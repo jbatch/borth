@@ -1,0 +1,19 @@
+# Compute nth fibonacci recursively.
+# fib(0) = 0
+# fib(1) = 1
+# fib(n) = fib(n - 1) + fib(n - 2)
+: fib
+    # Stack = [..., n]
+    dup 2 < if
+        # leave n on the stack
+    else
+        # stack = [..., n, fib(n-1)]
+        dup 1 - fib
+        # stack = [..., n, fib(n-1), fib(n-2)]
+        over 2 - fib
+        # stack = [..., fib(n)]
+        + swap drop
+    end
+;
+
+6 fib print
