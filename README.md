@@ -115,6 +115,17 @@ else
 end
 ```
 
+Loops run at least once. `until` consumes a flag from the top of the stack. It exits when the flag is non-zero and loops when the flag is `0`.
+
+```text
+1 loop
+  dup print
+  1 +
+  dup 6 =
+until
+drop
+```
+
 Comment lines start with `#`:
 
 ```text

@@ -60,3 +60,43 @@ test("if without end throws", () => {
     /if without matching end/,
   );
 });
+
+test("loop until repeats until the flag is non-zero", () => {
+  assert.deepEqual(outputOf("1 loop dup print 1 + dup 4 = until drop"), [
+    1,
+    2,
+    3,
+  ]);
+});
+
+test("loop until runs its body at least once", () => {
+  assert.deepEqual(outputOf("0 loop 1 + dup print 1 until drop"), [1]);
+});
+
+test("until without loop throws", () => {
+  assert.throws(() => outputOf("1 until"), /until without matching loop/);
+});
+
+test("loop without until throws", () => {
+  assert.throws(() => outputOf("1 loop dup"), /loop without matching until/);
+});
+
+test("definitions cannot close with an unclosed loop", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        : broken
+          loop
+            1
+        ;
+      `),
+    /definition broken has loop without matching until/,
+  );
+});
+
+test("loop and if blocks must not cross", () => {
+  assert.throws(
+    () => outputOf("loop 1 if 1 until end"),
+    /until cannot close loop before inner if/,
+  );
+});

@@ -7,9 +7,13 @@ type IfFrame = {
   hasElse: boolean;
 };
 
+type BlockKind = "if" | "loop";
+
 type CompilerState = {
   instructions: Instruction[];
   ifStack: IfFrame[];
+  loopStack: number[];
+  blockStack: BlockKind[];
   definitions: Map<string, number>;
 };
 
@@ -17,6 +21,8 @@ export function compile(program: Program): Instruction[] {
   const state: CompilerState = {
     instructions: [],
     ifStack: [],
+    loopStack: [],
+    blockStack: [],
     definitions: new Map(),
   };
 
@@ -34,6 +40,10 @@ export function compile(program: Program): Instruction[] {
     throw new Error("if without matching end");
   }
 
+  if (state.loopStack.length > 0) {
+    throw new Error("loop without matching until");
+  }
+
   state.instructions.push({ op: "HALT" });
   return state.instructions;
 }
@@ -43,7 +53,7 @@ function compileDefinition(
   nodes: AstNode[],
   colonIndex: number,
 ): number {
-  if (state.ifStack.length > 0) {
+  if (state.blockStack.length > 0) {
     throw new Error("definitions cannot appear inside control flow");
   }
 
@@ -77,6 +87,10 @@ function compileDefinition(
     if (isWord(node, ";")) {
       if (state.ifStack.length > 0) {
         throw new Error(`definition ${name} has if without matching end`);
+      }
+
+      if (state.loopStack.length > 0) {
+        throw new Error(`definition ${name} has loop without matching until`);
       }
 
       state.instructions.push({ op: "RET" });
@@ -121,6 +135,12 @@ function compileControlWord(state: CompilerState, name: string): boolean {
     case "end":
       compileEnd(state);
       return true;
+    case "loop":
+      compileLoop(state);
+      return true;
+    case "until":
+      compileUntil(state);
+      return true;
     case ";":
       throw new Error("; without matching :");
     default:
@@ -129,6 +149,7 @@ function compileControlWord(state: CompilerState, name: string): boolean {
 }
 
 function compileIf(state: CompilerState): void {
+  state.blockStack.push("if");
   state.ifStack.push({
     falseJumpIndex: state.instructions.length,
     hasElse: false,
@@ -137,6 +158,12 @@ function compileIf(state: CompilerState): void {
 }
 
 function compileElse(state: CompilerState): void {
+  requireCurrentBlock(
+    state,
+    "if",
+    "else without matching if",
+    "else cannot appear before closing inner control flow",
+  );
   const frame = currentIfFrame(state, "else without matching if");
 
   if (frame.hasElse) {
@@ -151,6 +178,12 @@ function compileElse(state: CompilerState): void {
 }
 
 function compileEnd(state: CompilerState): void {
+  requireCurrentBlock(
+    state,
+    "if",
+    "end without matching if",
+    "end cannot close if before inner loop",
+  );
   const frame = state.ifStack.pop();
 
   if (frame === undefined) {
@@ -166,6 +199,30 @@ function compileEnd(state: CompilerState): void {
   } else {
     patchJumpIfFalse(state, frame.falseJumpIndex, state.instructions.length);
   }
+
+  state.blockStack.pop();
+}
+
+function compileLoop(state: CompilerState): void {
+  state.blockStack.push("loop");
+  state.loopStack.push(state.instructions.length);
+}
+
+function compileUntil(state: CompilerState): void {
+  requireCurrentBlock(
+    state,
+    "loop",
+    "until without matching loop",
+    "until cannot close loop before inner if",
+  );
+  const loopStart = state.loopStack.pop();
+
+  if (loopStart === undefined) {
+    throw new Error("until without matching loop");
+  }
+
+  state.blockStack.pop();
+  state.instructions.push({ op: "JUMP_IF_FALSE", target: loopStart });
 }
 
 function currentIfFrame(state: CompilerState, errorMessage: string): IfFrame {
@@ -176,6 +233,23 @@ function currentIfFrame(state: CompilerState, errorMessage: string): IfFrame {
   }
 
   return frame;
+}
+
+function requireCurrentBlock(
+  state: CompilerState,
+  kind: BlockKind,
+  missingBlockError: string,
+  errorMessage: string,
+): void {
+  const current = state.blockStack.at(-1);
+
+  if (current === undefined) {
+    throw new Error(missingBlockError);
+  }
+
+  if (current !== kind) {
+    throw new Error(errorMessage);
+  }
 }
 
 function patchJump(
@@ -276,6 +350,8 @@ function isReservedWord(name: string): boolean {
     name === "if" ||
     name === "else" ||
     name === "end" ||
+    name === "loop" ||
+    name === "until" ||
     compileBuiltInWord(name) !== undefined
   );
 }

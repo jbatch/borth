@@ -567,3 +567,28 @@ Random decision:
   deterministic.
 - `random-between ( min max -- n )` is implemented in `prelude.borth`.
 - `random-between` is inclusive on both ends.
+
+## Milestone 11: Post-Condition Loops
+
+Goal:
+
+```text
+1 loop
+  dup print
+  1 +
+  dup 6 =
+until
+drop
+```
+
+should print `1` through `5`.
+
+Loop decision:
+
+- The initial loop syntax is `loop ... until`.
+- `loop` marks the start of a post-condition loop.
+- `until` consumes a numeric flag from the top of the stack.
+- `until` exits when the flag is non-zero.
+- `until` jumps back to the matching `loop` when the flag is `0`.
+- `until` compiles to the existing `JUMP_IF_FALSE`; no VM opcode is needed.
+- Nested control-flow blocks must close in order.

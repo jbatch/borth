@@ -2,17 +2,19 @@
 
 # ( target -- target )
 : guess-loop
-  "Guess a number between 1-100" print read-int
-  over over = if
-    "Correct!" print drop
-  else
-    over over < if
-      "Lower!" print
+  loop
+    "Guess a number between 1-100" print read-int
+    over over = if
+      "Correct!" print drop 1
     else
-      "Higher!" print
+      over over < if
+        "Lower!" print
+      else
+        "Higher!" print
+      end
+      drop 0
     end
-    drop guess-loop
-  end
+  until
 ;
 
 : main
