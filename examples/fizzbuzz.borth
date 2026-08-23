@@ -1,0 +1,54 @@
+# Print n fizzbuzz numbers.
+
+# div3 ( n -- flag )
+: div3
+    3 mod 0 =
+;
+
+# div5 ( n -- flag )
+: div5
+    5 mod 0 =
+;
+
+# div15 ( n -- flag )
+: div15
+    15 mod 0 =
+;
+
+# print-fb ( n -- )
+: print-fb
+    dup div15 if
+        "Fizzbuzz" print
+    else
+        dup div5 if
+            "Buzz" print
+        else
+            dup div3 if
+                "Fizz" print
+            else
+                dup print
+            end
+        end
+    end
+    drop
+;
+
+# fizzbuzz-to ( target cur -- )
+# Stops when target == cur
+: fizzbuzz-to
+    dup print-fb
+    # ( A B -- A B A==B )
+    over over = if
+        # end
+        drop drop
+    else
+        1 + fizzbuzz-to
+    end    
+;
+
+# fizzbuzz ( target -- )
+: fizzbuzz
+    1 fizzbuzz-to
+;
+
+16 fizzbuzz
