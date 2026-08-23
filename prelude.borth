@@ -55,6 +55,13 @@
   swap over
 ;
 
+# ( A B -- A B A B )
+#
+# Copy the top two values.
+: 2dup
+  over over
+;
+
 # ( min max -- n )
 #
 # Pick a random integer in the inclusive range min..max.

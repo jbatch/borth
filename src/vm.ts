@@ -127,8 +127,30 @@ export function execute(
         state.ip += 1;
         break;
       }
+      case "STR_LEN": {
+        const value = popString(state, "STR_LEN");
+        state.stack.push(value.length);
+        state.ip += 1;
+        break;
+      }
       case "STR_CAT": {
         binaryStringOp(state, "STR_CAT", (a, b) => a + b);
+        state.ip += 1;
+        break;
+      }
+      case "STR_SLICE": {
+        const length = popNonNegativeInteger(state, "STR_SLICE", "length");
+        const start = popNonNegativeInteger(state, "STR_SLICE", "start");
+        const value = popString(state, "STR_SLICE");
+        state.stack.push(sliceString(value, start, length));
+        state.ip += 1;
+        break;
+      }
+      case "STR_INDEX_OF": {
+        const start = popNonNegativeInteger(state, "STR_INDEX_OF", "start");
+        const needle = popString(state, "STR_INDEX_OF");
+        const value = popString(state, "STR_INDEX_OF");
+        state.stack.push(indexOfString(value, needle, start));
         state.ip += 1;
         break;
       }
@@ -229,6 +251,26 @@ function randomInteger(max: number, random: () => number): number {
   return Math.floor(value * max);
 }
 
+function sliceString(value: string, start: number, length: number): string {
+  if (start > value.length) {
+    throw new Error("STR_SLICE start is past end of string");
+  }
+
+  if (start + length > value.length) {
+    throw new Error("STR_SLICE range is past end of string");
+  }
+
+  return value.slice(start, start + length);
+}
+
+function indexOfString(value: string, needle: string, start: number): number {
+  if (start > value.length) {
+    throw new Error("STR_INDEX_OF start is past end of string");
+  }
+
+  return value.indexOf(needle, start);
+}
+
 function binaryNumberOp(
   state: VmState,
   op: string,
@@ -322,6 +364,20 @@ function popNumber(state: VmState, op: string): number {
 
   if (typeof value !== "number") {
     throw new Error(`${op} requires numbers on the stack`);
+  }
+
+  return value;
+}
+
+function popNonNegativeInteger(
+  state: VmState,
+  op: string,
+  name: string,
+): number {
+  const value = popNumber(state, op);
+
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${op} requires ${name} to be a non-negative integer`);
   }
 
   return value;

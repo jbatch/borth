@@ -45,6 +45,10 @@ test("string equality works in conditionals", () => {
   assert.deepEqual(outputOf('"yes" "yes" = if "ok" print end'), ["ok"]);
 });
 
+test("str-len returns the string length", () => {
+  assert.deepEqual(outputOf('"hello" str-len print'), [5]);
+});
+
 test("str-cat concatenates two strings", () => {
   assert.deepEqual(outputOf('"hello, " "borth" str-cat print'), [
     "hello, borth",
@@ -55,6 +59,23 @@ test("str-cat leaves the concatenated string on the stack", () => {
   const state = run('"a" "b" str-cat', { write: () => undefined });
 
   assert.deepEqual(state.stack, ["ab"]);
+});
+
+test("str-slice returns a substring by start and length", () => {
+  assert.deepEqual(outputOf('"hello" 1 3 str-slice print'), ["ell"]);
+});
+
+test("str-slice can return an empty string at the end", () => {
+  assert.deepEqual(outputOf('"hello" 5 0 str-slice print'), [""]);
+});
+
+test("str-index-of finds a substring from a start index", () => {
+  assert.deepEqual(outputOf('"one two two" "two" 0 str-index-of print'), [4]);
+  assert.deepEqual(outputOf('"one two two" "two" 5 str-index-of print'), [8]);
+});
+
+test("str-index-of returns negative one when the substring is not found", () => {
+  assert.deepEqual(outputOf('"hello" "z" 0 str-index-of print'), [-1]);
 });
 
 test("equality requires matching supported types", () => {
@@ -70,6 +91,32 @@ test("arithmetic requires numbers", () => {
 
 test("str-cat requires strings", () => {
   assert.throws(() => outputOf('"hello" 1 str-cat'), /STR_CAT requires strings/);
+});
+
+test("str-len requires a string", () => {
+  assert.throws(() => outputOf("1 str-len"), /STR_LEN requires strings/);
+});
+
+test("str-slice requires a valid range", () => {
+  assert.throws(
+    () => outputOf('"hello" 4 2 str-slice'),
+    /STR_SLICE range is past end of string/,
+  );
+  assert.throws(
+    () => outputOf('"hello" -1 1 str-slice'),
+    /STR_SLICE requires start to be a non-negative integer/,
+  );
+});
+
+test("str-index-of requires a valid start index", () => {
+  assert.throws(
+    () => outputOf('"hello" "e" 6 str-index-of'),
+    /STR_INDEX_OF start is past end of string/,
+  );
+  assert.throws(
+    () => outputOf('"hello" "e" -1 str-index-of'),
+    /STR_INDEX_OF requires start to be a non-negative integer/,
+  );
 });
 
 test("conditionals require numbers", () => {

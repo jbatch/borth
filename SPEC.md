@@ -506,6 +506,8 @@ Prelude decision:
 - Prelude words are treated like normal user-defined words after loading.
 - User programs cannot redefine prelude words.
 - Initial prelude words are `not`, `and`, `or`, `nip`, and `tuck`.
+- `2dup` is a prelude word because `( A B -- A B A B )` can be expressed as
+  `over over`.
 - `rot` is a VM primitive for now because the current language cannot express
   `( A B C -- B C A )` using only `drop`, `dup`, `swap`, and `over`.
 
@@ -654,3 +656,33 @@ String concatenation decision:
 - `+` remains numeric only; string concatenation is explicit.
 - This is a small step toward source manipulation and eventually writing lexer-like
   programs in Borth.
+
+## Milestone 15: String Inspection
+
+Goal:
+
+```text
+"hello" str-len print
+"hello" 1 3 str-slice print
+"hello" "l" 3 str-index-of print
+```
+
+should print:
+
+```text
+5
+ell
+3
+```
+
+String inspection decision:
+
+- `str-len`, `str-slice`, and `str-index-of` are VM primitives because strings
+  are still opaque runtime values.
+- String indexes are zero-based.
+- `str-slice ( string start length -- string )` throws when the requested range
+  is outside the string.
+- `str-index-of ( string needle start -- index )` returns `-1` when `needle` is
+  not found.
+- These words are the next step toward lexer-like programs without introducing
+  arrays or token data structures yet.

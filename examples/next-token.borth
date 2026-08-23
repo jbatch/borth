@@ -1,0 +1,35 @@
+# Extract the next space-delimited token from a source string and starting index.
+
+# token-end ( src from -- src from end )
+: token-end
+    # (src fromIdx -- src fromIndex foundIndex)
+    2dup " " swap str-index-of
+;
+
+# token-length ( from end -- from len )
+: token-length
+    over -
+;
+
+# next-start   ( end -- next )
+: next-start
+    1 +
+;
+
+# next-token (src from -- src nextStart tok)
+: next-token
+    # (src from -- src from src from endIndex)
+    2dup token-end
+    # ( src from src from endIndex -- src from src from length)
+    token-length
+    # ( src from src from length -- tok src from)
+    str-slice rot rot
+    # (tok src from -- src nextIndex tok)
+    token-end nip next-start rot
+;
+
+"10 20 + " 0 next-token
+# (src nextStart tok)
+.s print 
+next-token .s print
+next-token .s print

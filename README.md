@@ -14,6 +14,7 @@ yarn borth -- examples/add.borth
 yarn borth -- examples/echo.borth
 yarn borth -- examples/double-input.borth
 yarn borth -- examples/introduce.borth
+yarn borth -- examples/next-token.borth
 yarn borth -- examples/random-print.borth
 yarn borth -- examples/counter.borth
 ```
@@ -43,7 +44,10 @@ mod   ( A B -- C )
 <     ( number number -- 0|1 )
 >     ( number number -- 0|1 )
 
-str-cat ( string string -- string )
+str-len      ( string -- number )
+str-cat      ( string string -- string )
+str-slice    ( string start length -- string )
+str-index-of ( string needle start -- index )
 
 random ( max -- n )
 @      ( addr -- A )
@@ -62,6 +66,7 @@ and   ( A B -- flag )
 or    ( A B -- flag )
 nip   ( A B -- B )
 tuck  ( A B -- B A B )
+2dup  ( A B -- A B A B )
 random-between ( min max -- n )
 ```
 
@@ -81,6 +86,15 @@ Strings can contain whitespace, but they cannot span source lines. Supported esc
 
 ```text
 "hello, " "borth" str-cat print
+```
+
+String indexes are zero-based. `str-index-of` starts searching at the given
+index and returns `-1` when the needle is not found.
+
+```text
+"hello" str-len print
+"hello" 1 3 str-slice print
+"hello" "l" 3 str-index-of print
 ```
 
 User-defined words:

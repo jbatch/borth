@@ -16,7 +16,10 @@ export type Instruction =
   | { op: "EQ" }
   | { op: "LT" }
   | { op: "GT" }
+  | { op: "STR_LEN" }
   | { op: "STR_CAT" }
+  | { op: "STR_SLICE" }
+  | { op: "STR_INDEX_OF" }
   | { op: "FETCH" }
   | { op: "STORE" }
   | { op: "RANDOM" }
