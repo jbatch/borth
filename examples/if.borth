@@ -1,0 +1,9 @@
+# Print only the true branch.
+10 20 < if
+  111 print
+end
+
+# This block is skipped because the condition leaves 0.
+10 20 > if
+  222 print
+end

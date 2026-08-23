@@ -23,6 +23,7 @@ Current words:
 drop  ( A -- )
 dup   ( A -- A A )
 swap  ( A B -- B A )
+over  ( A B -- A B A )
 
 +     ( A B -- C )
 -     ( A B -- C )
@@ -35,6 +36,14 @@ mod   ( A B -- C )
 >     ( A B -- 0|1 )
 
 print ( A -- )
+```
+
+Conditionals consume a flag from the top of the stack. `0` is false; any other integer is true.
+
+```text
+10 20 < if
+  999 print
+end
 ```
 
 Comment lines start with `#`:

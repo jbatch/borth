@@ -30,9 +30,16 @@ export function execute(instructions: Instruction[]): VmState {
         break;
       }
       case "SWAP": {
+        requireStackDepth(state, "SWAP", 2);
         const b = pop(state, "SWAP");
         const a = pop(state, "SWAP");
         state.stack.push(b, a);
+        state.ip += 1;
+        break;
+      }
+      case "OVER": {
+        requireStackDepth(state, "OVER", 2);
+        state.stack.push(state.stack[state.stack.length - 2]);
         state.ip += 1;
         break;
       }
@@ -88,6 +95,11 @@ export function execute(instructions: Instruction[]): VmState {
         state.ip += 1;
         break;
       }
+      case "JUMP_IF_FALSE": {
+        const value = pop(state, "JUMP_IF_FALSE");
+        state.ip = value === 0 ? instruction.target : state.ip + 1;
+        break;
+      }
       case "PRINT":
         console.log(pop(state, "PRINT"));
         state.ip += 1;
@@ -105,6 +117,7 @@ function binaryNumberOp(
   op: string,
   apply: (a: number, b: number) => number,
 ): void {
+  requireStackDepth(state, op, 2);
   const b = pop(state, op);
   const a = pop(state, op);
 
@@ -113,6 +126,12 @@ function binaryNumberOp(
 
 function bool(value: boolean): number {
   return value ? 1 : 0;
+}
+
+function requireStackDepth(state: VmState, op: string, depth: number): void {
+  if (state.stack.length < depth) {
+    throw new Error(`${op} requires ${depth} values on the stack`);
+  }
 }
 
 function peek(state: VmState, op: string): number {

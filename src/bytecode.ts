@@ -3,6 +3,7 @@ export type Instruction =
   | { op: "DROP" }
   | { op: "DUP" }
   | { op: "SWAP" }
+  | { op: "OVER" }
   | { op: "ADD" }
   | { op: "SUB" }
   | { op: "MUL" }
@@ -11,5 +12,6 @@ export type Instruction =
   | { op: "EQ" }
   | { op: "LT" }
   | { op: "GT" }
+  | { op: "JUMP_IF_FALSE"; target: number }
   | { op: "PRINT" }
   | { op: "HALT" };

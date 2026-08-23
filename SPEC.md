@@ -392,3 +392,23 @@ Comment decision:
 
 - `#` starts a whole-line comment after optional leading whitespace.
 - Inline comments are intentionally not supported yet.
+
+## Milestone 3: First Conditional
+
+Goal:
+
+```text
+10 20 < if
+  999 print
+end
+```
+
+should print `999`.
+
+Conditional decision:
+
+- The condition is ordinary code that leaves an integer flag on the stack.
+- `if` consumes the flag.
+- `0` is false. Any other integer is true.
+- Source-level `if ... end` compiles to bytecode-level `JUMP_IF_FALSE`.
+- `else` is intentionally not supported yet.

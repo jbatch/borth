@@ -1,22 +1,70 @@
 import type { Program } from "./ast.js";
 import type { Instruction } from "./bytecode.js";
 
+type CompilerState = {
+  instructions: Instruction[];
+  ifJumpStack: number[];
+};
+
 export function compile(program: Program): Instruction[] {
-  const instructions: Instruction[] = [];
+  const state: CompilerState = {
+    instructions: [],
+    ifJumpStack: [],
+  };
 
   for (const node of program.body) {
     switch (node.kind) {
       case "integer":
-        instructions.push({ op: "PUSH", value: node.value });
+        state.instructions.push({ op: "PUSH", value: node.value });
         break;
       case "word":
-        instructions.push(compileWord(node.name));
+        if (!compileControlWord(state, node.name)) {
+          state.instructions.push(compileWord(node.name));
+        }
         break;
     }
   }
 
-  instructions.push({ op: "HALT" });
-  return instructions;
+  if (state.ifJumpStack.length > 0) {
+    throw new Error("if without matching end");
+  }
+
+  state.instructions.push({ op: "HALT" });
+  return state.instructions;
+}
+
+function compileControlWord(state: CompilerState, name: string): boolean {
+  switch (name) {
+    case "if":
+      compileIf(state);
+      return true;
+    case "end":
+      compileEnd(state);
+      return true;
+    default:
+      return false;
+  }
+}
+
+function compileIf(state: CompilerState): void {
+  state.ifJumpStack.push(state.instructions.length);
+  state.instructions.push({ op: "JUMP_IF_FALSE", target: -1 });
+}
+
+function compileEnd(state: CompilerState): void {
+  const ifJumpIndex = state.ifJumpStack.pop();
+
+  if (ifJumpIndex === undefined) {
+    throw new Error("end without matching if");
+  }
+
+  const ifJump = state.instructions[ifJumpIndex];
+
+  if (ifJump.op !== "JUMP_IF_FALSE") {
+    throw new Error("Compiler error: invalid if jump placeholder");
+  }
+
+  ifJump.target = state.instructions.length;
 }
 
 function compileWord(name: string): Instruction {
@@ -27,6 +75,8 @@ function compileWord(name: string): Instruction {
       return { op: "DUP" };
     case "swap":
       return { op: "SWAP" };
+    case "over":
+      return { op: "OVER" };
     case "+":
       return { op: "ADD" };
     case "-":
