@@ -508,3 +508,23 @@ Prelude decision:
 - Initial prelude words are `not`, `and`, `or`, `nip`, and `tuck`.
 - `rot` is a VM primitive for now because the current language cannot express
   `( A B C -- B C A )` using only `drop`, `dup`, `swap`, and `over`.
+
+## Milestone 8: Basic Input
+
+Goal:
+
+```text
+read-line print
+```
+
+should read one stdin line and print it back.
+
+Input decision:
+
+- `read-line` is the first input primitive.
+- Stack effect: `( -- string )`.
+- `read-line` is compiled to a VM instruction because it crosses the host IO
+  boundary.
+- The VM receives input through an injected callback so tests can stay
+  deterministic.
+- The CLI provides the real stdin-backed input callback.

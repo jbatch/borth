@@ -8,6 +8,7 @@ export type VmState = {
 };
 
 export type ExecuteOptions = {
+  read?: () => string;
   write?: (value: Value) => void;
 };
 
@@ -15,6 +16,7 @@ export function execute(
   instructions: Instruction[],
   options: ExecuteOptions = {},
 ): VmState {
+  const read = options.read ?? missingInput;
   const write = options.write ?? console.log;
   const state: VmState = {
     ip: 0,
@@ -135,6 +137,10 @@ export function execute(
         write(formatStack(state.stack));
         state.ip += 1;
         break;
+      case "READ_LINE":
+        state.stack.push(read());
+        state.ip += 1;
+        break;
       case "RET": {
         const returnAddress = state.callStack.pop();
 
@@ -151,6 +157,10 @@ export function execute(
   }
 
   return state;
+}
+
+function missingInput(): string {
+  throw new Error("READ_LINE requires an input provider");
 }
 
 function binaryNumberOp(

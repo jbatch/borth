@@ -11,6 +11,7 @@ yarn test
 yarn borth -- "10 20 + print"
 yarn borth -- '"hello, borth" print'
 yarn borth -- examples/add.borth
+yarn borth -- examples/echo.borth
 ```
 
 Expected output:
@@ -38,6 +39,7 @@ mod   ( A B -- C )
 <     ( A B -- 0|1 )
 >     ( A B -- 0|1 )
 
+read-line ( -- string )
 print ( A -- )
 .s    ( -- )
 ```
@@ -113,4 +115,10 @@ Comment lines start with `#`:
 ```text
 # Square a number.
 10 dup * print
+```
+
+`read-line` reads one line from stdin:
+
+```sh
+printf 'hello\n' | yarn borth -- examples/echo.borth
 ```

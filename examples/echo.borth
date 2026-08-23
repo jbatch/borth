@@ -1,0 +1,10 @@
+# Read one line from stdin and print it back in a loop
+
+# ( -- )
+: read-line-loop 
+    read-line
+    print
+    read-line-loop
+;
+
+read-line-loop
