@@ -372,6 +372,8 @@ Out of scope for milestone 1:
 Initial primitive decisions:
 
 - `PUSH` exists because integer literals need to place values on the VM stack.
-- `ADD` exists as the first arithmetic primitive.
+- `DROP`, `DUP`, and `SWAP` exist because reshaping the stack is fundamental in a stack language.
+- Arithmetic primitives currently operate on integers.
+- Comparisons currently return `1` for true and `0` for false.
 - `PRINT` exists temporarily as host I/O so we can observe programs from the CLI.
 - `HALT` exists so bytecode has an explicit stopping point.

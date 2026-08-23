@@ -21,8 +21,28 @@ export function compile(program: Program): Instruction[] {
 
 function compileWord(name: string): Instruction {
   switch (name) {
+    case "drop":
+      return { op: "DROP" };
+    case "dup":
+      return { op: "DUP" };
+    case "swap":
+      return { op: "SWAP" };
     case "+":
       return { op: "ADD" };
+    case "-":
+      return { op: "SUB" };
+    case "*":
+      return { op: "MUL" };
+    case "/":
+      return { op: "DIV" };
+    case "mod":
+      return { op: "MOD" };
+    case "=":
+      return { op: "EQ" };
+    case "<":
+      return { op: "LT" };
+    case ">":
+      return { op: "GT" };
     case "print":
       return { op: "PRINT" };
     default:

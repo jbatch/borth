@@ -15,3 +15,23 @@ Expected output:
 ```text
 30
 ```
+
+Current words:
+
+```text
+drop  ( A -- )
+dup   ( A -- A A )
+swap  ( A B -- B A )
+
++     ( A B -- C )
+-     ( A B -- C )
+*     ( A B -- C )
+/     ( A B -- C )
+mod   ( A B -- C )
+
+=     ( A B -- 0|1 )
+<     ( A B -- 0|1 )
+>     ( A B -- 0|1 )
+
+print ( A -- )
+```

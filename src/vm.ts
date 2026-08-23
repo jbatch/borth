@@ -19,10 +19,72 @@ export function execute(instructions: Instruction[]): VmState {
         state.stack.push(instruction.value);
         state.ip += 1;
         break;
+      case "DROP":
+        pop(state, "DROP");
+        state.ip += 1;
+        break;
+      case "DUP": {
+        const value = peek(state, "DUP");
+        state.stack.push(value);
+        state.ip += 1;
+        break;
+      }
+      case "SWAP": {
+        const b = pop(state, "SWAP");
+        const a = pop(state, "SWAP");
+        state.stack.push(b, a);
+        state.ip += 1;
+        break;
+      }
       case "ADD": {
-        const b = pop(state, "ADD");
-        const a = pop(state, "ADD");
-        state.stack.push(a + b);
+        binaryNumberOp(state, "ADD", (a, b) => a + b);
+        state.ip += 1;
+        break;
+      }
+      case "SUB": {
+        binaryNumberOp(state, "SUB", (a, b) => a - b);
+        state.ip += 1;
+        break;
+      }
+      case "MUL": {
+        binaryNumberOp(state, "MUL", (a, b) => a * b);
+        state.ip += 1;
+        break;
+      }
+      case "DIV": {
+        binaryNumberOp(state, "DIV", (a, b) => {
+          if (b === 0) {
+            throw new Error("DIV cannot divide by zero");
+          }
+
+          return Math.trunc(a / b);
+        });
+        state.ip += 1;
+        break;
+      }
+      case "MOD": {
+        binaryNumberOp(state, "MOD", (a, b) => {
+          if (b === 0) {
+            throw new Error("MOD cannot divide by zero");
+          }
+
+          return a % b;
+        });
+        state.ip += 1;
+        break;
+      }
+      case "EQ": {
+        binaryNumberOp(state, "EQ", (a, b) => bool(a === b));
+        state.ip += 1;
+        break;
+      }
+      case "LT": {
+        binaryNumberOp(state, "LT", (a, b) => bool(a < b));
+        state.ip += 1;
+        break;
+      }
+      case "GT": {
+        binaryNumberOp(state, "GT", (a, b) => bool(a > b));
         state.ip += 1;
         break;
       }
@@ -36,6 +98,31 @@ export function execute(instructions: Instruction[]): VmState {
   }
 
   return state;
+}
+
+function binaryNumberOp(
+  state: VmState,
+  op: string,
+  apply: (a: number, b: number) => number,
+): void {
+  const b = pop(state, op);
+  const a = pop(state, op);
+
+  state.stack.push(apply(a, b));
+}
+
+function bool(value: boolean): number {
+  return value ? 1 : 0;
+}
+
+function peek(state: VmState, op: string): number {
+  const value = state.stack.at(-1);
+
+  if (value === undefined) {
+    throw new Error(`${op} requires a value on the stack`);
+  }
+
+  return value;
 }
 
 function pop(state: VmState, op: string): number {
