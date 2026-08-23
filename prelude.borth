@@ -1,0 +1,56 @@
+# Borth prelude.
+#
+# This file is loaded before every user program. Keep it small: these words
+# should feel like basic vocabulary that most programs can assume exists.
+#
+# Stack-effect notation:
+#   ( before -- after )
+#
+# The top of the stack is written on the right. For example:
+#   ( A B -- B )
+# means B is the top value, and the word consumes A and B before leaving B.
+
+# ( flag -- flag )
+#
+# Convert 0 to 1, and any non-zero value to 0.
+: not
+  0 =
+;
+
+# ( A B -- flag )
+#
+# Boolean AND using Borth's numeric flags.
+# 0 is false; any non-zero number is true.
+: and
+  if
+    not not
+  else
+    drop 0
+  end
+;
+
+# ( A B -- flag )
+#
+# Boolean OR using Borth's numeric flags.
+# 0 is false; any non-zero number is true.
+: or
+  if
+    drop 1
+  else
+    not not
+  end
+;
+
+# ( A B -- B )
+#
+# Drop the second value from the top.
+: nip
+  swap drop
+;
+
+# ( A B -- B A B )
+#
+# Copy the top value underneath the previous second value.
+: tuck
+  swap over
+;

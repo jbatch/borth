@@ -6,6 +6,7 @@ export type Instruction =
   | { op: "DUP" }
   | { op: "SWAP" }
   | { op: "OVER" }
+  | { op: "ROT" }
   | { op: "ADD" }
   | { op: "SUB" }
   | { op: "MUL" }

@@ -19,13 +19,14 @@ Expected output:
 30
 ```
 
-Current words:
+Current VM words:
 
 ```text
 drop  ( A -- )
 dup   ( A -- A A )
 swap  ( A B -- B A )
 over  ( A B -- A B A )
+rot   ( A B C -- B C A )
 
 +     ( A B -- C )
 -     ( A B -- C )
@@ -40,6 +41,18 @@ mod   ( A B -- C )
 print ( A -- )
 .s    ( -- )
 ```
+
+Prelude words:
+
+```text
+not   ( flag -- flag )
+and   ( A B -- flag )
+or    ( A B -- flag )
+nip   ( A B -- B )
+tuck  ( A B -- B A B )
+```
+
+The prelude is loaded before every program from `prelude.borth`.
 
 Values:
 

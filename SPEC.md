@@ -491,3 +491,20 @@ String decision:
 - Supported escapes are `\"`, `\\`, and `\n`.
 - Stack manipulation words operate on all values.
 - Arithmetic, comparison, and conditional flags still require numbers.
+
+## Milestone 7: Prelude
+
+Goal:
+
+Common helper words should be available to every program without becoming VM
+primitives unless they genuinely need VM support.
+
+Prelude decision:
+
+- `prelude.borth` is loaded before every user program.
+- The prelude is written in Borth and should stay small.
+- Prelude words are treated like normal user-defined words after loading.
+- User programs cannot redefine prelude words.
+- Initial prelude words are `not`, `and`, `or`, `nip`, and `tuck`.
+- `rot` is a VM primitive for now because the current language cannot express
+  `( A B C -- B C A )` using only `drop`, `dup`, `swap`, and `over`.

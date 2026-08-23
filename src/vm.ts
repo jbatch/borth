@@ -54,6 +54,15 @@ export function execute(
         state.ip += 1;
         break;
       }
+      case "ROT": {
+        requireStackDepth(state, "ROT", 3);
+        const c = pop(state, "ROT");
+        const b = pop(state, "ROT");
+        const a = pop(state, "ROT");
+        state.stack.push(b, c, a);
+        state.ip += 1;
+        break;
+      }
       case "ADD": {
         binaryNumberOp(state, "ADD", (a, b) => a + b);
         state.ip += 1;

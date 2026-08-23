@@ -232,6 +232,8 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "SWAP" };
     case "over":
       return { op: "OVER" };
+    case "rot":
+      return { op: "ROT" };
     case "+":
       return { op: "ADD" };
     case "-":
