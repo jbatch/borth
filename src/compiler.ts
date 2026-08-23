@@ -250,6 +250,8 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "LT" };
     case ">":
       return { op: "GT" };
+    case "random":
+      return { op: "RANDOM" };
     case "read-line":
       return { op: "READ_LINE" };
     case "read-int":

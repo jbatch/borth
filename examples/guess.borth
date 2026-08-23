@@ -1,0 +1,23 @@
+# Guess the number game
+
+# ( target -- target )
+: guess-loop
+  "Guess a number between 1-100" print read-int
+  over over = if
+    "Correct!" print drop
+  else
+    over over < if
+      "Lower!" print
+    else
+      "Higher!" print
+    end
+    drop guess-loop
+  end
+;
+
+: main
+    1 100 random-between
+    guess-loop drop
+;
+
+main

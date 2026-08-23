@@ -546,3 +546,24 @@ Integer input decision:
 - Leading and trailing whitespace is ignored.
 - The whole trimmed line must be an integer.
 - Invalid input throws instead of partially parsing.
+
+## Milestone 10: Random Numbers
+
+Goal:
+
+```text
+1 100 random-between print
+```
+
+should print a random integer from `1` to `100`, inclusive.
+
+Random decision:
+
+- `random` is a VM primitive because it crosses the host entropy boundary.
+- Stack effect: `random ( max -- n )`.
+- `random` returns an integer from `0` to `max - 1`.
+- `max` must be a positive integer.
+- The VM receives randomness through an injected callback so tests can stay
+  deterministic.
+- `random-between ( min max -- n )` is implemented in `prelude.borth`.
+- `random-between` is inclusive on both ends.

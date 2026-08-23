@@ -54,3 +54,12 @@
 : tuck
   swap over
 ;
+
+# ( min max -- n )
+#
+# Pick a random integer in the inclusive range min..max.
+# This is built from the VM primitive `random`, which expects a range size and
+# returns 0..size-1.
+: random-between
+  over - 1 + random +
+;

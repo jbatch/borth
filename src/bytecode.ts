@@ -15,6 +15,7 @@ export type Instruction =
   | { op: "EQ" }
   | { op: "LT" }
   | { op: "GT" }
+  | { op: "RANDOM" }
   | { op: "CALL"; target: number }
   | { op: "JUMP"; target: number }
   | { op: "JUMP_IF_FALSE"; target: number }

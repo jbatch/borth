@@ -10,6 +10,7 @@ export type VmState = {
 };
 
 export type ExecuteOptions = {
+  random?: () => number;
   read?: () => string;
   write?: (value: Value) => void;
 };
@@ -18,6 +19,7 @@ export function execute(
   instructions: Instruction[],
   options: ExecuteOptions = {},
 ): VmState {
+  const random = options.random ?? Math.random;
   const read = options.read;
   const write = options.write ?? console.log;
   const state: VmState = {
@@ -119,6 +121,12 @@ export function execute(
         state.ip += 1;
         break;
       }
+      case "RANDOM": {
+        const max = popNumber(state, "RANDOM");
+        state.stack.push(randomInteger(max, random));
+        state.ip += 1;
+        break;
+      }
       case "CALL":
         state.callStack.push(state.ip + 1);
         state.ip = instruction.target;
@@ -181,6 +189,20 @@ function parseInputInteger(input: string): number {
   }
 
   return Number.parseInt(trimmed, 10);
+}
+
+function randomInteger(max: number, random: () => number): number {
+  if (!Number.isInteger(max) || max <= 0) {
+    throw new Error("RANDOM requires a positive integer maximum");
+  }
+
+  const value = random();
+
+  if (!Number.isFinite(value) || value < 0 || value >= 1) {
+    throw new Error("RANDOM provider must return a number >= 0 and < 1");
+  }
+
+  return Math.floor(value * max);
 }
 
 function binaryNumberOp(

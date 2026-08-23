@@ -13,6 +13,7 @@ yarn borth -- '"hello, borth" print'
 yarn borth -- examples/add.borth
 yarn borth -- examples/echo.borth
 yarn borth -- examples/double-input.borth
+yarn borth -- examples/random-print.borth
 ```
 
 Expected output:
@@ -40,6 +41,7 @@ mod   ( A B -- C )
 <     ( A B -- 0|1 )
 >     ( A B -- 0|1 )
 
+random ( max -- n )
 read-line ( -- string )
 read-int  ( -- number )
 print ( A -- )
@@ -54,6 +56,7 @@ and   ( A B -- flag )
 or    ( A B -- flag )
 nip   ( A B -- B )
 tuck  ( A B -- B A B )
+random-between ( min max -- n )
 ```
 
 The prelude is loaded before every program from `prelude.borth`.
@@ -129,4 +132,10 @@ printf 'hello\n' | yarn borth -- examples/echo.borth
 
 ```sh
 printf '21\n' | yarn borth -- examples/double-input.borth
+```
+
+`random` returns an integer from `0` to `max - 1`; `random-between` returns an integer in the inclusive range:
+
+```text
+1 100 random-between print
 ```
