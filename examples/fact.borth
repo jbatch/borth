@@ -1,0 +1,10 @@
+# Compute factorial recursively.
+: fact
+  dup 2 < if
+    drop 1
+  else
+    dup 1 - fact *
+  end
+;
+
+5 fact print

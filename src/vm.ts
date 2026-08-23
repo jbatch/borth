@@ -7,7 +7,7 @@ export type VmState = {
 };
 
 export type ExecuteOptions = {
-  write?: (value: number) => void;
+  write?: (value: number | string) => void;
 };
 
 export function execute(
@@ -121,6 +121,10 @@ export function execute(
         write(pop(state, "PRINT"));
         state.ip += 1;
         break;
+      case "PRINT_STACK":
+        write(formatStack(state.stack));
+        state.ip += 1;
+        break;
       case "RET": {
         const returnAddress = state.callStack.pop();
 
@@ -153,6 +157,10 @@ function binaryNumberOp(
 
 function bool(value: boolean): number {
   return value ? 1 : 0;
+}
+
+function formatStack(stack: number[]): string {
+  return `[${stack.join(" ")}]`;
 }
 
 function requireStackDepth(state: VmState, op: string, depth: number): void {

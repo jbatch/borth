@@ -1,0 +1,3 @@
+# Inspect the stack without changing it.
+10 20 .s
++ .s

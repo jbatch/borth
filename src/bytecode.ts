@@ -16,5 +16,6 @@ export type Instruction =
   | { op: "JUMP"; target: number }
   | { op: "JUMP_IF_FALSE"; target: number }
   | { op: "PRINT" }
+  | { op: "PRINT_STACK" }
   | { op: "RET" }
   | { op: "HALT" };

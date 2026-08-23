@@ -443,3 +443,32 @@ Definition decision:
 - User-defined words compile to `CALL`; definitions end with `RET`.
 - The VM has a call stack for return addresses.
 - Definitions must appear before use for now.
+
+## Milestone 5: Recursion
+
+Goal:
+
+```text
+: fact
+  dup 2 < if
+    drop 1
+  else
+    dup 1 - fact *
+  end
+;
+
+5 fact print
+```
+
+should print `120`.
+
+Recursion decision:
+
+- Self-recursion works because a word is registered before its body is compiled.
+- The recursive call compiles to `CALL` like any other user-defined word.
+- Mutual recursion and other forward references are intentionally unsupported for now.
+
+Debugging decision:
+
+- `.s` prints the current value stack without changing it.
+- Stack output is formatted from bottom to top, with the top of the stack on the right.

@@ -247,6 +247,8 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "GT" };
     case "print":
       return { op: "PRINT" };
+    case ".s":
+      return { op: "PRINT_STACK" };
     default:
       return undefined;
   }

@@ -80,3 +80,44 @@ test("unclosed definitions throw", () => {
     /definition square without closing ;/,
   );
 });
+
+test("user-defined words can call themselves recursively", () => {
+  assert.deepEqual(
+    outputOf(`
+      : fact
+        dup 2 < if
+          drop 1
+        else
+          dup 1 - fact *
+        end
+      ;
+
+      5 fact print
+    `),
+    [120],
+  );
+});
+
+test("recursive calls unwind the call stack", () => {
+  const state = run(
+    `
+      : fact
+        dup 2 < if
+          drop 1
+        else
+          dup 1 - fact *
+        end
+      ;
+
+      5 fact
+    `,
+    { write: () => undefined },
+  );
+
+  assert.deepEqual(state.stack, [120]);
+  assert.deepEqual(state.callStack, []);
+});
+
+test(".s prints the stack without changing it", () => {
+  assert.deepEqual(outputOf("10 20 .s + .s"), ["[10 20]", "[30]"]);
+});
