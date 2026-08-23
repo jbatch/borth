@@ -1,6 +1,8 @@
 import type { Instruction } from "./bytecode.js";
 import type { Value } from "./value.js";
 
+const integerInputPattern = /^-?\d+$/;
+
 export type VmState = {
   ip: number;
   stack: Value[];
@@ -16,7 +18,7 @@ export function execute(
   instructions: Instruction[],
   options: ExecuteOptions = {},
 ): VmState {
-  const read = options.read ?? missingInput;
+  const read = options.read;
   const write = options.write ?? console.log;
   const state: VmState = {
     ip: 0,
@@ -138,7 +140,11 @@ export function execute(
         state.ip += 1;
         break;
       case "READ_LINE":
-        state.stack.push(read());
+        state.stack.push(readInput(read, "READ_LINE"));
+        state.ip += 1;
+        break;
+      case "READ_INT":
+        state.stack.push(parseInputInteger(readInput(read, "READ_INT")));
         state.ip += 1;
         break;
       case "RET": {
@@ -159,8 +165,22 @@ export function execute(
   return state;
 }
 
-function missingInput(): string {
-  throw new Error("READ_LINE requires an input provider");
+function readInput(read: (() => string) | undefined, op: string): string {
+  if (read === undefined) {
+    throw new Error(`${op} requires an input provider`);
+  }
+
+  return read();
+}
+
+function parseInputInteger(input: string): number {
+  const trimmed = input.trim();
+
+  if (!integerInputPattern.test(trimmed)) {
+    throw new Error(`READ_INT expected an integer, got: ${input}`);
+  }
+
+  return Number.parseInt(trimmed, 10);
 }
 
 function binaryNumberOp(

@@ -12,8 +12,9 @@
         # stack = [..., n, fib(n-1), fib(n-2)]
         over 2 - fib
         # stack = [..., fib(n)]
-        + swap drop
+        + nip
     end
 ;
 
-6 fib print
+"Enter a number n:" print read-int
+fib print

@@ -1,0 +1,3 @@
+# Read one integer from stdin, double it, and print the result.
+
+read-int 2 * print

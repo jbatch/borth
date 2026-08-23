@@ -12,6 +12,7 @@ yarn borth -- "10 20 + print"
 yarn borth -- '"hello, borth" print'
 yarn borth -- examples/add.borth
 yarn borth -- examples/echo.borth
+yarn borth -- examples/double-input.borth
 ```
 
 Expected output:
@@ -40,6 +41,7 @@ mod   ( A B -- C )
 >     ( A B -- 0|1 )
 
 read-line ( -- string )
+read-int  ( -- number )
 print ( A -- )
 .s    ( -- )
 ```
@@ -121,4 +123,10 @@ Comment lines start with `#`:
 
 ```sh
 printf 'hello\n' | yarn borth -- examples/echo.borth
+```
+
+`read-int` reads one line from stdin and parses it as an integer:
+
+```sh
+printf '21\n' | yarn borth -- examples/double-input.borth
 ```

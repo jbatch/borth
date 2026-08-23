@@ -40,3 +40,25 @@ test("read-line requires an input provider", () => {
     /READ_LINE requires an input provider/,
   );
 });
+
+test("read-int parses an input line as a number", () => {
+  assert.deepEqual(outputOf("read-int 2 * print", ["21"]), [42]);
+});
+
+test("read-int trims surrounding whitespace", () => {
+  assert.deepEqual(outputOf("read-int print", ["  -7  "]), [-7]);
+});
+
+test("read-int rejects invalid integers", () => {
+  assert.throws(
+    () => outputOf("read-int", ["12abc"]),
+    /READ_INT expected an integer, got: 12abc/,
+  );
+});
+
+test("read-int requires an input provider", () => {
+  assert.throws(
+    () => run("read-int", { write: () => undefined }),
+    /READ_INT requires an input provider/,
+  );
+});

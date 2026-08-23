@@ -252,6 +252,8 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "GT" };
     case "read-line":
       return { op: "READ_LINE" };
+    case "read-int":
+      return { op: "READ_INT" };
     case "print":
       return { op: "PRINT" };
     case ".s":

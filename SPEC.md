@@ -528,3 +528,21 @@ Input decision:
 - The VM receives input through an injected callback so tests can stay
   deterministic.
 - The CLI provides the real stdin-backed input callback.
+
+## Milestone 9: Integer Input
+
+Goal:
+
+```text
+read-int 2 * print
+```
+
+with input `21` should print `42`.
+
+Integer input decision:
+
+- `read-int` reads one line through the same input callback as `read-line`.
+- Stack effect: `( -- number )`.
+- Leading and trailing whitespace is ignored.
+- The whole trimmed line must be an integer.
+- Invalid input throws instead of partially parsing.
