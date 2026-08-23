@@ -2,13 +2,14 @@
 
 Tiny experimental stack-based language.
 
-Current scope: a tiny source string can run through lexer, parser, compiler, bytecode, and VM.
+Current scope: tiny programs can run through lexer, parser, compiler, bytecode, and VM.
 
 ```sh
 yarn install
 yarn build
 yarn test
 yarn borth -- "10 20 + print"
+yarn borth -- '"hello, borth" print'
 yarn borth -- examples/add.borth
 ```
 
@@ -39,6 +40,16 @@ mod   ( A B -- C )
 print ( A -- )
 .s    ( -- )
 ```
+
+Values:
+
+```text
+123
+"hello"
+"line one\nline two"
+```
+
+Strings can contain whitespace, but they cannot span source lines. Supported escapes are `\"`, `\\`, and `\n`.
 
 User-defined words:
 

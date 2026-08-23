@@ -11,6 +11,13 @@ export function parse(tokens: Token[]): Program {
 }
 
 function parseToken(token: Token): AstNode {
+  if (token.kind === "string") {
+    return {
+      kind: "string",
+      value: token.value,
+    };
+  }
+
   if (integerPattern.test(token.lexeme)) {
     return {
       kind: "integer",

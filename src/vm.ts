@@ -1,13 +1,14 @@
 import type { Instruction } from "./bytecode.js";
+import type { Value } from "./value.js";
 
 export type VmState = {
   ip: number;
-  stack: number[];
+  stack: Value[];
   callStack: number[];
 };
 
 export type ExecuteOptions = {
-  write?: (value: number | string) => void;
+  write?: (value: Value) => void;
 };
 
 export function execute(
@@ -113,7 +114,7 @@ export function execute(
         state.ip = instruction.target;
         break;
       case "JUMP_IF_FALSE": {
-        const value = pop(state, "JUMP_IF_FALSE");
+        const value = popNumber(state, "JUMP_IF_FALSE");
         state.ip = value === 0 ? instruction.target : state.ip + 1;
         break;
       }
@@ -149,8 +150,8 @@ function binaryNumberOp(
   apply: (a: number, b: number) => number,
 ): void {
   requireStackDepth(state, op, 2);
-  const b = pop(state, op);
-  const a = pop(state, op);
+  const b = popNumber(state, op);
+  const a = popNumber(state, op);
 
   state.stack.push(apply(a, b));
 }
@@ -159,8 +160,16 @@ function bool(value: boolean): number {
   return value ? 1 : 0;
 }
 
-function formatStack(stack: number[]): string {
-  return `[${stack.join(" ")}]`;
+function formatStack(stack: Value[]): string {
+  return `[${stack.map(formatValueForStack).join(" ")}]`;
+}
+
+function formatValueForStack(value: Value): string {
+  if (typeof value === "string") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
 }
 
 function requireStackDepth(state: VmState, op: string, depth: number): void {
@@ -169,7 +178,7 @@ function requireStackDepth(state: VmState, op: string, depth: number): void {
   }
 }
 
-function peek(state: VmState, op: string): number {
+function peek(state: VmState, op: string): Value {
   const value = state.stack.at(-1);
 
   if (value === undefined) {
@@ -179,11 +188,21 @@ function peek(state: VmState, op: string): number {
   return value;
 }
 
-function pop(state: VmState, op: string): number {
+function pop(state: VmState, op: string): Value {
   const value = state.stack.pop();
 
   if (value === undefined) {
     throw new Error(`${op} requires a value on the stack`);
+  }
+
+  return value;
+}
+
+function popNumber(state: VmState, op: string): number {
+  const value = pop(state, op);
+
+  if (typeof value !== "number") {
+    throw new Error(`${op} requires numbers on the stack`);
   }
 
   return value;

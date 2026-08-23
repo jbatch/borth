@@ -1,5 +1,7 @@
+import type { Value } from "./value.js";
+
 export type Instruction =
-  | { op: "PUSH"; value: number }
+  | { op: "PUSH"; value: Value }
   | { op: "DROP" }
   | { op: "DUP" }
   | { op: "SWAP" }

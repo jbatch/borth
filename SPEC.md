@@ -472,3 +472,22 @@ Debugging decision:
 
 - `.s` prints the current value stack without changing it.
 - Stack output is formatted from bottom to top, with the top of the stack on the right.
+
+## Milestone 6: Strings
+
+Goal:
+
+```text
+"hello, borth" print
+```
+
+should print `hello, borth`.
+
+String decision:
+
+- Strings are the second value type after integers.
+- Runtime stack values are currently `number | string`.
+- Strings can contain whitespace, but cannot span source lines.
+- Supported escapes are `\"`, `\\`, and `\n`.
+- Stack manipulation words operate on all values.
+- Arithmetic, comparison, and conditional flags still require numbers.

@@ -99,6 +99,9 @@ function compileNode(state: CompilerState, node: AstNode): void {
     case "integer":
       state.instructions.push({ op: "PUSH", value: node.value });
       break;
+    case "string":
+      state.instructions.push({ op: "PUSH", value: node.value });
+      break;
     case "word":
       if (!compileControlWord(state, node.name)) {
         state.instructions.push(compileWord(state, node.name));
