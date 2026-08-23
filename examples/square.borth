@@ -1,0 +1,6 @@
+# Define a word that squares the top stack value.
+: square
+  dup *
+;
+
+10 square print

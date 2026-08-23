@@ -1,4 +1,4 @@
-import type { Program } from "./ast.js";
+import type { AstNode, Program, Word } from "./ast.js";
 import type { Instruction } from "./bytecode.js";
 
 type IfFrame = {
@@ -10,24 +10,23 @@ type IfFrame = {
 type CompilerState = {
   instructions: Instruction[];
   ifStack: IfFrame[];
+  definitions: Map<string, number>;
 };
 
 export function compile(program: Program): Instruction[] {
   const state: CompilerState = {
     instructions: [],
     ifStack: [],
+    definitions: new Map(),
   };
 
-  for (const node of program.body) {
-    switch (node.kind) {
-      case "integer":
-        state.instructions.push({ op: "PUSH", value: node.value });
-        break;
-      case "word":
-        if (!compileControlWord(state, node.name)) {
-          state.instructions.push(compileWord(node.name));
-        }
-        break;
+  for (let index = 0; index < program.body.length; index += 1) {
+    const node = program.body[index];
+
+    if (isWord(node, ":")) {
+      index = compileDefinition(state, program.body, index);
+    } else {
+      compileNode(state, node);
     }
   }
 
@@ -37,6 +36,75 @@ export function compile(program: Program): Instruction[] {
 
   state.instructions.push({ op: "HALT" });
   return state.instructions;
+}
+
+function compileDefinition(
+  state: CompilerState,
+  nodes: AstNode[],
+  colonIndex: number,
+): number {
+  if (state.ifStack.length > 0) {
+    throw new Error("definitions cannot appear inside control flow");
+  }
+
+  const nameNode = nodes[colonIndex + 1];
+
+  if (nameNode === undefined) {
+    throw new Error(": requires a word name");
+  }
+
+  if (nameNode.kind !== "word") {
+    throw new Error("definition name must be a word");
+  }
+
+  const name = nameNode.name;
+
+  if (isReservedWord(name)) {
+    throw new Error(`cannot define reserved word: ${name}`);
+  }
+
+  if (state.definitions.has(name)) {
+    throw new Error(`word already defined: ${name}`);
+  }
+
+  const skipDefinitionJumpIndex = state.instructions.length;
+  state.instructions.push({ op: "JUMP", target: -1 });
+  state.definitions.set(name, state.instructions.length);
+
+  for (let index = colonIndex + 2; index < nodes.length; index += 1) {
+    const node = nodes[index];
+
+    if (isWord(node, ";")) {
+      if (state.ifStack.length > 0) {
+        throw new Error(`definition ${name} has if without matching end`);
+      }
+
+      state.instructions.push({ op: "RET" });
+      patchJump(state, skipDefinitionJumpIndex, state.instructions.length);
+      return index;
+    }
+
+    if (isWord(node, ":")) {
+      throw new Error("nested definitions are not supported");
+    }
+
+    compileNode(state, node);
+  }
+
+  throw new Error(`definition ${name} without closing ;`);
+}
+
+function compileNode(state: CompilerState, node: AstNode): void {
+  switch (node.kind) {
+    case "integer":
+      state.instructions.push({ op: "PUSH", value: node.value });
+      break;
+    case "word":
+      if (!compileControlWord(state, node.name)) {
+        state.instructions.push(compileWord(state, node.name));
+      }
+      break;
+  }
 }
 
 function compileControlWord(state: CompilerState, name: string): boolean {
@@ -50,6 +118,8 @@ function compileControlWord(state: CompilerState, name: string): boolean {
     case "end":
       compileEnd(state);
       return true;
+    case ";":
+      throw new Error("; without matching :");
     default:
       return false;
   }
@@ -133,7 +203,23 @@ function patchJumpIfFalse(
   instruction.target = target;
 }
 
-function compileWord(name: string): Instruction {
+function compileWord(state: CompilerState, name: string): Instruction {
+  const builtIn = compileBuiltInWord(name);
+
+  if (builtIn !== undefined) {
+    return builtIn;
+  }
+
+  const target = state.definitions.get(name);
+
+  if (target !== undefined) {
+    return { op: "CALL", target };
+  }
+
+  throw new Error(`Unknown word: ${name}`);
+}
+
+function compileBuiltInWord(name: string): Instruction | undefined {
   switch (name) {
     case "drop":
       return { op: "DROP" };
@@ -162,6 +248,21 @@ function compileWord(name: string): Instruction {
     case "print":
       return { op: "PRINT" };
     default:
-      throw new Error(`Unknown word: ${name}`);
+      return undefined;
   }
+}
+
+function isWord(node: AstNode, name: string): node is Word {
+  return node.kind === "word" && node.name === name;
+}
+
+function isReservedWord(name: string): boolean {
+  return (
+    name === ":" ||
+    name === ";" ||
+    name === "if" ||
+    name === "else" ||
+    name === "end" ||
+    compileBuiltInWord(name) !== undefined
+  );
 }

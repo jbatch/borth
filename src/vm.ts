@@ -3,6 +3,7 @@ import type { Instruction } from "./bytecode.js";
 export type VmState = {
   ip: number;
   stack: number[];
+  callStack: number[];
 };
 
 export type ExecuteOptions = {
@@ -17,6 +18,7 @@ export function execute(
   const state: VmState = {
     ip: 0,
     stack: [],
+    callStack: [],
   };
 
   while (state.ip < instructions.length) {
@@ -103,6 +105,10 @@ export function execute(
         state.ip += 1;
         break;
       }
+      case "CALL":
+        state.callStack.push(state.ip + 1);
+        state.ip = instruction.target;
+        break;
       case "JUMP":
         state.ip = instruction.target;
         break;
@@ -115,6 +121,16 @@ export function execute(
         write(pop(state, "PRINT"));
         state.ip += 1;
         break;
+      case "RET": {
+        const returnAddress = state.callStack.pop();
+
+        if (returnAddress === undefined) {
+          throw new Error("RET requires a return address");
+        }
+
+        state.ip = returnAddress;
+        break;
+      }
       case "HALT":
         return state;
     }

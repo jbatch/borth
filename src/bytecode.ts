@@ -12,7 +12,9 @@ export type Instruction =
   | { op: "EQ" }
   | { op: "LT" }
   | { op: "GT" }
+  | { op: "CALL"; target: number }
   | { op: "JUMP"; target: number }
   | { op: "JUMP_IF_FALSE"; target: number }
   | { op: "PRINT" }
+  | { op: "RET" }
   | { op: "HALT" };

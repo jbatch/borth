@@ -39,6 +39,16 @@ mod   ( A B -- C )
 print ( A -- )
 ```
 
+User-defined words:
+
+```text
+: square
+  dup *
+;
+
+10 square print
+```
+
 Conditionals consume a flag from the top of the stack. `0` is false; any other integer is true.
 
 ```text

@@ -419,3 +419,27 @@ Testing decision:
 - Use Node's built-in test runner.
 - Prefer behavior tests for control flow over exhaustive primitive tests.
 - `run` accepts a write callback so tests can capture `print` output directly.
+
+## Milestone 4: User-Defined Words
+
+Goal:
+
+```text
+: square
+  dup *
+;
+
+10 square print
+```
+
+should print `100`.
+
+Definition decision:
+
+- `:` starts a word definition.
+- The next token is the word name.
+- `;` ends the definition.
+- Calling a user-defined word is just writing its name.
+- User-defined words compile to `CALL`; definitions end with `RET`.
+- The VM has a call stack for return addresses.
+- Definitions must appear before use for now.
