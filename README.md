@@ -7,6 +7,7 @@ Current scope: a tiny source string can run through lexer, parser, compiler, byt
 ```sh
 yarn install
 yarn build
+yarn test
 yarn borth -- "10 20 + print"
 yarn borth -- examples/add.borth
 ```
@@ -43,6 +44,12 @@ Conditionals consume a flag from the top of the stack. `0` is false; any other i
 ```text
 10 20 < if
   999 print
+end
+
+10 20 > if
+  111 print
+else
+  222 print
 end
 ```
 

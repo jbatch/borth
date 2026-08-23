@@ -411,4 +411,11 @@ Conditional decision:
 - `if` consumes the flag.
 - `0` is false. Any other integer is true.
 - Source-level `if ... end` compiles to bytecode-level `JUMP_IF_FALSE`.
-- `else` is intentionally not supported yet.
+- Source-level `if ... else ... end` compiles to `JUMP_IF_FALSE` and `JUMP`.
+- `else` belongs to the nearest unmatched `if`.
+
+Testing decision:
+
+- Use Node's built-in test runner.
+- Prefer behavior tests for control flow over exhaustive primitive tests.
+- `run` accepts a write callback so tests can capture `print` output directly.

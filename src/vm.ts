@@ -5,7 +5,15 @@ export type VmState = {
   stack: number[];
 };
 
-export function execute(instructions: Instruction[]): VmState {
+export type ExecuteOptions = {
+  write?: (value: number) => void;
+};
+
+export function execute(
+  instructions: Instruction[],
+  options: ExecuteOptions = {},
+): VmState {
+  const write = options.write ?? console.log;
   const state: VmState = {
     ip: 0,
     stack: [],
@@ -95,13 +103,16 @@ export function execute(instructions: Instruction[]): VmState {
         state.ip += 1;
         break;
       }
+      case "JUMP":
+        state.ip = instruction.target;
+        break;
       case "JUMP_IF_FALSE": {
         const value = pop(state, "JUMP_IF_FALSE");
         state.ip = value === 0 ? instruction.target : state.ip + 1;
         break;
       }
       case "PRINT":
-        console.log(pop(state, "PRINT"));
+        write(pop(state, "PRINT"));
         state.ip += 1;
         break;
       case "HALT":

@@ -1,0 +1,13 @@
+# The true branch runs.
+10 20 < if
+  111 print
+else
+  222 print
+end
+
+# The false branch runs.
+10 20 > if
+  333 print
+else
+  444 print
+end

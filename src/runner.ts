@@ -1,12 +1,14 @@
 import { compile } from "./compiler.js";
 import { lex } from "./lexer.js";
 import { parse } from "./parser.js";
-import { execute } from "./vm.js";
+import { execute, type ExecuteOptions, type VmState } from "./vm.js";
 
-export function run(source: string): void {
+export type RunOptions = ExecuteOptions;
+
+export function run(source: string, options: RunOptions = {}): VmState {
   const tokens = lex(source);
   const program = parse(tokens);
   const bytecode = compile(program);
 
-  execute(bytecode);
+  return execute(bytecode, options);
 }
