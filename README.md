@@ -13,6 +13,7 @@ yarn borth -- '"hello, borth" print'
 yarn borth -- examples/add.borth
 yarn borth -- examples/echo.borth
 yarn borth -- examples/double-input.borth
+yarn borth -- examples/introduce.borth
 yarn borth -- examples/random-print.borth
 yarn borth -- examples/counter.borth
 ```
@@ -41,6 +42,8 @@ mod   ( A B -- C )
 =     ( number number -- 0|1 ) or ( string string -- 0|1 )
 <     ( number number -- 0|1 )
 >     ( number number -- 0|1 )
+
+str-cat ( string string -- string )
 
 random ( max -- n )
 @      ( addr -- A )
@@ -73,6 +76,12 @@ Values:
 ```
 
 Strings can contain whitespace, but they cannot span source lines. Supported escapes are `\"`, `\\`, and `\n`.
+
+`str-cat` concatenates two strings:
+
+```text
+"hello, " "borth" str-cat print
+```
 
 User-defined words:
 

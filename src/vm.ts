@@ -127,6 +127,11 @@ export function execute(
         state.ip += 1;
         break;
       }
+      case "STR_CAT": {
+        binaryStringOp(state, "STR_CAT", (a, b) => a + b);
+        state.ip += 1;
+        break;
+      }
       case "FETCH": {
         const address = popAddress(state, "FETCH");
         state.stack.push(loadMemory(state, address, "FETCH"));
@@ -236,6 +241,18 @@ function binaryNumberOp(
   state.stack.push(apply(a, b));
 }
 
+function binaryStringOp(
+  state: VmState,
+  op: string,
+  apply: (a: string, b: string) => string,
+): void {
+  requireStackDepth(state, op, 2);
+  const b = popString(state, op);
+  const a = popString(state, op);
+
+  state.stack.push(apply(a, b));
+}
+
 function binaryEqualOp(state: VmState): void {
   requireStackDepth(state, "EQ", 2);
   const b = pop(state, "EQ");
@@ -305,6 +322,16 @@ function popNumber(state: VmState, op: string): number {
 
   if (typeof value !== "number") {
     throw new Error(`${op} requires numbers on the stack`);
+  }
+
+  return value;
+}
+
+function popString(state: VmState, op: string): string {
+  const value = pop(state, op);
+
+  if (typeof value !== "string") {
+    throw new Error(`${op} requires strings on the stack`);
   }
 
   return value;

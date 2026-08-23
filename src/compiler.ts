@@ -376,6 +376,8 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "LT" };
     case ">":
       return { op: "GT" };
+    case "str-cat":
+      return { op: "STR_CAT" };
     case "@":
       return { op: "FETCH" };
     case "!":

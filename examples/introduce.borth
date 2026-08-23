@@ -1,0 +1,17 @@
+# Ask two questions, then print one formatted sentence.
+
+# ( first second -- sentence )
+: introduction
+  "Hi, " rot str-cat
+  ". I heard you like " str-cat
+  swap str-cat
+  "." str-cat
+;
+
+"What is your name?" print
+read-line
+
+"What do you like?" print
+read-line
+
+introduction print

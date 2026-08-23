@@ -633,3 +633,24 @@ String equality decision:
 - `=` compares two numbers or two strings and returns a numeric flag.
 - Mixed-type equality throws instead of silently returning false.
 - Ordering comparisons remain number-only.
+
+## Milestone 14: String Concatenation
+
+Goal:
+
+```text
+"hello, " "borth" str-cat print
+```
+
+should print:
+
+```text
+hello, borth
+```
+
+String concatenation decision:
+
+- `str-cat` is a VM primitive for now because strings are opaque runtime values.
+- `+` remains numeric only; string concatenation is explicit.
+- This is a small step toward source manipulation and eventually writing lexer-like
+  programs in Borth.

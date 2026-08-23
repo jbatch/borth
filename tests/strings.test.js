@@ -45,6 +45,18 @@ test("string equality works in conditionals", () => {
   assert.deepEqual(outputOf('"yes" "yes" = if "ok" print end'), ["ok"]);
 });
 
+test("str-cat concatenates two strings", () => {
+  assert.deepEqual(outputOf('"hello, " "borth" str-cat print'), [
+    "hello, borth",
+  ]);
+});
+
+test("str-cat leaves the concatenated string on the stack", () => {
+  const state = run('"a" "b" str-cat', { write: () => undefined });
+
+  assert.deepEqual(state.stack, ["ab"]);
+});
+
 test("equality requires matching supported types", () => {
   assert.throws(
     () => outputOf('"1" 1 ='),
@@ -54,6 +66,10 @@ test("equality requires matching supported types", () => {
 
 test("arithmetic requires numbers", () => {
   assert.throws(() => outputOf('"hello" 1 +'), /ADD requires numbers/);
+});
+
+test("str-cat requires strings", () => {
+  assert.throws(() => outputOf('"hello" 1 str-cat'), /STR_CAT requires strings/);
 });
 
 test("conditionals require numbers", () => {

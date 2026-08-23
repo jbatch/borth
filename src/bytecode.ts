@@ -16,6 +16,7 @@ export type Instruction =
   | { op: "EQ" }
   | { op: "LT" }
   | { op: "GT" }
+  | { op: "STR_CAT" }
   | { op: "FETCH" }
   | { op: "STORE" }
   | { op: "RANDOM" }
