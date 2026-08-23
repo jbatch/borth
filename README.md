@@ -38,9 +38,9 @@ rot   ( A B C -- B C A )
 /     ( A B -- C )
 mod   ( A B -- C )
 
-=     ( A B -- 0|1 )
-<     ( A B -- 0|1 )
->     ( A B -- 0|1 )
+=     ( number number -- 0|1 ) or ( string string -- 0|1 )
+<     ( number number -- 0|1 )
+>     ( number number -- 0|1 )
 
 random ( max -- n )
 @      ( addr -- A )

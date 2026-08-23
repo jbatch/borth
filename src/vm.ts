@@ -113,7 +113,7 @@ export function execute(
         break;
       }
       case "EQ": {
-        binaryNumberOp(state, "EQ", (a, b) => bool(a === b));
+        binaryEqualOp(state);
         state.ip += 1;
         break;
       }
@@ -234,6 +234,24 @@ function binaryNumberOp(
   const a = popNumber(state, op);
 
   state.stack.push(apply(a, b));
+}
+
+function binaryEqualOp(state: VmState): void {
+  requireStackDepth(state, "EQ", 2);
+  const b = pop(state, "EQ");
+  const a = pop(state, "EQ");
+
+  if (typeof a === "number" && typeof b === "number") {
+    state.stack.push(bool(a === b));
+    return;
+  }
+
+  if (typeof a === "string" && typeof b === "string") {
+    state.stack.push(bool(a === b));
+    return;
+  }
+
+  throw new Error("EQ requires matching numbers or strings on the stack");
 }
 
 function bool(value: boolean): number {

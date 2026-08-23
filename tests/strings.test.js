@@ -36,6 +36,22 @@ test(".s prints strings with quotes", () => {
   assert.deepEqual(outputOf('"hello" 123 .s'), ['["hello" 123]']);
 });
 
+test("string equality returns numeric flags", () => {
+  assert.deepEqual(outputOf('"hello" "hello" = print'), [1]);
+  assert.deepEqual(outputOf('"hello" "there" = print'), [0]);
+});
+
+test("string equality works in conditionals", () => {
+  assert.deepEqual(outputOf('"yes" "yes" = if "ok" print end'), ["ok"]);
+});
+
+test("equality requires matching supported types", () => {
+  assert.throws(
+    () => outputOf('"1" 1 ='),
+    /EQ requires matching numbers or strings/,
+  );
+});
+
 test("arithmetic requires numbers", () => {
   assert.throws(() => outputOf('"hello" 1 +'), /ADD requires numbers/);
 });

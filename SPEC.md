@@ -486,11 +486,11 @@ should print `hello, borth`.
 String decision:
 
 - Strings are the second value type after integers.
-- Runtime stack values are currently `number | string`.
+- Runtime stack values now include numbers, strings, and addresses.
 - Strings can contain whitespace, but cannot span source lines.
 - Supported escapes are `\"`, `\\`, and `\n`.
 - Stack manipulation words operate on all values.
-- Arithmetic, comparison, and conditional flags still require numbers.
+- Arithmetic, ordering comparisons, and conditional flags still require numbers.
 
 ## Milestone 7: Prelude
 
@@ -615,3 +615,21 @@ Variable decision:
 - Addresses are their own value type, not plain numbers.
 - `@` fetches from an address: `( addr -- A )`.
 - `!` stores into an address: `( A addr -- )`.
+
+## Milestone 13: String Equality
+
+Goal:
+
+```text
+"yes" read-line = if
+  "matched" print
+end
+```
+
+should print `matched` when the user enters `yes`.
+
+String equality decision:
+
+- `=` compares two numbers or two strings and returns a numeric flag.
+- Mixed-type equality throws instead of silently returning false.
+- Ordering comparisons remain number-only.
