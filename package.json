@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "borth": "node dist/main.js",
     "start": "node dist/main.js",
     "dev": "tsc && node dist/main.js"
   },

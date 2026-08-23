@@ -2,10 +2,16 @@
 
 Tiny experimental stack-based language.
 
-Current scope: TypeScript project boilerplate with an executable hello world.
+Current scope: a tiny source string can run through lexer, parser, compiler, bytecode, and VM.
 
 ```sh
-npm install
-npm run build
-npm start
+yarn install
+yarn build
+yarn borth -- "10 20 + print"
+```
+
+Expected output:
+
+```text
+30
 ```

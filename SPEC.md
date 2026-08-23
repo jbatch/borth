@@ -341,7 +341,7 @@ The repository currently contains TypeScript boilerplate and an executable hello
 
 ## Milestone 1: Smallest Complete Stack Program
 
-Proposed goal:
+Goal:
 
 ```text
 10 20 + print
@@ -368,3 +368,10 @@ Out of scope for milestone 1:
 - files as source input, unless we decide the CLI needs it immediately
 - a binary bytecode format
 - optimisation
+
+Initial primitive decisions:
+
+- `PUSH` exists because integer literals need to place values on the VM stack.
+- `ADD` exists as the first arithmetic primitive.
+- `PRINT` exists temporarily as host I/O so we can observe programs from the CLI.
+- `HALT` exists so bytecode has an explicit stopping point.
