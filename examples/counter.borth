@@ -1,0 +1,11 @@
+# Count from 0 to 4 using a global variable cell.
+
+variable count
+
+0 count !
+
+loop
+  count @ print
+  count @ 1 + count !
+  count @ 5 =
+until

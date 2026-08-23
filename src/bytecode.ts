@@ -2,6 +2,7 @@ import type { Value } from "./value.js";
 
 export type Instruction =
   | { op: "PUSH"; value: Value }
+  | { op: "ALLOC_VARIABLE" }
   | { op: "DROP" }
   | { op: "DUP" }
   | { op: "SWAP" }
@@ -15,6 +16,8 @@ export type Instruction =
   | { op: "EQ" }
   | { op: "LT" }
   | { op: "GT" }
+  | { op: "FETCH" }
+  | { op: "STORE" }
   | { op: "RANDOM" }
   | { op: "CALL"; target: number }
   | { op: "JUMP"; target: number }

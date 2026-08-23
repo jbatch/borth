@@ -14,6 +14,7 @@ yarn borth -- examples/add.borth
 yarn borth -- examples/echo.borth
 yarn borth -- examples/double-input.borth
 yarn borth -- examples/random-print.borth
+yarn borth -- examples/counter.borth
 ```
 
 Expected output:
@@ -42,6 +43,8 @@ mod   ( A B -- C )
 >     ( A B -- 0|1 )
 
 random ( max -- n )
+@      ( addr -- A )
+!      ( A addr -- )
 read-line ( -- string )
 read-int  ( -- number )
 print ( A -- )
@@ -149,4 +152,13 @@ printf '21\n' | yarn borth -- examples/double-input.borth
 
 ```text
 1 100 random-between print
+```
+
+Variables are global cells. A variable name pushes its address; `@` fetches from
+an address and `!` stores into an address.
+
+```text
+variable count
+0 count !
+count @ print
 ```

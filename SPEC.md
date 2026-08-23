@@ -592,3 +592,26 @@ Loop decision:
 - `until` jumps back to the matching `loop` when the flag is `0`.
 - `until` compiles to the existing `JUMP_IF_FALSE`; no VM opcode is needed.
 - Nested control-flow blocks must close in order.
+
+## Milestone 12: Variable Cells
+
+Goal:
+
+```text
+variable count
+0 count !
+count @ print
+```
+
+should print `0`.
+
+Variable decision:
+
+- Variables are globally scoped, like user-defined words.
+- `variable name` is compiler syntax, similar to `: name ... ;`.
+- A variable declaration allocates one mutable VM cell initialized to `0`.
+- After declaration, the variable name becomes a word.
+- Running a variable word pushes its address.
+- Addresses are their own value type, not plain numbers.
+- `@` fetches from an address: `( addr -- A )`.
+- `!` stores into an address: `( A addr -- )`.

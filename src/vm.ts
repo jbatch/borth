@@ -1,5 +1,5 @@
 import type { Instruction } from "./bytecode.js";
-import type { Value } from "./value.js";
+import type { Address, Value } from "./value.js";
 
 const integerInputPattern = /^-?\d+$/;
 
@@ -7,6 +7,7 @@ export type VmState = {
   ip: number;
   stack: Value[];
   callStack: number[];
+  memory: Value[];
 };
 
 export type ExecuteOptions = {
@@ -26,6 +27,7 @@ export function execute(
     ip: 0,
     stack: [],
     callStack: [],
+    memory: [],
   };
 
   while (state.ip < instructions.length) {
@@ -34,6 +36,10 @@ export function execute(
     switch (instruction.op) {
       case "PUSH":
         state.stack.push(instruction.value);
+        state.ip += 1;
+        break;
+      case "ALLOC_VARIABLE":
+        state.memory.push(0);
         state.ip += 1;
         break;
       case "DROP":
@@ -118,6 +124,19 @@ export function execute(
       }
       case "GT": {
         binaryNumberOp(state, "GT", (a, b) => bool(a > b));
+        state.ip += 1;
+        break;
+      }
+      case "FETCH": {
+        const address = popAddress(state, "FETCH");
+        state.stack.push(loadMemory(state, address, "FETCH"));
+        state.ip += 1;
+        break;
+      }
+      case "STORE": {
+        const address = popAddress(state, "STORE");
+        const value = pop(state, "STORE");
+        storeMemory(state, address, value, "STORE");
         state.ip += 1;
         break;
       }
@@ -230,6 +249,10 @@ function formatValueForStack(value: Value): string {
     return JSON.stringify(value);
   }
 
+  if (typeof value === "object") {
+    return `<addr:${value.index}>`;
+  }
+
   return String(value);
 }
 
@@ -267,4 +290,37 @@ function popNumber(state: VmState, op: string): number {
   }
 
   return value;
+}
+
+function popAddress(state: VmState, op: string): Address {
+  const value = pop(state, op);
+
+  if (typeof value !== "object" || value.kind !== "address") {
+    throw new Error(`${op} requires an address on the stack`);
+  }
+
+  return value;
+}
+
+function loadMemory(state: VmState, address: Address, op: string): Value {
+  const value = state.memory[address.index];
+
+  if (value === undefined) {
+    throw new Error(`${op} received invalid address`);
+  }
+
+  return value;
+}
+
+function storeMemory(
+  state: VmState,
+  address: Address,
+  value: Value,
+  op: string,
+): void {
+  if (state.memory[address.index] === undefined) {
+    throw new Error(`${op} received invalid address`);
+  }
+
+  state.memory[address.index] = value;
 }

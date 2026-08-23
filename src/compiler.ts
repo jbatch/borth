@@ -15,6 +15,7 @@ type CompilerState = {
   loopStack: number[];
   blockStack: BlockKind[];
   definitions: Map<string, number>;
+  variables: Map<string, number>;
 };
 
 export function compile(program: Program): Instruction[] {
@@ -24,6 +25,7 @@ export function compile(program: Program): Instruction[] {
     loopStack: [],
     blockStack: [],
     definitions: new Map(),
+    variables: new Map(),
   };
 
   for (let index = 0; index < program.body.length; index += 1) {
@@ -31,6 +33,8 @@ export function compile(program: Program): Instruction[] {
 
     if (isWord(node, ":")) {
       index = compileDefinition(state, program.body, index);
+    } else if (isWord(node, "variable")) {
+      index = compileVariable(state, program.body, index);
     } else {
       compileNode(state, node);
     }
@@ -73,7 +77,7 @@ function compileDefinition(
     throw new Error(`cannot define reserved word: ${name}`);
   }
 
-  if (state.definitions.has(name)) {
+  if (isUserWordNameTaken(state, name)) {
     throw new Error(`word already defined: ${name}`);
   }
 
@@ -102,10 +106,49 @@ function compileDefinition(
       throw new Error("nested definitions are not supported");
     }
 
+    if (isWord(node, "variable")) {
+      throw new Error("variable declarations are only supported at top level");
+    }
+
     compileNode(state, node);
   }
 
   throw new Error(`definition ${name} without closing ;`);
+}
+
+function compileVariable(
+  state: CompilerState,
+  nodes: AstNode[],
+  variableIndex: number,
+): number {
+  if (state.blockStack.length > 0) {
+    throw new Error("variable declarations cannot appear inside control flow");
+  }
+
+  const nameNode = nodes[variableIndex + 1];
+
+  if (nameNode === undefined) {
+    throw new Error("variable requires a name");
+  }
+
+  if (nameNode.kind !== "word") {
+    throw new Error("variable name must be a word");
+  }
+
+  const name = nameNode.name;
+
+  if (isReservedWord(name)) {
+    throw new Error(`cannot define reserved word: ${name}`);
+  }
+
+  if (isUserWordNameTaken(state, name)) {
+    throw new Error(`word already defined: ${name}`);
+  }
+
+  state.variables.set(name, state.variables.size);
+  state.instructions.push({ op: "ALLOC_VARIABLE" });
+
+  return variableIndex + 1;
 }
 
 function compileNode(state: CompilerState, node: AstNode): void {
@@ -293,6 +336,15 @@ function compileWord(state: CompilerState, name: string): Instruction {
     return { op: "CALL", target };
   }
 
+  const variableIndex = state.variables.get(name);
+
+  if (variableIndex !== undefined) {
+    return {
+      op: "PUSH",
+      value: { kind: "address", index: variableIndex },
+    };
+  }
+
   throw new Error(`Unknown word: ${name}`);
 }
 
@@ -324,6 +376,10 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "LT" };
     case ">":
       return { op: "GT" };
+    case "@":
+      return { op: "FETCH" };
+    case "!":
+      return { op: "STORE" };
     case "random":
       return { op: "RANDOM" };
     case "read-line":
@@ -352,6 +408,11 @@ function isReservedWord(name: string): boolean {
     name === "end" ||
     name === "loop" ||
     name === "until" ||
+    name === "variable" ||
     compileBuiltInWord(name) !== undefined
   );
+}
+
+function isUserWordNameTaken(state: CompilerState, name: string): boolean {
+  return state.definitions.has(name) || state.variables.has(name);
 }
