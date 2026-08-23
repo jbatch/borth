@@ -377,3 +377,18 @@ Initial primitive decisions:
 - Comparisons currently return `1` for true and `0` for false.
 - `PRINT` exists temporarily as host I/O so we can observe programs from the CLI.
 - `HALT` exists so bytecode has an explicit stopping point.
+
+## Milestone 2: Small Documented Programs
+
+Goal:
+
+```sh
+yarn borth -- examples/add.borth
+```
+
+should read source from a file and run it through the existing pipeline.
+
+Comment decision:
+
+- `#` starts a whole-line comment after optional leading whitespace.
+- Inline comments are intentionally not supported yet.

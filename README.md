@@ -8,6 +8,7 @@ Current scope: a tiny source string can run through lexer, parser, compiler, byt
 yarn install
 yarn build
 yarn borth -- "10 20 + print"
+yarn borth -- examples/add.borth
 ```
 
 Expected output:
@@ -34,4 +35,11 @@ mod   ( A B -- C )
 >     ( A B -- 0|1 )
 
 print ( A -- )
+```
+
+Comment lines start with `#`:
+
+```text
+# Square a number.
+10 dup * print
 ```
