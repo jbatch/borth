@@ -1,0 +1,45 @@
+# Extract space-delimited tokens by threading the original source string and a
+# starting index through each call.
+#
+# This version is useful as a stack-shape exercise:
+#
+#   next-token ( src from -- src next tok )
+#
+# After `print` consumes `tok`, the stack still contains `src next`, ready for
+# another call to `next-token`.
+#
+# Limitation: `token-end` is just the next space index. That means this example
+# needs the source string to end with a trailing space, otherwise the final token
+# sees `-1` as its end index.
+
+# token-end ( src from -- src from end )
+: token-end
+  2dup " " swap str-index-of
+;
+
+# token-length ( from end -- from len )
+: token-length
+  over -
+;
+
+# next-start ( end -- next )
+: next-start
+  1 +
+;
+
+# next-token ( src from -- src next tok )
+: next-token
+  # Preserve `src from` because deriving `tok` consumes a copy.
+  2dup token-end
+  token-length
+  str-slice rot rot
+
+  # Recompute the token end so we can derive the continuation index without
+  # carrying too many intermediate values.
+  token-end nip next-start rot
+;
+
+"10 20 + " 0 next-token
+.s print
+next-token .s print
+next-token .s print

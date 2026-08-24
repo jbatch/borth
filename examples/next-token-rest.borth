@@ -1,0 +1,46 @@
+# Extract space-delimited tokens by returning the unconsumed rest of the source.
+#
+# This version is more ergonomic for streaming lexing:
+#
+#   rest-token ( src -- rest tok )
+#
+# After `print` consumes `tok`, the stack still contains `rest`, ready for
+# another call to `rest-token`.
+#
+# Unlike the index-threading version, this handles the final token without
+# requiring the source string to end with a trailing space.
+
+# token-end ( src from -- src from end )
+#
+# Return the exclusive token end index. If no space is found, use the end of the
+# source string instead of leaking `str-index-of`'s `-1` sentinel to callers.
+: token-end
+  2dup " " swap str-index-of
+  dup -1 = if
+    drop
+    over str-len
+  end
+;
+
+# rest-token ( src -- rest tok )
+: rest-token
+  # Find the token end, then duplicate it so one copy can build `tok`.
+  dup 0 token-end nip nip 2dup
+  0 swap str-slice rot rot
+
+  # The rest starts after the delimiter. When the token ended at the source end,
+  # that computed rest would be outside the string, so return "" instead.
+  1 + swap dup str-len rot swap
+  over -
+  dup 0 < if
+    drop drop drop "" swap
+  else
+    str-slice swap
+  end
+;
+
+"10 20 +"
+rest-token print
+rest-token print
+rest-token print .s
+rest-token print .s

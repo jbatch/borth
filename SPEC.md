@@ -686,3 +686,116 @@ String inspection decision:
   not found.
 - These words are the next step toward lexer-like programs without introducing
   arrays or token data structures yet.
+
+## Near-Term Roadmap: Toward a Borth Lexer
+
+The long-term goal is still a compiler written in Borth. The next milestones
+should be small programs that force only one or two new language features at a
+time.
+
+### Proposed Milestone: Safer Token Scanning
+
+Goal:
+
+```text
+"10 20 +" 0 next-token
+```
+
+should extract one token and enough continuation state to call `next-token`
+again.
+
+Likely language work:
+
+- Handle "delimiter not found" cleanly.
+- Decide whether `next-token` returns a `done` flag.
+- Add small stack helpers such as `2drop` or `-rot` only if stack pressure
+  remains awkward after factoring.
+- Keep both token-scanning examples around for now: index-threading
+  demonstrates `( src from -- src next tok )`, while rest-threading appears more
+  ergonomic for streaming because each consumed token leaves the next source
+  string on the stack.
+
+### Proposed Milestone: Skip Leading Whitespace
+
+Goal:
+
+```text
+"   10 20" 0 skip-spaces next-token
+```
+
+should skip leading spaces before extracting the next token.
+
+Likely language work:
+
+- Prefer using existing loops and string inspection first.
+- Consider `str-at ( string index -- string )` only if avoiding character-level
+  access makes the program harder to understand.
+
+### Proposed Milestone: Token Kind Classification
+
+Goal:
+
+```text
+"123" classify-token print
+"+" classify-token print
+"if" classify-token print
+```
+
+should classify token text into simple token kinds.
+
+Likely language work:
+
+- Add `str->int?` or `is-int?` when integer classification becomes necessary.
+- Use nested `if` first; add case/switch syntax only after the shape becomes
+  repetitive enough to justify it.
+- Represent token kind as a string initially; structured token values can wait.
+
+### Proposed Milestone: Stream Tokens From Source
+
+Goal:
+
+```text
+"10 20 + print " lex-print
+```
+
+should print:
+
+```text
+10
+20
++
+print
+```
+
+Likely language work:
+
+- Build a loop around `next-token`.
+- Establish a clear `done` convention.
+- Avoid arrays at first; print or consume tokens as a stream.
+
+### Proposed Milestone: First Token Records
+
+Goal:
+
+```text
+"123 " 0 next-token parse-token .s
+```
+
+should leave an inspectable token representation on the stack.
+
+Likely language work:
+
+- Start with parallel stack values such as `( kind value )`.
+- Introduce arrays or records only once passing around paired token data becomes
+  awkward.
+- Prefer high-level array values over raw Forth-style memory structs at this
+  stage.
+
+### Roadmap Bias
+
+- Prefer changing stack effects and factoring words before adding deep stack
+  access.
+- Prefer recomputing cheap pure values over preserving many intermediates on
+  the stack.
+- Add VM primitives only when Borth cannot inspect or construct the value
+  directly.

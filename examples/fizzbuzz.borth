@@ -38,7 +38,7 @@
 : fizzbuzz-to
     dup print-fb
     # ( A B -- A B A==B )
-    over over = if
+    2dup = if
         # end
         drop drop
     else

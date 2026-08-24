@@ -14,7 +14,7 @@ yarn borth -- examples/add.borth
 yarn borth -- examples/echo.borth
 yarn borth -- examples/double-input.borth
 yarn borth -- examples/introduce.borth
-yarn borth -- examples/next-token.borth
+yarn borth -- examples/next-token-rest.borth
 yarn borth -- examples/random-print.borth
 yarn borth -- examples/counter.borth
 ```
