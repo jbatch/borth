@@ -1,0 +1,12 @@
+# Count from 0 to 4 using a pre-test loop.
+
+0
+
+loop
+  dup 5 <
+while
+  dup print
+  1 +
+repeat
+
+drop

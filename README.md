@@ -17,6 +17,7 @@ yarn borth -- examples/introduce.borth
 yarn borth -- examples/next-token-rest.borth
 yarn borth -- examples/random-print.borth
 yarn borth -- examples/counter.borth
+yarn borth -- examples/while-count.borth
 ```
 
 Expected output:
@@ -149,6 +150,23 @@ Loops run at least once. `until` consumes a flag from the top of the stack. It e
   1 +
   dup 6 =
 until
+drop
+```
+
+Pre-test loops check a condition before each body run. `while` consumes a flag
+from the top of the stack. It exits when the flag is `0`; `repeat` jumps back
+to the start of the loop.
+
+```text
+0
+
+loop
+  dup 5 <
+while
+  dup print
+  1 +
+repeat
+
 drop
 ```
 

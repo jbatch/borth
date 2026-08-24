@@ -7,12 +7,17 @@ type IfFrame = {
   hasElse: boolean;
 };
 
+type LoopFrame = {
+  startIndex: number;
+  whileJumpIndex?: number;
+};
+
 type BlockKind = "if" | "loop";
 
 type CompilerState = {
   instructions: Instruction[];
   ifStack: IfFrame[];
-  loopStack: number[];
+  loopStack: LoopFrame[];
   blockStack: BlockKind[];
   definitions: Map<string, number>;
   variables: Map<string, number>;
@@ -45,7 +50,7 @@ export function compile(program: Program): Instruction[] {
   }
 
   if (state.loopStack.length > 0) {
-    throw new Error("loop without matching until");
+    throw new Error("loop without matching until or repeat");
   }
 
   state.instructions.push({ op: "HALT" });
@@ -94,7 +99,9 @@ function compileDefinition(
       }
 
       if (state.loopStack.length > 0) {
-        throw new Error(`definition ${name} has loop without matching until`);
+        throw new Error(
+          `definition ${name} has loop without matching until or repeat`,
+        );
       }
 
       state.instructions.push({ op: "RET" });
@@ -181,8 +188,14 @@ function compileControlWord(state: CompilerState, name: string): boolean {
     case "loop":
       compileLoop(state);
       return true;
+    case "while":
+      compileWhile(state);
+      return true;
     case "until":
       compileUntil(state);
+      return true;
+    case "repeat":
+      compileRepeat(state);
       return true;
     case ";":
       throw new Error("; without matching :");
@@ -248,7 +261,24 @@ function compileEnd(state: CompilerState): void {
 
 function compileLoop(state: CompilerState): void {
   state.blockStack.push("loop");
-  state.loopStack.push(state.instructions.length);
+  state.loopStack.push({ startIndex: state.instructions.length });
+}
+
+function compileWhile(state: CompilerState): void {
+  requireCurrentBlock(
+    state,
+    "loop",
+    "while without matching loop",
+    "while cannot appear before closing inner control flow",
+  );
+  const frame = currentLoopFrame(state, "while without matching loop");
+
+  if (frame.whileJumpIndex !== undefined) {
+    throw new Error("while after while");
+  }
+
+  frame.whileJumpIndex = state.instructions.length;
+  state.instructions.push({ op: "JUMP_IF_FALSE", target: -1 });
 }
 
 function compileUntil(state: CompilerState): void {
@@ -258,18 +288,57 @@ function compileUntil(state: CompilerState): void {
     "until without matching loop",
     "until cannot close loop before inner if",
   );
-  const loopStart = state.loopStack.pop();
+  const frame = state.loopStack.pop();
 
-  if (loopStart === undefined) {
+  if (frame === undefined) {
     throw new Error("until without matching loop");
   }
 
+  if (frame.whileJumpIndex !== undefined) {
+    throw new Error("until cannot close loop after while");
+  }
+
   state.blockStack.pop();
-  state.instructions.push({ op: "JUMP_IF_FALSE", target: loopStart });
+  state.instructions.push({ op: "JUMP_IF_FALSE", target: frame.startIndex });
+}
+
+function compileRepeat(state: CompilerState): void {
+  requireCurrentBlock(
+    state,
+    "loop",
+    "repeat without matching loop",
+    "repeat cannot close loop before inner control flow",
+  );
+  const frame = state.loopStack.pop();
+
+  if (frame === undefined) {
+    throw new Error("repeat without matching loop");
+  }
+
+  if (frame.whileJumpIndex === undefined) {
+    throw new Error("repeat without matching while");
+  }
+
+  state.blockStack.pop();
+  state.instructions.push({ op: "JUMP", target: frame.startIndex });
+  patchJumpIfFalse(state, frame.whileJumpIndex, state.instructions.length);
 }
 
 function currentIfFrame(state: CompilerState, errorMessage: string): IfFrame {
   const frame = state.ifStack.at(-1);
+
+  if (frame === undefined) {
+    throw new Error(errorMessage);
+  }
+
+  return frame;
+}
+
+function currentLoopFrame(
+  state: CompilerState,
+  errorMessage: string,
+): LoopFrame {
+  const frame = state.loopStack.at(-1);
 
   if (frame === undefined) {
     throw new Error(errorMessage);
@@ -415,7 +484,9 @@ function isReservedWord(name: string): boolean {
     name === "else" ||
     name === "end" ||
     name === "loop" ||
+    name === "while" ||
     name === "until" ||
+    name === "repeat" ||
     name === "variable" ||
     compileBuiltInWord(name) !== undefined
   );

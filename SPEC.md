@@ -687,6 +687,38 @@ String inspection decision:
 - These words are the next step toward lexer-like programs without introducing
   arrays or token data structures yet.
 
+## Milestone 16: Pre-Test Loops
+
+Goal:
+
+```text
+0
+
+loop
+  dup 5 <
+while
+  dup print
+  1 +
+repeat
+
+drop
+```
+
+should print `0` through `4`.
+
+Pre-test loop decision:
+
+- `loop ... until` remains the post-condition loop form. It runs the body at
+  least once and exits when `until` consumes a non-zero flag.
+- `loop ... while ... repeat` is the pre-condition loop form. The words between
+  `loop` and `while` compute a numeric flag before each body run.
+- `while` consumes the flag. It exits when the flag is `0`.
+- `repeat` jumps back to the matching `loop`.
+- `while` and `repeat` compile to existing `JUMP_IF_FALSE` and `JUMP`
+  instructions; no VM opcode is needed.
+- This shape keeps the condition as ordinary stack code before the control word
+  that consumes it.
+
 ## Near-Term Roadmap: Toward a Borth Lexer
 
 The long-term goal is still a compiler written in Borth. The next milestones
@@ -769,7 +801,7 @@ print
 
 Likely language work:
 
-- Build a loop around `next-token`.
+- Use `loop ... while ... repeat` to avoid running once for an empty source.
 - Establish a clear `done` convention.
 - Avoid arrays at first; print or consume tokens as a stream.
 

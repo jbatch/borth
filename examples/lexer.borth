@@ -1,0 +1,49 @@
+# Lex through whitespace separated tokens of a source string
+
+# token-end ( src from -- src from end )
+#
+# Return the exclusive token end index. If no space is found, use the end of the
+# source string instead of leaking `str-index-of`'s `-1` sentinel to callers.
+: token-end
+  2dup " " swap str-index-of
+  dup -1 = if
+    drop
+    over str-len
+  end
+;
+
+# rest-token ( src -- rest tok )
+: rest-token
+  # Find the token end, then duplicate it so one copy can build `tok`.
+  dup 0 token-end nip nip 2dup
+  0 swap str-slice rot rot
+
+  # The rest starts after the delimiter. When the token ended at the source end,
+  # that computed rest would be outside the string, so return "" instead.
+  1 + swap dup str-len rot swap
+  over -
+  dup 0 < if
+    drop drop drop "" swap
+  else
+    str-slice swap
+  end
+;
+
+# has-rest? ( src -- 0|1) 
+#
+# Returns one if src is non-empty string
+: has-rest?
+    str-len 0 = not
+;
+
+# ( src -- )
+: lex-src
+    loop
+        dup has-rest?
+    while
+        rest-token print
+    repeat
+    drop
+;
+
+"10 20 +" lex-src

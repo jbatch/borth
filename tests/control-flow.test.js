@@ -73,8 +73,34 @@ test("loop until runs its body at least once", () => {
   assert.deepEqual(outputOf("0 loop 1 + dup print 1 until drop"), [1]);
 });
 
+test("loop while repeat checks the condition before each body run", () => {
+  assert.deepEqual(
+    outputOf("0 loop dup 3 < while 1 + dup print repeat drop"),
+    [1, 2, 3],
+  );
+});
+
+test("loop while repeat can skip its body", () => {
+  assert.deepEqual(
+    outputOf("3 loop dup 3 < while 1 + dup print repeat drop"),
+    [],
+  );
+});
+
 test("until without loop throws", () => {
   assert.throws(() => outputOf("1 until"), /until without matching loop/);
+});
+
+test("while without loop throws", () => {
+  assert.throws(() => outputOf("1 while"), /while without matching loop/);
+});
+
+test("repeat without loop throws", () => {
+  assert.throws(() => outputOf("repeat"), /repeat without matching loop/);
+});
+
+test("repeat without while throws", () => {
+  assert.throws(() => outputOf("loop 1 repeat"), /repeat without matching while/);
 });
 
 test("loop without until throws", () => {
@@ -98,5 +124,19 @@ test("loop and if blocks must not cross", () => {
   assert.throws(
     () => outputOf("loop 1 if 1 until end"),
     /until cannot close loop before inner if/,
+  );
+});
+
+test("while loops must close with repeat", () => {
+  assert.throws(
+    () => outputOf("loop 1 while 2 until"),
+    /until cannot close loop after while/,
+  );
+});
+
+test("loop while repeat blocks must not cross", () => {
+  assert.throws(
+    () => outputOf("loop 1 while 1 if repeat end"),
+    /repeat cannot close loop before inner control flow/,
   );
 });
