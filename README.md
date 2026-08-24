@@ -14,6 +14,7 @@ yarn borth -- examples/add.borth
 yarn borth -- examples/echo.borth
 yarn borth -- examples/double-input.borth
 yarn borth -- examples/introduce.borth
+yarn borth -- examples/import-math.borth
 yarn borth -- examples/next-token-rest.borth
 yarn borth -- examples/random-print.borth
 yarn borth -- examples/counter.borth
@@ -203,3 +204,16 @@ variable count
 0 count !
 count @ print
 ```
+
+Files can import definitions and variables from other Borth files. Imports are
+resolved relative to the importing file, and transitive imports share the same
+global word scope.
+
+```text
+import "lexer-lib.borth"
+
+"10 20 +" lex-src
+```
+
+Imported files are library modules: they can contain imports, variables, and
+word definitions, but not loose top-level executable code.

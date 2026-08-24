@@ -14,7 +14,7 @@ type LoopFrame = {
 
 type BlockKind = "if" | "loop";
 
-type CompilerState = {
+export type CompilerState = {
   instructions: Instruction[];
   ifStack: IfFrame[];
   loopStack: LoopFrame[];
@@ -23,8 +23,13 @@ type CompilerState = {
   variables: Map<string, number>;
 };
 
-export function compile(program: Program): Instruction[] {
-  const state: CompilerState = {
+export type CompileProgramOptions = {
+  allowTopLevelCode: boolean;
+  importModule?: (path: string) => void;
+};
+
+export function createCompilerState(): CompilerState {
+  return {
     instructions: [],
     ifStack: [],
     loopStack: [],
@@ -32,7 +37,19 @@ export function compile(program: Program): Instruction[] {
     definitions: new Map(),
     variables: new Map(),
   };
+}
 
+export function compile(program: Program): Instruction[] {
+  const state = createCompilerState();
+  compileProgram(state, program, { allowTopLevelCode: true });
+  return finishCompile(state);
+}
+
+export function compileProgram(
+  state: CompilerState,
+  program: Program,
+  options: CompileProgramOptions,
+): void {
   for (let index = 0; index < program.body.length; index += 1) {
     const node = program.body[index];
 
@@ -40,11 +57,17 @@ export function compile(program: Program): Instruction[] {
       index = compileDefinition(state, program.body, index);
     } else if (isWord(node, "variable")) {
       index = compileVariable(state, program.body, index);
+    } else if (isWord(node, "import")) {
+      index = compileImport(state, program.body, index, options.importModule);
+    } else if (!options.allowTopLevelCode) {
+      throw new Error("imported module cannot contain top-level executable code");
     } else {
       compileNode(state, node);
     }
   }
+}
 
+export function finishCompile(state: CompilerState): Instruction[] {
   if (state.ifStack.length > 0) {
     throw new Error("if without matching end");
   }
@@ -55,6 +78,35 @@ export function compile(program: Program): Instruction[] {
 
   state.instructions.push({ op: "HALT" });
   return state.instructions;
+}
+
+function compileImport(
+  state: CompilerState,
+  nodes: AstNode[],
+  importIndex: number,
+  importModule: ((path: string) => void) | undefined,
+): number {
+  if (state.blockStack.length > 0) {
+    throw new Error("imports cannot appear inside control flow");
+  }
+
+  const pathNode = nodes[importIndex + 1];
+
+  if (pathNode === undefined) {
+    throw new Error("import requires a path string");
+  }
+
+  if (pathNode.kind !== "string") {
+    throw new Error("import path must be a string");
+  }
+
+  if (importModule === undefined) {
+    throw new Error("import requires a module loader");
+  }
+
+  importModule(pathNode.value);
+
+  return importIndex + 1;
 }
 
 function compileDefinition(
@@ -115,6 +167,10 @@ function compileDefinition(
 
     if (isWord(node, "variable")) {
       throw new Error("variable declarations are only supported at top level");
+    }
+
+    if (isWord(node, "import")) {
+      throw new Error("imports are only supported at top level");
     }
 
     compileNode(state, node);
@@ -197,6 +253,8 @@ function compileControlWord(state: CompilerState, name: string): boolean {
     case "repeat":
       compileRepeat(state);
       return true;
+    case "import":
+      throw new Error("imports are only supported at top level");
     case ";":
       throw new Error("; without matching :");
     default:
@@ -487,6 +545,7 @@ function isReservedWord(name: string): boolean {
     name === "while" ||
     name === "until" ||
     name === "repeat" ||
+    name === "import" ||
     name === "variable" ||
     compileBuiltInWord(name) !== undefined
   );

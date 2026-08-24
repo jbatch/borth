@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, readSync, statSync } from "node:fs";
+import { existsSync, readSync, statSync } from "node:fs";
 
-import { run } from "./runner.js";
+import { run, runFile } from "./runner.js";
 
 const stdinFileDescriptor = 0;
 const bytesPerRead = 1;
@@ -15,8 +15,11 @@ if (args.length === 0) {
   process.exitCode = 1;
 } else {
   try {
-    const source = readSource(args);
-    run(source, { read: readLineFromStdin });
+    if (isFileArgument(args)) {
+      runFile(args[0], { read: readLineFromStdin });
+    } else {
+      run(args.join(" "), { read: readLineFromStdin });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`error: ${message}`);
@@ -61,10 +64,10 @@ function readLineFromStdin(): string {
   return Buffer.from(bytes).toString("utf8");
 }
 
-function readSource(args: string[]): string {
+function isFileArgument(args: string[]): args is [string] {
   if (args.length === 1 && existsSync(args[0]) && statSync(args[0]).isFile()) {
-    return readFileSync(args[0], "utf8");
+    return true;
   }
 
-  return args.join(" ");
+  return false;
 }

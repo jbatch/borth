@@ -719,6 +719,39 @@ Pre-test loop decision:
 - This shape keeps the condition as ordinary stack code before the control word
   that consumes it.
 
+## Milestone 17: Module Imports
+
+Goal:
+
+```text
+import "lexer-lib.borth"
+
+"10 20 +" lex-src
+```
+
+should make words from `lexer-lib.borth` available to the importing file.
+
+Import decision:
+
+- `import` is top-level syntax followed by a string path.
+- Imported paths are resolved relative to the importing file.
+- Imports are transitive. If `a.borth` imports `b.borth`, importing `a.borth`
+  also makes `b.borth`'s definitions available.
+- Importing the same file more than once is ignored after the first successful
+  import.
+- Import cycles throw.
+- Imported modules compile into the same global compiler state as the entry
+  program. There is no separate bytecode object or linker yet.
+- Imported modules can contain imports, variable declarations, and word
+  definitions.
+- Imported modules cannot contain loose top-level executable code. This keeps
+  library code from running just because it was imported.
+- Source files are lexed and parsed independently rather than concatenated into
+  one large source string. This preserves a path toward useful file/line/column
+  error reporting.
+- No VM opcode is needed; imports are a source loading and compiler-session
+  feature.
+
 ## Near-Term Roadmap: Toward a Borth Lexer
 
 The long-term goal is still a compiler written in Borth. The next milestones

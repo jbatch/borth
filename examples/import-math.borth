@@ -1,0 +1,6 @@
+# Import words from a sibling Borth file.
+
+import "./math-lib.borth"
+
+5 square print
+3 cube print

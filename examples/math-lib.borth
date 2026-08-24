@@ -1,0 +1,14 @@
+# Tiny importable math helpers.
+#
+# Imported modules are library modules: definitions are allowed, but loose
+# top-level executable code is not.
+
+# square ( n -- n )
+: square
+  dup *
+;
+
+# cube ( n -- n )
+: cube
+  dup square *
+;
