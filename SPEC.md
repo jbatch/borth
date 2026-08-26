@@ -719,6 +719,25 @@ Array decision:
 - Arrays are intended as the first high-level container for token lists and
   simple token records.
 
+## Milestone 15b: Fatal Errors
+
+Goal:
+
+```text
+"boom" panic
+```
+
+should stop the current run with the error message `boom`.
+
+Fatal error decision:
+
+- `panic ( string -- never )` is a VM primitive because only the VM can halt the
+  current instruction stream immediately.
+- `panic` consumes a string message and throws it as the runtime error.
+- Later explicit result values may be useful, but compiler-style failures are
+  fatal for now. This keeps early compiler library words from returning magic
+  sentinel values or accidentally continuing with a broken stack shape.
+
 ## Milestone 16: Pre-Test Loops
 
 Goal:
@@ -786,109 +805,85 @@ Import decision:
 - No VM opcode is needed; imports are a source loading and compiler-session
   feature.
 
-## Near-Term Roadmap: Toward a Borth Lexer
+## Milestone 18: First Borth Compiler Library Slice
+
+Goal:
+
+```text
+"10 20 +" lex-src parse-tokens compile-nodes .s
+```
+
+should leave an inspectable instruction array like:
+
+```text
+[[["PUSH" 10] ["PUSH" 20] ["ADD"] ["HALT"]]]
+```
+
+Compiler library decision:
+
+- `lib/lexer.borth` turns a source string into an array of token strings.
+- `lib/parser.borth` turns token strings into simple node arrays such as
+  `["integer" 10]` and `["word" "+"]`.
+- `lib/compiler.borth` turns parser nodes into instruction arrays.
+- A single node compiles to an array of instructions, even when it currently
+  emits only one instruction. This keeps the contract ready for future words
+  that expand into zero, one, or many instructions.
+- The current instruction format is intentionally inspectable data, not a final
+  bytecode format. Use "instructions" for this Borth-level representation.
+- Compiler failures use `panic` for now so invalid input stops immediately
+  instead of continuing with a broken stack shape.
+- `array-append` is currently local to `lib/compiler.borth`; decide later
+  whether it belongs in the prelude or a dedicated array library.
+
+## Near-Term Roadmap: Toward a Borth Compiler
 
 The long-term goal is still a compiler written in Borth. The next milestones
 should be small programs that force only one or two new language features at a
 time.
 
-### Proposed Milestone: Safer Token Scanning
+### Proposed Milestone: Broaden Primitive Compilation
 
-Goal:
-
-```text
-"10 20 +" 0 next-token
-```
-
-should extract one token and enough continuation state to call `next-token`
-again.
+Extend `compile-word` beyond `"+"` to a small table of ordinary VM words:
+arithmetic, stack operations, `print`, and `.s`.
 
 Likely language work:
 
-- Handle "delimiter not found" cleanly.
-- Decide whether `next-token` returns a `done` flag.
-- Add small stack helpers such as `2drop` or `-rot` only if stack pressure
-  remains awkward after factoring.
-- Keep both token-scanning examples around for now: index-threading
-  demonstrates `( src from -- src next tok )`, while rest-threading appears more
-  ergonomic for streaming because each consumed token leaves the next source
-  string on the stack.
+- Use nested `if` briefly if the list stays tiny.
+- Add `case` / `match` compiler syntax once word dispatch becomes repetitive
+  enough that it hides the compiler logic.
 
-### Proposed Milestone: Skip Leading Whitespace
+### Proposed Milestone: Shared Array Helpers
 
-Goal:
-
-```text
-"   10 20" 0 skip-spaces next-token
-```
-
-should skip leading spaces before extracting the next token.
+Move `array-append` out of `lib/compiler.borth` once another module needs it.
 
 Likely language work:
 
-- Prefer using existing loops and string inspection first.
-- Consider `str-at ( string index -- string )` only if avoiding character-level
-  access makes the program harder to understand.
+- Decide between `lib/arrays.borth` and the global prelude.
+- Keep `array-append ( target src -- target )` order-preserving and non-mutating
+  in spirit, matching `array-push`.
 
-### Proposed Milestone: Token Kind Classification
+### Proposed Milestone: Execute Borth-Compiled Instructions
 
-Goal:
-
-```text
-"123" classify-token print
-"+" classify-token print
-"if" classify-token print
-```
-
-should classify token text into simple token kinds.
+Turn the inspectable instruction arrays from `compile-nodes` into something
+that can run.
 
 Likely language work:
 
-- Add `str->int?` or `is-int?` when integer classification becomes necessary.
-- Use nested `if` first; add case/switch syntax only after the shape becomes
-  repetitive enough to justify it.
-- Represent token kind as a string initially; structured token values can wait.
+- Start with a tiny interpreter for the instruction arrays rather than a binary
+  encoder.
+- Support only `PUSH`, `ADD`, and `HALT` first.
+- Keep this separate from the TypeScript VM bytecode until the representation
+  settles.
 
-### Proposed Milestone: Stream Tokens From Source
+### Proposed Milestone: Control-Flow Compilation
 
-Goal:
-
-```text
-"10 20 + print " lex-print
-```
-
-should print:
-
-```text
-10
-20
-+
-print
-```
+Add Borth compiler support for `if`, `else`, `end`, and later loops.
 
 Likely language work:
 
-- Use `loop ... while ... repeat` to avoid running once for an empty source.
-- Establish a clear `done` convention.
-- Avoid arrays at first; print or consume tokens as a stream.
-
-### Proposed Milestone: First Token Records
-
-Goal:
-
-```text
-"123 " 0 next-token parse-token .s
-```
-
-should leave an inspectable token representation on the stack.
-
-Likely language work:
-
-- Start with parallel stack values such as `( kind value )`.
-- Use arrays for token records once `( kind value )` becomes awkward to pass
-  around.
-- Prefer high-level array values over raw Forth-style memory structs at this
-  stage.
+- Introduce placeholders and patching for jump targets.
+- This may force array update/replace helpers, because existing arrays can only
+  append and read.
 
 ### Roadmap Bias
 

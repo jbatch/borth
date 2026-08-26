@@ -1,0 +1,101 @@
+# Compiler helper words.
+#
+# This module compiles the simple AST node arrays produced by parser.borth into
+# an inspectable instruction array. Instructions are represented as arrays too:
+#
+#   ["PUSH" 10]
+#   ["ADD"]
+#   ["HALT"]
+#
+# A single source node returns an array of instructions, even when it currently
+# emits only one instruction. That keeps the contract ready for future words
+# that expand into zero, one, or many instructions.
+
+# get-kind ( node -- kind )
+#
+# Return the kind field from a parser node, such as "integer" or "word".
+: get-kind
+    0 array-get
+;
+
+# get-value ( node -- value )
+#
+# Return the value field from a parser node.
+: get-value
+    1 array-get
+;
+
+# TODO: Decide whether this should live in prelude or an array lib.
+# array-append ( target src -- target )
+#
+# Append every item from src onto target, preserving item order.
+# This is local to the compiler for now because compile-nodes needs to flatten
+# each node's emitted instruction array into one final instruction stream.
+: array-append
+    # Thread an index through src while rebuilding target with array-push.
+    0
+    loop
+        over array-len 2dup swap - 0 > nip
+    while
+        # ( target src index -- target src index value )
+        2dup array-get
+
+        # ( target src index value -- target' src index+1 )
+        3 roll swap array-push 2 -roll 1 +
+    repeat
+    drop drop
+;
+
+# compile-word ( wordValue -- instructions )
+#
+# Compile a word node's value into an instruction array.
+# Unknown words are fatal compiler errors for now.
+: compile-word
+    dup "+" = if
+        array-new "ADD" array-push
+        # Wrap ["ADD"] so compile-word always returns an instruction array.
+        array-new swap array-push
+    else
+        "Unknown word: " over show str-cat panic
+    end
+    nip
+;
+
+# compile-node ( node -- instructions )
+#
+# Compile one parser node into an instruction array.
+: compile-node
+    dup get-kind
+    dup "integer" = if
+        # Build ["PUSH", value].
+        array-new "PUSH" array-push nip swap get-value array-push 
+
+        # Wrap it so compile-node always returns an instruction array.
+        array-new swap array-push
+    else dup "word" = if
+        drop get-value compile-word
+    else
+        "Unknown node kind: " over show str-cat panic
+    end end
+;
+
+
+# compile-nodes ( node-array -- instruction-array )
+#
+# Compile every parser node into one flat instruction stream and append HALT.
+: compile-nodes
+    array-new swap 0
+    loop
+        over array-len 2dup swap - 0 > nip
+    while
+        # Compile the node at index.
+        # ( instruction-array node-array index -- instruction-array node-array index instructions )
+        2dup array-get compile-node
+
+        # Append emitted instructions and increment index.
+        # ( instruction-array node-array index instructions -- instruction-array node-array index )
+        3 roll swap array-append 2 -roll 1 +
+    repeat
+    drop drop
+    array-new "HALT" array-push array-push
+;

@@ -234,6 +234,10 @@ export function execute(
         write(formatStack(state.stack));
         state.ip += 1;
         break;
+      case "PANIC": {
+        const message = popString(state, "PANIC");
+        throw new Error(message);
+      }
       case "READ_LINE":
         state.stack.push(readInput(read, "READ_LINE"));
         state.ip += 1;

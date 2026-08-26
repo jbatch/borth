@@ -37,5 +37,6 @@ export type Instruction =
   | { op: "READ_INT" }
   | { op: "PRINT" }
   | { op: "PRINT_STACK" }
+  | { op: "PANIC" }
   | { op: "RET" }
   | { op: "HALT" };

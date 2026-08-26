@@ -66,6 +66,7 @@ read-line ( -- string )
 read-int  ( -- number )
 print ( A -- )
 .s    ( -- )
+panic ( string -- never )
 ```
 
 Prelude words:
@@ -151,6 +152,12 @@ Use `.s` to print the current stack without changing it:
 
 ```text
 10 20 .s + .s
+```
+
+Use `panic` to abort the current run with an explicit error message:
+
+```text
+"Unknown word" panic
 ```
 
 Conditionals consume a flag from the top of the stack. `0` is false; any other integer is true.
@@ -249,4 +256,17 @@ import "lib/strings.borth"
 
 "-123" str-int? print
 "-123" str-to-int print
+```
+
+The first Borth compiler slice lives in `lib/lexer.borth`, `lib/parser.borth`,
+and `lib/compiler.borth`. It can lex source, parse token strings into simple
+node arrays, and compile integer/addition programs into inspectable instruction
+arrays:
+
+```text
+import "lib/lexer.borth"
+import "lib/parser.borth"
+import "lib/compiler.borth"
+
+"10 20 +" lex-src parse-tokens compile-nodes .s
 ```
