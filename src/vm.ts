@@ -1,5 +1,5 @@
 import type { Instruction } from "./bytecode.js";
-import type { Address, Value } from "./value.js";
+import type { Address, ArrayValue, Value } from "./value.js";
 
 const integerInputPattern = /^-?\d+$/;
 
@@ -171,6 +171,30 @@ export function execute(
         state.ip += 1;
         break;
       }
+      case "ARRAY_NEW":
+        state.stack.push({ kind: "array", items: [] });
+        state.ip += 1;
+        break;
+      case "ARRAY_PUSH": {
+        const value = pop(state, "ARRAY_PUSH");
+        const array = popArray(state, "ARRAY_PUSH");
+        state.stack.push({ kind: "array", items: [...array.items, value] });
+        state.ip += 1;
+        break;
+      }
+      case "ARRAY_LEN": {
+        const array = popArray(state, "ARRAY_LEN");
+        state.stack.push(array.items.length);
+        state.ip += 1;
+        break;
+      }
+      case "ARRAY_GET": {
+        const index = popNonNegativeInteger(state, "ARRAY_GET", "index");
+        const array = popArray(state, "ARRAY_GET");
+        state.stack.push(getArrayValue(array, index));
+        state.ip += 1;
+        break;
+      }
       case "FETCH": {
         const address = popAddress(state, "FETCH");
         state.stack.push(loadMemory(state, address, "FETCH"));
@@ -288,6 +312,16 @@ function indexOfString(value: string, needle: string, start: number): number {
   return value.indexOf(needle, start);
 }
 
+function getArrayValue(array: ArrayValue, index: number): Value {
+  const value = array.items[index];
+
+  if (value === undefined) {
+    throw new Error("ARRAY_GET index is past end of array");
+  }
+
+  return value;
+}
+
 function binaryNumberOp(
   state: VmState,
   op: string,
@@ -358,7 +392,12 @@ function formatValueForStack(value: Value): string {
   }
 
   if (typeof value === "object") {
-    return `<addr:${value.index}>`;
+    switch (value.kind) {
+      case "address":
+        return `<addr:${value.index}>`;
+      case "array":
+        return `[${value.items.map(formatValueForStack).join(" ")}]`;
+    }
   }
 
   return String(value);
@@ -419,6 +458,16 @@ function popString(state: VmState, op: string): string {
 
   if (typeof value !== "string") {
     throw new Error(`${op} requires strings on the stack`);
+  }
+
+  return value;
+}
+
+function popArray(state: VmState, op: string): ArrayValue {
+  const value = pop(state, op);
+
+  if (typeof value !== "object" || value.kind !== "array") {
+    throw new Error(`${op} requires an array on the stack`);
   }
 
   return value;

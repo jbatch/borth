@@ -517,6 +517,14 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "STR_INDEX_OF" };
     case "show":
       return { op: "SHOW" };
+    case "array-new":
+      return { op: "ARRAY_NEW" };
+    case "array-push":
+      return { op: "ARRAY_PUSH" };
+    case "array-len":
+      return { op: "ARRAY_LEN" };
+    case "array-get":
+      return { op: "ARRAY_GET" };
     case "@":
       return { op: "FETCH" };
     case "!":

@@ -1,0 +1,39 @@
+import "strings.borth"
+
+# parse-token ( tok -- [kind value] )
+#
+# Parse one token string into a small AST node array.
+# Current node forms:
+#
+#   ["integer" value]
+#   ["word" name]
+#
+# String literal tokens are not represented yet because the Borth lexer library
+# does not yet read quoted strings as a single token.
+: parse-token
+  array-new over str-int? if
+    "integer" array-push swap str-to-int array-push
+  else
+    "word" array-push swap array-push
+  end
+;
+
+# parse-tokens ( token-array -- node-array )
+#
+# Parse an array of token strings into an array of AST node arrays.
+: parse-tokens
+  # ( token-array -- node-array token-array index )
+  array-new swap 0
+  loop
+    over array-len 2dup swap - 0 > nip
+  while
+    # Get token at index and parse it into a node.
+    # ( node-array token-array index -- node-array token-array index node )
+    2dup array-get parse-token
+
+    # Push node into node-array and increment index.
+    # ( node-array token-array index node -- node-array token-array index )
+    3 roll swap array-push 2 -roll 1 +
+  repeat
+  drop drop
+;

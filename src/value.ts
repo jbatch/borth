@@ -3,4 +3,9 @@ export type Address = {
   index: number;
 };
 
-export type Value = number | string | Address;
+export type ArrayValue = {
+  kind: "array";
+  items: Value[];
+};
+
+export type Value = number | string | Address | ArrayValue;

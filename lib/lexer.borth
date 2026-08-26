@@ -1,0 +1,63 @@
+# Lexer helper words.
+#
+# This module is importable library code: it defines words only and has no
+# top-level executable test code.
+#
+# Current lexer scope is deliberately small: tokens are split on the single
+# space character. It does not yet skip leading or repeated spaces, and it does
+# not yet handle quoted string literals.
+
+# token-end ( src from -- src from end )
+#
+# Return the exclusive end index of the token starting at from.
+# If no space is found, use the end of src instead of leaking str-index-of's -1
+# sentinel to callers.
+: token-end
+  2dup " " swap str-index-of
+  dup -1 = if
+    drop
+    over str-len
+  end
+;
+
+# rest-token ( src -- rest tok )
+#
+# Split src into the next token and the unconsumed source rest.
+# The returned rest is ready to pass back into rest-token or lex-src.
+: rest-token
+  # Find the token end, then duplicate it so one copy can build `tok`.
+  dup 0 token-end nip nip 2dup
+  0 swap str-slice rot rot
+
+  # The rest starts after the delimiter. When the token ended at the source end,
+  # that computed rest would be outside the string, so return "" instead.
+  1 + swap dup str-len rot swap
+  over -
+  dup 0 < if
+    drop drop drop "" swap
+  else
+    str-slice swap
+  end
+;
+
+# has-rest? ( src -- flag )
+#
+# Return 1 when src is non-empty.
+: has-rest?
+  str-len 0 = not
+;
+
+# lex-src ( src -- tok-array )
+#
+# Split the whole source string into an array of token strings.
+: lex-src
+  array-new swap
+  loop
+    dup has-rest?
+  while
+    # ( tok-array rest -- tok-array rest tok )
+    rest-token
+    rot swap array-push swap
+  repeat
+  drop
+;

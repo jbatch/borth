@@ -693,6 +693,32 @@ String inspection decision:
 - These words are the next step toward lexer-like programs without introducing
   arrays or token data structures yet.
 
+## Milestone 15a: Arrays
+
+Goal:
+
+```text
+array-new "integer" array-push 123 array-push show print
+```
+
+should print:
+
+```text
+["integer" 123]
+```
+
+Array decision:
+
+- Arrays are runtime values constructed with words, not source literals.
+- Initial array words are `array-new`, `array-push`, `array-len`, and
+  `array-get`.
+- `array-push ( array A -- array )` returns a new array value rather than
+  mutating the input array. This keeps aliases through variables predictable.
+- `array-get` uses zero-based indexes and throws when the requested index is
+  outside the array.
+- Arrays are intended as the first high-level container for token lists and
+  simple token records.
+
 ## Milestone 16: Pre-Test Loops
 
 Goal:
@@ -752,6 +778,8 @@ Import decision:
   definitions.
 - Imported modules cannot contain loose top-level executable code. This keeps
   library code from running just because it was imported.
+- Reusable Borth modules live under `lib/` as they emerge from examples. Keep
+  these modules free of top-level test code so they remain importable.
 - Source files are lexed and parsed independently rather than concatenated into
   one large source string. This preserves a path toward useful file/line/column
   error reporting.
@@ -857,8 +885,8 @@ should leave an inspectable token representation on the stack.
 Likely language work:
 
 - Start with parallel stack values such as `( kind value )`.
-- Introduce arrays or records only once passing around paired token data becomes
-  awkward.
+- Use arrays for token records once `( kind value )` becomes awkward to pass
+  around.
 - Prefer high-level array values over raw Forth-style memory structs at this
   stage.
 

@@ -1,0 +1,20 @@
+import "../lib/strings.borth"
+
+# parse-token ( tok -- [kind value] )
+: parse-token
+    # if token is a valid int treat as an integer, else as a word
+    array-new over str-int? if
+        "integer" array-push swap str-to-int array-push
+    else
+        "word" array-push swap array-push
+    end
+;
+
+# test-parse-token ( tok -- )
+: test-parse-token
+    dup show " parse-token" str-cat print parse-token .s drop "" print
+;
+
+"10" test-parse-token
+"20" test-parse-token
+"+"  test-parse-token

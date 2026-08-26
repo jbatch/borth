@@ -54,6 +54,11 @@ str-slice    ( string start length -- string )
 str-index-of ( string needle start -- index )
 show         ( A -- string )
 
+array-new  ( -- array )
+array-push ( array A -- array )
+array-len  ( array -- number )
+array-get  ( array index -- A )
+
 random ( max -- n )
 @      ( addr -- A )
 !      ( A addr -- )
@@ -107,6 +112,15 @@ index and returns `-1` when the needle is not found.
 "hello" str-len print
 "hello" 1 3 str-slice print
 "hello" "l" 3 str-index-of print
+```
+
+Arrays are runtime values built with words rather than literal syntax:
+
+```text
+array-new
+"integer" array-push
+123 array-push
+show print
 ```
 
 User-defined words:
@@ -227,3 +241,12 @@ import "lexer-lib.borth"
 
 Imported files are library modules: they can contain imports, variables, and
 word definitions, but not loose top-level executable code.
+
+The `lib/` directory contains reusable Borth modules:
+
+```text
+import "lib/strings.borth"
+
+"-123" str-int? print
+"-123" str-to-int print
+```

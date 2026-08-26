@@ -23,6 +23,10 @@ export type Instruction =
   | { op: "STR_SLICE" }
   | { op: "STR_INDEX_OF" }
   | { op: "SHOW" }
+  | { op: "ARRAY_NEW" }
+  | { op: "ARRAY_PUSH" }
+  | { op: "ARRAY_LEN" }
+  | { op: "ARRAY_GET" }
   | { op: "FETCH" }
   | { op: "STORE" }
   | { op: "RANDOM" }
