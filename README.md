@@ -52,6 +52,7 @@ str-len      ( string -- number )
 str-cat      ( string string -- string )
 str-slice    ( string start length -- string )
 str-index-of ( string needle start -- index )
+show         ( A -- string )
 
 random ( max -- n )
 @      ( addr -- A )
@@ -90,6 +91,13 @@ Strings can contain whitespace, but they cannot span source lines. Supported esc
 
 ```text
 "hello, " "borth" str-cat print
+```
+
+`show` converts one value into its debug string representation, useful before
+concatenating debug output:
+
+```text
+"index=" 3 show str-cat print
 ```
 
 String indexes are zero-based. `str-index-of` starts searching at the given

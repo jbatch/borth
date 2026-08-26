@@ -135,14 +135,12 @@
 
 # test-str-int? ( str -- )
 : test-str-int?
-  dup print "str-int?" print
-  str-int? .s drop "" print
+  dup show " str-int?" str-cat print str-int? .s drop "" print
 ;
 
 # test-str-to-int ( str -- )
 : test-str-to-int
-  dup print "str-to-int" print
-  str-to-int .s drop "" print
+  dup show " str-to-int" str-cat print str-to-int .s drop "" print
 ;
 
 "121" test-str-int?

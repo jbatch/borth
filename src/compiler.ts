@@ -515,6 +515,8 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "STR_SLICE" };
     case "str-index-of":
       return { op: "STR_INDEX_OF" };
+    case "show":
+      return { op: "SHOW" };
     case "@":
       return { op: "FETCH" };
     case "!":

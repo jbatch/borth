@@ -61,6 +61,30 @@ test("str-cat leaves the concatenated string on the stack", () => {
   assert.deepEqual(state.stack, ["ab"]);
 });
 
+test("show converts values to debug strings", () => {
+  assert.deepEqual(
+    outputOf(`
+      123 show print
+      "hello" show print
+      "one\\ntwo" show print
+    `),
+    ["123", '"hello"', '"one\\ntwo"'],
+  );
+
+  const [address] = outputOf("variable cell cell show print");
+  assert.match(address, /^<addr:\d+>$/);
+});
+
+test("show output can be concatenated into debug messages", () => {
+  assert.deepEqual(
+    outputOf(`
+      "index=" 3 show str-cat print
+      "value=" "abc" show str-cat print
+    `),
+    ["index=3", 'value="abc"'],
+  );
+});
+
 test("str-slice returns a substring by start and length", () => {
   assert.deepEqual(outputOf('"hello" 1 3 str-slice print'), ["ell"]);
 });

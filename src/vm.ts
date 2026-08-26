@@ -166,6 +166,11 @@ export function execute(
         state.ip += 1;
         break;
       }
+      case "SHOW": {
+        state.stack.push(formatValueForStack(pop(state, "SHOW")));
+        state.ip += 1;
+        break;
+      }
       case "FETCH": {
         const address = popAddress(state, "FETCH");
         state.stack.push(loadMemory(state, address, "FETCH"));

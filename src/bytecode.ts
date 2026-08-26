@@ -22,6 +22,7 @@ export type Instruction =
   | { op: "STR_CAT" }
   | { op: "STR_SLICE" }
   | { op: "STR_INDEX_OF" }
+  | { op: "SHOW" }
   | { op: "FETCH" }
   | { op: "STORE" }
   | { op: "RANDOM" }

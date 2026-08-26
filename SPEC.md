@@ -657,6 +657,9 @@ String concatenation decision:
 
 - `str-cat` is a VM primitive for now because strings are opaque runtime values.
 - `+` remains numeric only; string concatenation is explicit.
+- `show ( A -- string )` formats a value as a debug string. Strings are quoted,
+  matching `.s`, so debug messages can distinguish `"hello"` from a word-like
+  string.
 - This is a small step toward source manipulation and eventually writing lexer-like
   programs in Borth.
 
