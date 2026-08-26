@@ -1,5 +1,5 @@
 import "../lib/lexer.borth"
 import "../lib/parser.borth"
 
-"10 20 +" lex-src
+"10   20 +" lex-src
 parse-tokens .s

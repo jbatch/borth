@@ -4,8 +4,8 @@
 # top-level executable test code.
 #
 # Current lexer scope is deliberately small: tokens are split on the single
-# space character. It does not yet skip leading or repeated spaces, and it does
-# not yet handle quoted string literals.
+# space character. Empty tokens from leading, repeated, or trailing spaces are
+# skipped. Quoted string literals are not handled yet.
 
 # token-end ( src from -- src from end )
 #
@@ -57,7 +57,13 @@
   while
     # ( tok-array rest -- tok-array rest tok )
     rest-token
-    rot swap array-push swap
+    rot swap
+    # Ignore empty tokens produced by leading, repeated, or trailing spaces.
+    dup "" = if
+      drop swap
+    else
+      array-push swap
+    end
   repeat
   drop
 ;

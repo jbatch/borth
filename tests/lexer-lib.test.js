@@ -59,7 +59,8 @@ test("lexer library lexes a source string into token strings", () => {
       "" lex-src show print
       "10" lex-src show print
       "10 20 +" lex-src show print
+      " 10  20 + " lex-src show print
     `),
-    ["[]", '["10"]', '["10" "20" "+"]'],
+    ["[]", '["10"]', '["10" "20" "+"]', '["10" "20" "+"]'],
   );
 });
