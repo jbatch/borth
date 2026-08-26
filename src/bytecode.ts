@@ -8,6 +8,8 @@ export type Instruction =
   | { op: "SWAP" }
   | { op: "OVER" }
   | { op: "ROT" }
+  | { op: "ROLL" }
+  | { op: "ROLL_REVERSE" }
   | { op: "ADD" }
   | { op: "SUB" }
   | { op: "MUL" }

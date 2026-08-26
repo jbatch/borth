@@ -45,6 +45,40 @@ test("rot moves the third value to the top", () => {
   assert.deepEqual(outputOf("1 2 3 rot .s"), ["[2 3 1]"]);
 });
 
+test("roll moves a deeper stack value to the top", () => {
+  assert.deepEqual(outputOf("1 2 3 0 roll .s"), ["[1 2 3]"]);
+  assert.deepEqual(outputOf("1 2 3 1 roll .s"), ["[1 3 2]"]);
+  assert.deepEqual(outputOf("1 2 3 2 roll .s"), ["[2 3 1]"]);
+  assert.deepEqual(outputOf("1 2 3 4 3 roll .s"), ["[2 3 4 1]"]);
+});
+
+test("-roll moves the top value down to a deeper stack position", () => {
+  assert.deepEqual(outputOf("1 2 3 0 -roll .s"), ["[1 2 3]"]);
+  assert.deepEqual(outputOf("1 3 2 1 -roll .s"), ["[1 2 3]"]);
+  assert.deepEqual(outputOf("2 3 1 2 -roll .s"), ["[1 2 3]"]);
+  assert.deepEqual(outputOf("2 3 4 1 3 -roll .s"), ["[1 2 3 4]"]);
+});
+
+test("roll depth must be available on the stack", () => {
+  assert.throws(() => outputOf("roll"), /ROLL requires a value on the stack/);
+});
+
+test("roll depth must be a non-negative integer", () => {
+  assert.throws(
+    () => outputOf('"x" roll'),
+    /ROLL requires numbers on the stack/,
+  );
+  assert.throws(
+    () => outputOf("1 -1 roll"),
+    /ROLL requires depth to be a non-negative integer/,
+  );
+});
+
+test("roll requires enough stack values below its depth", () => {
+  assert.throws(() => outputOf("1 2 roll"), /ROLL requires 3 values/);
+  assert.throws(() => outputOf("1 2 -roll"), /-ROLL requires 3 values/);
+});
+
 test("prelude words cannot be redefined by user programs", () => {
   assert.throws(
     () =>

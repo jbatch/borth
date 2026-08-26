@@ -510,6 +510,9 @@ Prelude decision:
   `over over`.
 - `rot` is a VM primitive for now because the current language cannot express
   `( A B C -- B C A )` using only `drop`, `dup`, `swap`, and `over`.
+- `roll` and `-roll` are VM primitives because they move stack values at a
+  runtime-selected depth. They are useful pressure valves while exploring
+  parser code, but should not replace factoring or clearer loop stack shapes.
 
 ## Milestone 8: Basic Input
 

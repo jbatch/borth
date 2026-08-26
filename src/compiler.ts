@@ -487,6 +487,10 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "OVER" };
     case "rot":
       return { op: "ROT" };
+    case "roll":
+      return { op: "ROLL" };
+    case "-roll":
+      return { op: "ROLL_REVERSE" };
     case "+":
       return { op: "ADD" };
     case "-":

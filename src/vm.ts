@@ -75,6 +75,18 @@ export function execute(
         state.ip += 1;
         break;
       }
+      case "ROLL": {
+        const depth = popNonNegativeInteger(state, "ROLL", "depth");
+        rollStack(state, "ROLL", depth);
+        state.ip += 1;
+        break;
+      }
+      case "ROLL_REVERSE": {
+        const depth = popNonNegativeInteger(state, "-ROLL", "depth");
+        reverseRollStack(state, "-ROLL", depth);
+        state.ip += 1;
+        break;
+      }
       case "ADD": {
         binaryNumberOp(state, "ADD", (a, b) => a + b);
         state.ip += 1;
@@ -281,6 +293,20 @@ function binaryNumberOp(
   const a = popNumber(state, op);
 
   state.stack.push(apply(a, b));
+}
+
+function rollStack(state: VmState, op: string, depth: number): void {
+  requireStackDepth(state, op, depth + 1);
+  const index = state.stack.length - 1 - depth;
+  const [value] = state.stack.splice(index, 1);
+  state.stack.push(value);
+}
+
+function reverseRollStack(state: VmState, op: string, depth: number): void {
+  requireStackDepth(state, op, depth + 1);
+  const value = pop(state, op);
+  const index = state.stack.length - depth;
+  state.stack.splice(index, 0, value);
 }
 
 function binaryStringOp(

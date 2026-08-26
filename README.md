@@ -35,6 +35,8 @@ dup   ( A -- A A )
 swap  ( A B -- B A )
 over  ( A B -- A B A )
 rot   ( A B C -- B C A )
+roll  ( Xn ... X0 n -- Xn-1 ... X0 Xn )
+-roll ( Xn ... X0 n -- X0 Xn ... X1 )
 
 +     ( A B -- C )
 -     ( A B -- C )
