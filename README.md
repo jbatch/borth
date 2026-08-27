@@ -258,15 +258,16 @@ import "lib/strings.borth"
 "-123" str-to-int print
 ```
 
-The first Borth compiler slice lives in `lib/lexer.borth`, `lib/parser.borth`,
-and `lib/compiler.borth`. It can lex source, parse token strings into simple
-node arrays, and compile integer/addition programs into inspectable instruction
-arrays:
+The first Borth compiler and VM slice lives in `lib/lexer.borth`,
+`lib/parser.borth`, `lib/compiler.borth`, and `lib/vm.borth`. It can lex source,
+parse token strings into simple node arrays, compile integer/addition programs
+into inspectable instruction arrays, and run that bytecode in a tiny Borth VM:
 
 ```text
 import "lib/lexer.borth"
 import "lib/parser.borth"
 import "lib/compiler.borth"
+import "lib/vm.borth"
 
-"10 20 +" lex-src parse-tokens compile-nodes .s
+"10 20 +" lex-src parse-tokens compile-nodes run-bytecode show print
 ```

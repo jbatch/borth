@@ -1,0 +1,51 @@
+import "./array.borth"
+
+# Tiny bytecode VM written in Borth.
+#
+# Current scope is deliberately tiny. It can execute the instruction arrays
+# produced by compiler.borth for integer addition programs:
+#
+#   ["PUSH" value]
+#   ["ADD"]
+#   ["HALT"]
+#
+# The VM state is threaded through the interpreter loop as:
+#
+#   instructions ip stack
+
+# execute-instruction ( ip stack instruction -- ip stack haltedFlag )
+#
+# Execute one instruction. The instruction pointer is advanced here for normal
+# instructions; HALT leaves it unchanged and returns a true halted flag.
+: execute-instruction
+    dup 0 array-get
+    dup "PUSH" = if drop
+        # Push the instruction operand onto the VM value stack.
+        1 array-get array-push
+        swap 1 + swap 0
+    else dup "ADD" = if drop
+        # Pop b then a, and push a + b.
+        drop array-pop swap array-pop rot + array-push
+        swap 1 + swap 0
+    else dup "HALT" = if drop
+        drop 1
+    else
+        "Unknown instruction: " over show str-cat panic
+    end end end
+;
+
+# run-bytecode ( instructions -- stack )
+#
+# Run bytecode from instruction 0 until HALT, then return the VM value stack.
+: run-bytecode
+    # ( instructions -- instructions ip stack )
+    0 array-new
+    loop
+        # Rotate so instructions and ip are next to each other for array-get.
+        # TODO: Replace with -rot if the language gains that word.
+        rot rot
+        2dup array-get 3 roll swap
+        execute-instruction
+    until
+    nip nip
+;

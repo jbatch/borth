@@ -1,0 +1,49 @@
+# array-append ( target src -- target )
+#
+# Append every item from src onto target, preserving item order.
+: array-append
+    # Thread an index through src while rebuilding target with array-push.
+    0
+    loop
+        over array-len 2dup swap - 0 > nip
+    while
+        # ( target src index -- target src index value )
+        2dup array-get
+
+        # ( target src index value -- target' src index+1 )
+        3 roll swap array-push 2 -roll 1 +
+    repeat
+    drop drop
+;
+
+# array-last ( array -- value )
+#
+# Return the final item from an array without changing the array.
+: array-last
+    dup array-len 1 - array-get
+;
+
+# array-pop  ( array -- rest value )
+#
+# Return a copy of the array without its final item, plus the final item.
+# This rebuilds the prefix one item at a time because Borth arrays do not yet
+# have mutable update or slice operations.
+: array-pop
+    # Save the final value, then build a new array for the prefix.
+    # ( array -- value array prefix )
+    dup array-last swap array-new swap
+
+    # Copy every item before the final index into the prefix.
+    # ( value array prefix -- value array prefix index )
+    0
+    loop
+        over array-len 1 - 2dup swap - 0 > nip
+    while
+        # ( value array prefix index -- value array prefix index item )
+        2dup array-get
+
+        # ( value array prefix index item -- value array prefix index+1 )
+        3 roll swap array-push 2 -roll 1 +
+    repeat
+    drop drop swap
+;

@@ -832,8 +832,44 @@ Compiler library decision:
   bytecode format. Use "instructions" for this Borth-level representation.
 - Compiler failures use `panic` for now so invalid input stops immediately
   instead of continuing with a broken stack shape.
-- `array-append` is currently local to `lib/compiler.borth`; decide later
-  whether it belongs in the prelude or a dedicated array library.
+- `array-append` lives in `lib/array.borth` because more than one Borth library
+  now needs small array-manipulation helpers.
+
+## Milestone 19: First Borth VM Library Slice
+
+Goal:
+
+```text
+"10 20 +" lex-src parse-tokens compile-nodes run-bytecode
+```
+
+should run through Borth library code for:
+
+```text
+source string -> token strings -> node arrays -> instruction arrays -> VM stack
+```
+
+and produce:
+
+```text
+[30]
+```
+
+VM library decision:
+
+- `lib/vm.borth` is a tiny interpreter for the inspectable instruction arrays
+  produced by `lib/compiler.borth`.
+- The VM state is threaded as `instructions ip stack`.
+- Current instruction support is only `PUSH`, `ADD`, and `HALT`.
+- `run-bytecode ( instructions -- stack )` returns the interpreted VM value
+  stack rather than printing trace output.
+
+Array helper decision:
+
+- `array-pop` lives in `lib/array.borth` as ordinary Borth code.
+- It rebuilds the array prefix and is intentionally O(n).
+- Do not promote it to a TypeScript VM primitive until the inefficiency blocks
+  the next small language milestone.
 
 ## Near-Term Roadmap: Toward a Borth Compiler
 
@@ -851,29 +887,6 @@ Likely language work:
 - Use nested `if` briefly if the list stays tiny.
 - Add `case` / `match` compiler syntax once word dispatch becomes repetitive
   enough that it hides the compiler logic.
-
-### Proposed Milestone: Shared Array Helpers
-
-Move `array-append` out of `lib/compiler.borth` once another module needs it.
-
-Likely language work:
-
-- Decide between `lib/arrays.borth` and the global prelude.
-- Keep `array-append ( target src -- target )` order-preserving and non-mutating
-  in spirit, matching `array-push`.
-
-### Proposed Milestone: Execute Borth-Compiled Instructions
-
-Turn the inspectable instruction arrays from `compile-nodes` into something
-that can run.
-
-Likely language work:
-
-- Start with a tiny interpreter for the instruction arrays rather than a binary
-  encoder.
-- Support only `PUSH`, `ADD`, and `HALT` first.
-- Keep this separate from the TypeScript VM bytecode until the representation
-  settles.
 
 ### Proposed Milestone: Control-Flow Compilation
 
