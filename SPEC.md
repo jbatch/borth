@@ -877,6 +877,33 @@ The long-term goal is still a compiler written in Borth. The next milestones
 should be small programs that force only one or two new language features at a
 time.
 
+### Example-Driven Feature Ladder
+
+This is a rough order for expanding the Borth-written compiler. Each step names
+the next useful language feature and the smallest existing example it should
+make possible through the Borth compiler/VM path.
+
+| Step | Feature pressure | Example unlocked | Notes |
+| --- | --- | --- | --- |
+| 1 | More straight-line primitives | `add.borth`, `stack-debug.borth` | Compile and execute `print`, `.s`, stack words, and basic arithmetic beyond `+`. |
+| 2 | String literals | `hello.borth` | Parse and compile string nodes, then support `PUSH` of strings in the Borth VM. |
+| 3 | User-defined words | `square.borth` | Add definitions, `CALL`, `RET`, and a Borth compiler dictionary. |
+| 4 | Imports of definition-only modules | `math-lib.borth`, `import-math.borth` | Decide how a Borth compiler session loads and shares module definitions. |
+| 5 | Basic conditionals | `if.borth` | Compile `if/end` using `JUMP_IF_FALSE` placeholders. |
+| 6 | Else branches | `else.borth` | Add `JUMP` and patch both false-branch and after-branch targets. |
+| 7 | Recursion | `fact.borth` | Register word names before compiling bodies so self-calls can resolve. |
+| 8 | Host input primitives | `double-input.borth`, `echo.borth` | Decide how the Borth VM crosses the host IO boundary. |
+| 9 | Loop control flow | `while-count.borth` | Compile `loop/while/repeat`; later add `loop/until`. |
+| 10 | Variable cells | `counter.borth` | Add address values, global memory cells, `@`, and `!`. |
+| 11 | String operations | `introduce.borth` | Compile and execute string concatenation plus stack reshaping. |
+| 12 | Larger recursive programs | `fib.borth`, `fizzbuzz.borth` | Exercise nested branches, multiple definitions, `mod`, and deeper stack effects. |
+| 13 | Entropy and interactive loops | `random-print.borth`, `guess.borth` | Add `random` once host effects and loop state are already understood. |
+| 14 | Compiler-oriented strings and arrays | `lexer.borth`, `parse-token.borth`, `str-to-int.borth` | Support the data manipulation needed for the compiler to grow itself. |
+| 15 | Full current self-hosting slice | `borth-compiler.borth` | Keep extending the Borth compiler/VM until this example covers more of the language. |
+
+The order is allowed to change when an earlier feature turns out to need a
+smaller supporting feature first.
+
 ### Proposed Milestone: Broaden Primitive Compilation
 
 Extend `compile-word` beyond `"+"` to a small table of ordinary VM words:

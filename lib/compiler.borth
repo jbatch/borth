@@ -27,18 +27,39 @@ import "./array.borth"
     1 array-get
 ;
 
+# array-wrap ( value -- array )
+#
+# Return a new single-item array containing value.
+: array-wrap
+    array-new swap array-push
+;
+
 # compile-word ( wordValue -- instructions )
 #
 # Compile a word node's value into an instruction array.
 # Unknown words are fatal compiler errors for now.
 : compile-word
     dup "+" = if
-        array-new "ADD" array-push
-        # Wrap ["ADD"] so compile-word always returns an instruction array.
-        array-new swap array-push
+        # Return [["ADD"]].
+        "ADD" array-wrap array-wrap
+    else dup "drop" = if
+        # Return [["DROP"]].
+        "DROP" array-wrap array-wrap
+    else dup "dup" = if
+        # Return [["DUP"]].
+        "DUP" array-wrap array-wrap
+    else dup "swap" = if
+        # Return [["SWAP"]].
+        "SWAP" array-wrap array-wrap
+    else dup "over" = if
+        # Return [["OVER"]].
+        "OVER" array-wrap array-wrap
+    else dup "rot" = if
+        # Return [["ROT"]].
+        "ROT" array-wrap array-wrap
     else
         "Unknown word: " over show str-cat panic
-    end
+    end end end end end end
     nip
 ;
 

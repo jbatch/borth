@@ -62,6 +62,13 @@
   over over
 ;
 
+# ( A B C -- C A B)
+#
+# rotate top three values in reverse
+: -rot
+  rot rot
+;
+
 # ( min max -- n )
 #
 # Pick a random integer in the inclusive range min..max.
