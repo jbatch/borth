@@ -13,16 +13,25 @@ import "./array.borth"
 #
 #   instructions ip stack
 
+# Stubbed instruction handlers.
+#
+# These opcodes are recognized by the compiler and dispatcher, but their
+# behavior still needs string/value formatting support in the Borth VM.
+# show  -> SHOW
+# panic -> PANIC
+
+# inc-ip ( ip stack -- ip stack )
+#
+# Increment the instruction pointer under the VM stack.
+: inc-ip
+    swap 1 + swap
+;
 
 # assert-stack-length ( stack expected word -- )
 #
 # Panic if stack has fewer than expected values.
-# Single-value underflow matches TS VM wording:
-#   "DROP requires a value on the stack"
-# Multi-value underflow matches TS VM wording:
-#   "SWAP requires 2 values on the stack"
 : assert-stack-length
-    -rot swap array-len 
+    -rot swap array-len
 
     over < if
         dup 1 = if
@@ -36,14 +45,22 @@ import "./array.borth"
     drop drop
 ;
 
+# prepare-binary-operation ( ip stack op -- ip stack a b )
+#
+# Validate that stack has two values, then pop b and a for a binary operation.
+: prepare-binary-operation
+    swap dup rot 2 swap assert-stack-length
+    array-pop swap array-pop rot
+;
+
 # execute-drop ( ip stack -- ip stack )
 #
 # Execute DROP by removing the top stack value and advancing ip.
 # Validate stack has at least 1 value: "DROP requires a value on the stack"
 : execute-drop
     dup 1 "DROP" assert-stack-length
-    array-pop drop 
-    swap 1 + swap
+    array-pop drop
+    inc-ip
 ;
 
 # execute-dup ( ip stack -- ip stack )
@@ -52,8 +69,8 @@ import "./array.borth"
 # Validate stack has at least 1 value: "DUP requires a value on the stack"
 : execute-dup
     dup 1 "DUP" assert-stack-length
-    array-pop dup -rot array-push swap array-push 
-    swap 1 + swap
+    array-pop dup -rot array-push swap array-push
+    inc-ip
 ;
 
 # execute-swap ( ip stack -- ip stack )
@@ -62,8 +79,8 @@ import "./array.borth"
 # Validate stack has at least 2 values: "SWAP requires 2 values on the stack"
 : execute-swap
     dup 2 "SWAP" assert-stack-length
-    array-pop swap array-pop -rot swap array-push swap array-push 
-    swap 1 + swap
+    array-pop swap array-pop -rot swap array-push swap array-push
+    inc-ip
 ;
 
 # execute-over ( ip stack -- ip stack )
@@ -73,7 +90,7 @@ import "./array.borth"
 : execute-over
     dup 2 "OVER" assert-stack-length
     array-pop swap array-pop dup -rot array-push rot array-push swap array-push
-    swap 1 + swap
+    inc-ip
 ;
 
 # execute-rot ( ip stack -- ip stack )
@@ -84,7 +101,46 @@ import "./array.borth"
     dup 3 "ROT" assert-stack-length
     array-pop swap array-pop swap array-pop
     -rot swap array-push rot array-push swap array-push
-    swap 1 + swap
+    inc-ip
+;
+
+# execute-print ( ip stack -- ip stack )
+#
+# Execute PRINT by removing the top stack value, printing it, and advancing ip.
+# Validate stack has at least 1 value: "PRINT requires a value on the stack"
+: execute-print
+    dup 1 "PRINT" assert-stack-length
+    array-pop print
+    inc-ip
+;
+
+# execute-print-stack ( ip stack -- ip stack )
+#
+# Execute PRINT_STACK by printing the VM stack state and advancing ip.
+: execute-print-stack
+    dup show print
+    inc-ip
+;
+
+# execute-show ( ip stack -- ip stack )
+#
+# Stub for SHOW, which will replace the top value with its string representation.
+# Validate stack has at least 1 value: "SHOW requires a value on the stack"
+: execute-show
+    dup 1 "SHOW" assert-stack-length
+    "not yet implemented" panic
+    inc-ip
+;
+
+# execute-panic ( ip stack -- ip stack )
+#
+# Stub for PANIC, which will panic with the string on top of the stack.
+# Validate stack has at least 1 value: "PANIC requires a value on the stack"
+: execute-panic
+    dup 1 "PANIC" assert-stack-length
+    # TODO validate top of the stack is a string
+    "not yet implemented" panic
+    inc-ip
 ;
 
 # execute-instruction ( ip stack instruction -- ip stack haltedFlag )
@@ -96,31 +152,46 @@ import "./array.borth"
     dup "PUSH" = if drop
         # Push the instruction operand onto the VM value stack.
         1 array-get array-push
-        swap 1 + swap 0
+        inc-ip 0
     else dup "DROP" = if drop
-        drop execute-drop
-        0
+        drop execute-drop 0
     else dup "DUP" = if drop
-        drop execute-dup
-        0 
+        drop execute-dup 0 
     else dup "SWAP" = if drop
-        drop execute-swap
-        0
+        drop execute-swap 0
     else dup "OVER" = if drop
-        drop execute-over
-        0
+        drop execute-over 0
     else dup "ROT" = if drop
-        drop execute-rot
-        0
-    else dup "ADD" = if drop
-        # Pop b then a, and push a + b.
-        drop array-pop swap array-pop rot + array-push
-        swap 1 + swap 0
+        drop execute-rot 0
+    else dup "PRINT" = if drop
+        drop execute-print 0
+    else dup "PRINT_STACK" = if drop
+        drop execute-print-stack 0
+    else dup "SHOW" = if drop
+        drop execute-show 0
+    else dup "PANIC" = if drop
+        drop execute-panic 1
+    else dup "ADD" = if nip
+        prepare-binary-operation + array-push inc-ip 0
+    else dup "SUB" = if nip
+        prepare-binary-operation - array-push inc-ip 0
+    else dup "MUL" = if nip
+        prepare-binary-operation * array-push inc-ip 0
+    else dup "DIV" = if nip
+        prepare-binary-operation / array-push inc-ip 0
+    else dup "MOD" = if nip
+        prepare-binary-operation mod array-push inc-ip 0
+    else dup "EQ" = if nip
+        prepare-binary-operation = array-push inc-ip 0
+    else dup "LT" = if nip
+        prepare-binary-operation < array-push inc-ip 0
+    else dup "GT" = if nip
+        prepare-binary-operation > array-push inc-ip 0
     else dup "HALT" = if drop
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

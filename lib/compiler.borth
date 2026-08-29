@@ -38,28 +38,53 @@ import "./array.borth"
 #
 # Compile a word node's value into an instruction array.
 # Unknown words are fatal compiler errors for now.
+# SHOW and PANIC are wired here but still stubbed in the Borth VM.
 : compile-word
+    # Arithmetic operations.
     dup "+" = if
-        # Return [["ADD"]].
         "ADD" array-wrap array-wrap
+    else dup "-" = if
+        "SUB" array-wrap array-wrap
+    else dup "*" = if
+        "MUL" array-wrap array-wrap
+    else dup "/" = if
+        "DIV" array-wrap array-wrap
+    else dup "mod" = if
+        "MOD" array-wrap array-wrap
+
+    # Boolean comparisons.
+    else dup "=" = if
+        "EQ" array-wrap array-wrap
+    else dup "<" = if
+        "LT" array-wrap array-wrap
+    else dup ">" = if
+        "GT" array-wrap array-wrap
+
+    # Stack operations.
     else dup "drop" = if
-        # Return [["DROP"]].
         "DROP" array-wrap array-wrap
     else dup "dup" = if
-        # Return [["DUP"]].
         "DUP" array-wrap array-wrap
     else dup "swap" = if
-        # Return [["SWAP"]].
         "SWAP" array-wrap array-wrap
     else dup "over" = if
-        # Return [["OVER"]].
         "OVER" array-wrap array-wrap
     else dup "rot" = if
-        # Return [["ROT"]].
         "ROT" array-wrap array-wrap
+
+    # Utility operations.
+    else dup "print" = if
+        "PRINT" array-wrap array-wrap
+    else dup ".s" = if
+        "PRINT_STACK" array-wrap array-wrap
+    else dup "show" = if
+        "SHOW" array-wrap array-wrap
+    else dup "panic" = if
+        "PANIC" array-wrap array-wrap
+
     else
         "Unknown word: " over show str-cat panic
-    end end end end end end
+    end end end end end end end end end end end end end end end end end
     nip
 ;
 
