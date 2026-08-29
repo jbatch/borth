@@ -13,44 +13,6 @@ function outputOf(source) {
   return output;
 }
 
-test("lexer library finds token end indexes", () => {
-  assert.deepEqual(
-    outputOf(`
-      import "lib/lexer.borth"
-
-      "10 20 +" 0 token-end print
-      "10 20 +" 3 token-end print
-      "10 20 +" 6 token-end print
-      "10" 0 token-end print
-    `),
-    [2, 5, 7, 2],
-  );
-});
-
-test("lexer library splits the next token from the rest", () => {
-  assert.deepEqual(
-    outputOf(`
-      import "lib/lexer.borth"
-
-      "10 20 +" rest-token print print
-      "20" rest-token print print
-    `),
-    ["10", "20 +", "20", ""],
-  );
-});
-
-test("lexer library reports whether source remains", () => {
-  assert.deepEqual(
-    outputOf(`
-      import "lib/lexer.borth"
-
-      "" has-rest? print
-      "x" has-rest? print
-    `),
-    [0, 1],
-  );
-});
-
 test("lexer library lexes a source string into token strings", () => {
   assert.deepEqual(
     outputOf(`
@@ -62,5 +24,41 @@ test("lexer library lexes a source string into token strings", () => {
       " 10  20 + " lex-src show print
     `),
     ["[]", '["10"]', '["10" "20" "+"]', '["10" "20" "+"]'],
+  );
+});
+
+test("lexer library keeps quoted strings with spaces as one token", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+
+      "\\"Hello World\\" print" lex-src show print
+      "1 \\"two words\\" 3" lex-src show print
+    `),
+    ['["\\"Hello World\\"" "print"]', '["1" "\\"two words\\"" "3"]'],
+  );
+});
+
+test("lexer library rejects unterminated quoted strings", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+
+        "\\"hello" lex-src show print
+      `),
+    /Unterminated string literal/,
+  );
+});
+
+test("lexer library rejects quoted strings spanning lines", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+
+        "\\"hello\\nthere\\"" lex-src show print
+      `),
+    /String literal cannot span lines/,
   );
 });

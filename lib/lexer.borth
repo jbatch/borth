@@ -3,65 +3,171 @@
 # This module is importable library code: it defines words only and has no
 # top-level executable test code.
 #
-# Current lexer scope is deliberately small: tokens are split on the single
-# space character. Empty tokens from leading, repeated, or trailing spaces are
-# skipped. Quoted string literals are not handled yet.
-
-# token-end ( src from -- src from end )
+# Current lexer scope is deliberately small. It splits source into token strings
+# separated by spaces, skips empty tokens from leading, repeated, or trailing
+# spaces, and keeps quoted string literals together even when they contain spaces.
 #
-# Return the exclusive end index of the token starting at from.
-# If no space is found, use the end of src instead of leaking str-index-of's -1
-# sentinel to callers.
-: token-end
-  2dup " " swap str-index-of
-  dup -1 = if
-    drop
-    over str-len
-  end
+# String escape sequences are not handled yet.
+
+# Use a global variable for source to make the word contracts much simpler to maintain.
+variable lex-source
+
+# lex-char-at ( index -- char )
+#
+# Return the one-character string at index in lex-source.
+# Caller must check bounds before calling this word.
+: lex-char-at
+  lex-source @ swap 1 str-slice
 ;
 
-# rest-token ( src -- rest tok )
+# lex-at-end? ( index -- flag )
 #
-# Split src into the next token and the unconsumed source rest.
-# The returned rest is ready to pass back into rest-token or lex-src.
-: rest-token
-  # Find the token end, then duplicate it so one copy can build `tok`.
-  dup 0 token-end nip nip 2dup
-  0 swap str-slice rot rot
+# Return 1 when index is at or past the end of lex-source.
+: lex-at-end?
+  lex-source @ str-len < not
+;
 
-  # The rest starts after the delimiter. When the token ended at the source end,
-  # that computed rest would be outside the string, so return "" instead.
-  1 + swap dup str-len rot swap
-  over -
-  dup 0 < if
-    drop drop drop "" swap
+# lex-whitespace? ( char -- flag )
+#
+# Return 1 when char is the lexer delimiter.
+# Only the plain space character is treated as whitespace for now.
+: lex-whitespace?
+  " " =
+;
+
+# lex-quote? ( char -- flag )
+#
+# Return 1 when char is a double quote.
+: lex-quote?
+  "\"" =
+;
+
+# lex-new-line? ( char -- flag )
+#
+# Return 1 when char is a newline.
+# TODO: Support catching carriage return too
+: lex-new-line?
+  "\n" =
+;
+
+# lex-end-of-word? ( index -- flag )
+#
+# Return 1 when index is at the end of a non-string token.
+# This is a safe predicate: it checks end of source before reading a character.
+: lex-end-of-word?
+  dup lex-at-end? if
+    1
   else
-    str-slice swap
+    dup lex-char-at lex-whitespace? if
+      1
+    else
+      0
+    end
+  end
+  nip
+;
+
+# lex-end-of-whitespace? ( index -- flag )
+#
+# Return 1 when index points at the start of a token or the end of source.
+# This is a safe predicate: it checks end of source before reading a character.
+: lex-end-of-whitespace?
+  dup lex-at-end? if
+    1
+  else
+    dup lex-char-at lex-whitespace? not if
+      1
+    else
+      0
+    end
+  end
+  nip
+;
+
+# lex-word-end ( index -- end )
+#
+# Return the exclusive end index of a non-string token.
+# index must point at the first character of the token.
+: lex-word-end
+  # Skip the first character because index is already known to be inside a word.
+  1 +
+  loop
+    dup lex-end-of-word? not
+  while
+    1 +
+  repeat
+;
+
+# lex-string-end ( index -- end )
+#
+# Return the exclusive end index after the closing quote.
+# index must point at the opening quote.
+# Panics if the source ends before a closing quote is found.
+: lex-string-end
+  # Skip the opening quote before scanning for the closing quote.
+  1 +
+  loop
+    dup lex-char-at lex-quote? not
+  while
+    1 +
+    dup lex-at-end? if
+      "Unterminated string literal" panic
+    end
+    dup lex-char-at lex-new-line? if
+      "String literal cannot span lines" panic
+    end
+  repeat
+  1 +
+;
+
+# lex-token-end ( index -- end )
+#
+# Return the exclusive end index of the token starting at index.
+# Quoted string tokens may contain spaces; other tokens end at the next space.
+: lex-token-end
+  dup lex-char-at lex-quote? if
+    lex-string-end
+  else
+    lex-word-end
   end
 ;
 
-# has-rest? ( src -- flag )
+# lex-token-slice ( start end -- token )
 #
-# Return 1 when src is non-empty.
-: has-rest?
-  str-len 0 = not
+# Return the token text between start and end from lex-source.
+: lex-token-slice
+  over - lex-source @ -rot str-slice
+;
+
+# lex-skip-whitespace ( index -- start )
+#
+# Return the first non-whitespace index at or after index.
+# If only whitespace remains, return the end index.
+: lex-skip-whitespace
+  loop
+    dup lex-end-of-whitespace? not
+  while
+    1 +
+  repeat
 ;
 
 # lex-src ( src -- tok-array )
 #
 # Split the whole source string into an array of token strings.
 : lex-src
-  array-new swap
+  # Store src globally so helper words only need to thread the current index.
+  lex-source !
+
+  array-new 0
+  # ( tok-array index )
   loop
-    dup has-rest?
+    dup lex-at-end? not
   while
-    # ( tok-array rest -- tok-array rest tok )
-    rest-token
-    rot swap
-    # Ignore empty tokens produced by leading, repeated, or trailing spaces.
-    dup "" = if
-      drop swap
-    else
+    lex-skip-whitespace
+    dup lex-at-end? not if
+      # Read the next token, push it into tok-array, and keep the new index.
+      # ( tok-array index -- tok-array end )
+      dup lex-token-end dup -rot lex-token-slice rot swap
       array-push swap
     end
   repeat
