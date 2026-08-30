@@ -20,12 +20,14 @@ test("parser library parses token strings into node arrays", () => {
 
       "10" parse-token show print
       "-20" parse-token show print
+      "\\"hello world\\"" parse-token show print
       "+" parse-token show print
       "if" parse-token show print
     `),
     [
       '["integer" 10]',
       '["integer" -20]',
+      '["string" "hello world"]',
       '["word" "+"]',
       '["word" "if"]',
     ],
@@ -51,8 +53,8 @@ test("lexer and parser libraries compose into the first compiler slice", () => {
       import "lib/lexer.borth"
       import "lib/parser.borth"
 
-      "10 20 +" lex-src parse-tokens show print
+      "10 \\"hello world\\" +" lex-src parse-tokens show print
     `),
-    ['[["integer" 10] ["integer" 20] ["word" "+"]]'],
+    ['[["integer" 10] ["string" "hello world"] ["word" "+"]]'],
   );
 });

@@ -13,13 +13,6 @@ import "./array.borth"
 #
 #   instructions ip stack
 
-# Stubbed instruction handlers.
-#
-# These opcodes are recognized by the compiler and dispatcher, but their
-# behavior still needs string/value formatting support in the Borth VM.
-# show  -> SHOW
-# panic -> PANIC
-
 # inc-ip ( ip stack -- ip stack )
 #
 # Increment the instruction pointer under the VM stack.
@@ -124,22 +117,22 @@ import "./array.borth"
 
 # execute-show ( ip stack -- ip stack )
 #
-# Stub for SHOW, which will replace the top value with its string representation.
+# Execute SHOW by replacing the top value with its string representation.
 # Validate stack has at least 1 value: "SHOW requires a value on the stack"
 : execute-show
     dup 1 "SHOW" assert-stack-length
-    "not yet implemented" panic
+    array-pop show array-push
     inc-ip
 ;
 
 # execute-panic ( ip stack -- ip stack )
 #
-# Stub for PANIC, which will panic with the string on top of the stack.
+# Execute PANIC by throwing the string on top of the stack.
 # Validate stack has at least 1 value: "PANIC requires a value on the stack"
 : execute-panic
     dup 1 "PANIC" assert-stack-length
     # TODO validate top of the stack is a string
-    "not yet implemented" panic
+    array-pop panic
     inc-ip
 ;
 

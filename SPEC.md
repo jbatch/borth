@@ -823,8 +823,10 @@ Compiler library decision:
 
 - `lib/lexer.borth` turns a source string into an array of token strings.
 - `lib/parser.borth` turns token strings into simple node arrays such as
-  `["integer" 10]` and `["word" "+"]`.
+  `["integer" 10]`, `["string" "hello"]`, and `["word" "+"]`.
 - `lib/compiler.borth` turns parser nodes into instruction arrays.
+- String literal parsing currently strips surrounding quotes but does not yet
+  process escape sequences.
 - A single node compiles to an array of instructions, even when it currently
   emits only one instruction. This keeps the contract ready for future words
   that expand into zero, one, or many instructions.
@@ -860,7 +862,9 @@ VM library decision:
 - `lib/vm.borth` is a tiny interpreter for the inspectable instruction arrays
   produced by `lib/compiler.borth`.
 - The VM state is threaded as `instructions ip stack`.
-- Current instruction support is only `PUSH`, `ADD`, and `HALT`.
+- Current instruction support covers straight-line primitives, including literal
+  `PUSH`, arithmetic, comparisons, stack operations, `PRINT`, `PRINT_STACK`,
+  `SHOW`, `PANIC`, and `HALT`.
 - `run-bytecode ( instructions -- stack )` returns the interpreted VM value
   stack rather than printing trace output.
 

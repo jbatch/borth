@@ -1,21 +1,40 @@
 import "strings.borth"
 
+# parser-is-string? ( tok -- flag )
+#
+# Return 1 when tok starts with a double quote.
+# The lexer is responsible for keeping the full string literal in one token.
+: parser-is-string?
+  0 1 str-slice "\"" =
+;
+
+# parser-strip-quotes ( string -- string )
+#
+# Return the string literal contents without the surrounding quotes.
+# Assumes string starts and ends with double quotes.
+: parser-strip-quotes
+  dup str-len 2 - 1 swap str-slice
+;
+
 # parse-token ( tok -- [kind value] )
 #
 # Parse one token string into a small AST node array.
 # Current node forms:
 #
 #   ["integer" value]
+#   ["string" value]
 #   ["word" name]
 #
-# String literal tokens are not represented yet because the Borth lexer library
-# does not yet read quoted strings as a single token.
+# String values currently strip the surrounding quotes but do not process escape
+# sequences yet.
 : parse-token
   array-new over str-int? if
     "integer" array-push swap str-to-int array-push
+  else over parser-is-string? if
+    "string" array-push swap parser-strip-quotes array-push
   else
     "word" array-push swap array-push
-  end
+  end end
 ;
 
 # parse-tokens ( token-array -- node-array )

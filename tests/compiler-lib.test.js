@@ -26,6 +26,19 @@ test("compiler library compiles integer and add nodes into instruction arrays", 
   );
 });
 
+test("compiler library compiles string nodes into push instructions", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+
+      "\\"hello world\\" print" lex-src parse-tokens compile-nodes show print
+    `),
+    ['[["PUSH" "hello world"] ["PRINT"] ["HALT"]]'],
+  );
+});
+
 test("compiler library panics for unknown words", () => {
   assert.throws(
     () =>

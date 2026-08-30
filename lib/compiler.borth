@@ -15,7 +15,7 @@ import "./array.borth"
 
 # get-kind ( node -- kind )
 #
-# Return the kind field from a parser node, such as "integer" or "word".
+# Return the kind field from a parser node, such as "integer", "string", or "word".
 : get-kind
     0 array-get
 ;
@@ -38,7 +38,6 @@ import "./array.borth"
 #
 # Compile a word node's value into an instruction array.
 # Unknown words are fatal compiler errors for now.
-# SHOW and PANIC are wired here but still stubbed in the Borth VM.
 : compile-word
     # Arithmetic operations.
     dup "+" = if
@@ -88,22 +87,32 @@ import "./array.borth"
     nip
 ;
 
+# create-push-instruction ( node -- instruction )
+#
+# Compile a literal node into a single PUSH instruction.
+# The node value is used as-is.
+: create-push-instruction
+    # ( value ["PUSH"] )
+    get-value "PUSH" array-wrap
+    # ( ["PUSH" value] )
+    swap array-push
+;
+
 # compile-node ( node -- instructions )
 #
 # Compile one parser node into an instruction array.
+# Literal nodes compile to PUSH; word nodes compile through compile-word.
 : compile-node
     dup get-kind
     dup "integer" = if
-        # Build ["PUSH", value].
-        array-new "PUSH" array-push nip swap get-value array-push
-
-        # Wrap it so compile-node always returns an instruction array.
-        array-new swap array-push
+        drop create-push-instruction array-wrap
+    else dup "string" = if
+        drop create-push-instruction array-wrap
     else dup "word" = if
         drop get-value compile-word
     else
         "Unknown node kind: " over show str-cat panic
-    end end
+    end end end
 ;
 
 # compile-nodes ( node-array -- instruction-array )

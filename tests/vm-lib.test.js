@@ -27,6 +27,49 @@ test("Borth VM runs compiled integer addition bytecode", () => {
   );
 });
 
+test("Borth VM runs compiled string print bytecode", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "\\"Hello, World\\" print" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ["Hello, World", "[]"],
+  );
+});
+
+test("Borth VM executes SHOW by replacing a value with its debug string", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "\\"Hello\\" show" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ['["\\"Hello\\""]'],
+  );
+});
+
+test("Borth VM executes PANIC by throwing the string on top of the stack", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+        import "lib/vm.borth"
+
+        "\\"boom\\" panic 1" lex-src parse-tokens compile-nodes run-bytecode show print
+      `),
+    /boom/,
+  );
+});
+
 test("Borth VM panics for unknown instructions", () => {
   assert.throws(
     () =>
