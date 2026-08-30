@@ -827,9 +827,20 @@ Compiler library decision:
 - `lib/compiler.borth` turns parser nodes into instruction arrays.
 - String literal parsing currently strips surrounding quotes but does not yet
   process escape sequences.
-- A single node compiles to an array of instructions, even when it currently
-  emits only one instruction. This keeps the contract ready for future words
-  that expand into zero, one, or many instructions.
+- Compiler helpers emit instructions into `compiler-instructions` rather than
+  returning instruction arrays for each node. This keeps the contract ready for
+  future words that expand into zero, one, or many instructions.
+- The compiler library now uses global compiler state rather than threading the
+  instruction array through every helper. This keeps the stack shape manageable
+  as control-flow words need to remember and patch earlier instruction indexes.
+- `compiler-instructions` stores the emitted instruction array for the current
+  compilation.
+- `compiler-block-stack` stores unresolved control-flow frames. The first frame
+  shape is `["if" falseJumpIndex]`.
+- Source-level `if ... end` compiles by emitting `["JUMP_IF_FALSE" -1]`,
+  pushing an `if` frame, and patching the placeholder to the next instruction
+  when `end` is compiled.
+- `compile-nodes` fails if any `if` block remains unclosed before `HALT`.
 - The current instruction format is intentionally inspectable data, not a final
   bytecode format. Use "instructions" for this Borth-level representation.
 - Compiler failures use `panic` for now so invalid input stops immediately
@@ -862,9 +873,12 @@ VM library decision:
 - `lib/vm.borth` is a tiny interpreter for the inspectable instruction arrays
   produced by `lib/compiler.borth`.
 - The VM state is threaded as `instructions ip stack`.
-- Current instruction support covers straight-line primitives, including
-  literal `PUSH`, arithmetic, comparisons, stack operations, string operations,
-  array operations, `PRINT`, `PRINT_STACK`, `SHOW`, `PANIC`, and `HALT`.
+- Current instruction support covers literal `PUSH`, arithmetic, comparisons,
+  stack operations, string operations, array operations, `JUMP_IF_FALSE`,
+  `PRINT`, `PRINT_STACK`, `SHOW`, `PANIC`, and `HALT`.
+- `JUMP_IF_FALSE` pops a numeric flag from the interpreted VM stack. It sets the
+  instruction pointer to the compiled target when the flag is `0`; otherwise it
+  advances to the next instruction.
 - The Borth VM implementations of `STR_LEN`, `STR_CAT`, `STR_SLICE`,
   `STR_INDEX_OF`, `ARRAY_NEW`, `ARRAY_PUSH`, `ARRAY_LEN`, and `ARRAY_GET`
   delegate to the existing outer Borth words. This keeps the interpreter slice

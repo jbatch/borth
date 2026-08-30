@@ -54,6 +54,62 @@ test("compiler library compiles string and array primitive words", () => {
   );
 });
 
+test("compiler library compiles if end with a patched false jump", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+
+      "1 if 2 print end" lex-src parse-tokens compile-nodes show print
+    `),
+    ['[["PUSH" 1] ["JUMP_IF_FALSE" 4] ["PUSH" 2] ["PRINT"] ["HALT"]]'],
+  );
+});
+
+test("compiler library compiles nested if end blocks", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+
+      "1 if 2 if 3 print end 4 print end" lex-src parse-tokens compile-nodes show print
+    `),
+    [
+      '[["PUSH" 1] ["JUMP_IF_FALSE" 8] ["PUSH" 2] ["JUMP_IF_FALSE" 6] ["PUSH" 3] ["PRINT"] ["PUSH" 4] ["PRINT"] ["HALT"]]',
+    ],
+  );
+});
+
+test("compiler library panics for end without if", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+
+        "1 end" lex-src parse-tokens compile-nodes show print
+      `),
+    /end without matching if/,
+  );
+});
+
+test("compiler library panics for if without end", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+
+        "1 if 2" lex-src parse-tokens compile-nodes show print
+      `),
+    /if without matching end/,
+  );
+});
+
 test("compiler library panics for unknown words", () => {
   assert.throws(
     () =>

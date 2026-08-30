@@ -11,6 +11,12 @@ This is a learning project as much as an implementation project.
 - Do not add language features speculatively.
 - Update this file as our working process changes.
 - Update `SPEC.md` as the language design and project goals evolve.
+- Treat `.borth` implementation code as the user's learning space.
+- When reviewing `.borth` programs, provide logic feedback, suggested stack
+  effects, and example snippets, but do not directly edit executable `.borth`
+  code unless explicitly asked for that specific change.
+- Direct edits to `.borth` files should normally be limited to comments and
+  documentation text.
 
 ## Engineering Style
 

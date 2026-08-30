@@ -9,9 +9,11 @@ import "./array.borth"
 #   ["ADD"]
 #   ["HALT"]
 #
-# A single source node returns an array of instructions, even when it currently
-# emits only one instruction. That keeps the contract ready for future words
-# that expand into zero, one, or many instructions.
+# Compilation uses global compiler state so control-flow words can remember
+# instruction indexes and patch earlier instructions when blocks close.
+
+variable compiler-instructions
+variable compiler-block-stack
 
 # get-kind ( node -- kind )
 #
@@ -34,77 +36,149 @@ import "./array.borth"
     array-new swap array-push
 ;
 
-# compile-word ( wordValue -- instructions )
+# emit-instruction ( instruction -- )
 #
-# Compile a word node's value into an instruction array.
+# Append one instruction to compiler-instructions.
+: emit-instruction
+    compiler-instructions @ swap array-push
+    compiler-instructions !
+;
+
+# current-instruction ( -- index )
+#
+# Return the index where the next emitted instruction will be written.
+: current-instruction
+    compiler-instructions @ array-len
+;
+
+# patch-instruction ( index instruction -- )
+#
+# Replace an already-emitted instruction. Used for control-flow backpatching.
+: patch-instruction
+    compiler-instructions @ -rot array-set
+    compiler-instructions !
+;
+
+# compile-if ( -- )
+#
+# Emit a JUMP_IF_FALSE placeholder and remember where it lives.
+# The matching end patches that instruction to jump past the true branch.
+: compile-if
+    current-instruction
+    "JUMP_IF_FALSE" array-wrap -1 array-push emit-instruction
+
+    # ( ["if", instructionIndexOfUnpatchedJump] )
+    "if" array-wrap swap array-push
+    compiler-block-stack @ swap array-push
+    compiler-block-stack !
+;
+
+# compile-end ( -- )
+#
+# Close an if block by patching its JUMP_IF_FALSE target to the next instruction.
+: compile-end
+    compiler-block-stack @ array-len 0 = if
+        "end without matching if" panic
+    end
+
+    compiler-block-stack @ array-pop swap compiler-block-stack !
+
+    # assert frame kind == "if"
+    dup get-kind "if" = not if
+        "end without matching if" panic
+    end
+
+    # Patch the if's jump target to the next instruction.
+    get-value "JUMP_IF_FALSE" array-wrap current-instruction array-push patch-instruction
+;
+
+# assert-no-open-blocks ( -- )
+#
+# Ensure every opened control-flow block was closed before HALT is emitted.
+: assert-no-open-blocks
+    compiler-block-stack @ array-len 0 = not if
+        "if without matching end" panic
+    end
+;
+
+# compile-word ( wordValue -- )
+#
+# Compile a word node's value by emitting zero or one instructions.
+# Control words may update compiler state instead of emitting normal bytecode.
 # Unknown words are fatal compiler errors for now.
 : compile-word
     # Arithmetic operations.
     dup "+" = if
-        "ADD" array-wrap array-wrap
+        "ADD" array-wrap emit-instruction
     else dup "-" = if
-        "SUB" array-wrap array-wrap
+        "SUB" array-wrap emit-instruction
     else dup "*" = if
-        "MUL" array-wrap array-wrap
+        "MUL" array-wrap emit-instruction
     else dup "/" = if
-        "DIV" array-wrap array-wrap
+        "DIV" array-wrap emit-instruction
     else dup "mod" = if
-        "MOD" array-wrap array-wrap
+        "MOD" array-wrap emit-instruction
 
     # Boolean comparisons.
     else dup "=" = if
-        "EQ" array-wrap array-wrap
+        "EQ" array-wrap emit-instruction
     else dup "<" = if
-        "LT" array-wrap array-wrap
+        "LT" array-wrap emit-instruction
     else dup ">" = if
-        "GT" array-wrap array-wrap
+        "GT" array-wrap emit-instruction
 
     # Stack operations.
     else dup "drop" = if
-        "DROP" array-wrap array-wrap
+        "DROP" array-wrap emit-instruction
     else dup "dup" = if
-        "DUP" array-wrap array-wrap
+        "DUP" array-wrap emit-instruction
     else dup "swap" = if
-        "SWAP" array-wrap array-wrap
+        "SWAP" array-wrap emit-instruction
     else dup "over" = if
-        "OVER" array-wrap array-wrap
+        "OVER" array-wrap emit-instruction
     else dup "rot" = if
-        "ROT" array-wrap array-wrap
+        "ROT" array-wrap emit-instruction
 
     # String operations.
     else dup "str-len" = if
-        "STR_LEN" array-wrap array-wrap
+        "STR_LEN" array-wrap emit-instruction
     else dup "str-cat" = if
-        "STR_CAT" array-wrap array-wrap
+        "STR_CAT" array-wrap emit-instruction
     else dup "str-slice" = if
-        "STR_SLICE" array-wrap array-wrap
+        "STR_SLICE" array-wrap emit-instruction
     else dup "str-index-of" = if
-        "STR_INDEX_OF" array-wrap array-wrap
+        "STR_INDEX_OF" array-wrap emit-instruction
 
     # Array operations.
     else dup "array-new" = if
-        "ARRAY_NEW" array-wrap array-wrap
+        "ARRAY_NEW" array-wrap emit-instruction
     else dup "array-len" = if
-        "ARRAY_LEN" array-wrap array-wrap
+        "ARRAY_LEN" array-wrap emit-instruction
     else dup "array-push" = if
-        "ARRAY_PUSH" array-wrap array-wrap
+        "ARRAY_PUSH" array-wrap emit-instruction
     else dup "array-get" = if
-        "ARRAY_GET" array-wrap array-wrap
+        "ARRAY_GET" array-wrap emit-instruction
+
+    # Control-flow operations.
+    else dup "if" = if
+        compile-if
+    else dup "end" = if
+        compile-end
 
     # Utility operations.
     else dup "print" = if
-        "PRINT" array-wrap array-wrap
+        "PRINT" array-wrap emit-instruction
     else dup ".s" = if
-        "PRINT_STACK" array-wrap array-wrap
+        "PRINT_STACK" array-wrap emit-instruction
     else dup "show" = if
-        "SHOW" array-wrap array-wrap
+        "SHOW" array-wrap emit-instruction
     else dup "panic" = if
-        "PANIC" array-wrap array-wrap
+        "PANIC" array-wrap emit-instruction
 
     else
         "Unknown word: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end
-    nip
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    drop
 ;
 
 # create-push-instruction ( node -- instruction )
@@ -118,16 +192,16 @@ import "./array.borth"
     swap array-push
 ;
 
-# compile-node ( node -- instructions )
+# compile-node ( node -- )
 #
-# Compile one parser node into an instruction array.
+# Compile one parser node by emitting instructions into compiler-instructions.
 # Literal nodes compile to PUSH; word nodes compile through compile-word.
 : compile-node
     dup get-kind
     dup "integer" = if
-        drop create-push-instruction array-wrap
+        drop create-push-instruction emit-instruction
     else dup "string" = if
-        drop create-push-instruction array-wrap
+        drop create-push-instruction emit-instruction
     else dup "word" = if
         drop get-value compile-word
     else
@@ -135,22 +209,28 @@ import "./array.borth"
     end end end
 ;
 
+
 # compile-nodes ( node-array -- instruction-array )
 #
 # Compile every parser node into one flat instruction stream and append HALT.
 : compile-nodes
-    array-new swap 0
+    # Initialize compiler state for this compilation.
+    array-new compiler-instructions !
+    array-new compiler-block-stack !
+
+    # ( node-array index )
+    0
     loop
         over array-len 2dup swap - 0 > nip
     while
-        # Compile the node at index.
-        # ( instruction-array node-array index -- instruction-array node-array index instructions )
+        # Compile the node at index emitting any instructions generated.
+        # ( instruction-array node-array index -- instruction-array node-array index )
         2dup array-get compile-node
-
-        # Append emitted instructions and increment index.
-        # ( instruction-array node-array index instructions -- instruction-array node-array index )
-        3 roll swap array-append 2 -roll 1 +
+        # increment index
+        1 +
     repeat
     drop drop
-    array-new "HALT" array-push array-push
+    assert-no-open-blocks
+    "HALT" array-wrap emit-instruction
+    compiler-instructions @
 ;

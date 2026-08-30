@@ -113,6 +113,62 @@ test("Borth VM validates stack depth before delegated string operations", () => 
   );
 });
 
+test("Borth VM executes compiled if end true branches", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "1 if 2 end" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ["[2]"],
+  );
+});
+
+test("Borth VM skips compiled if end false branches", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "0 if 2 end" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ["[]"],
+  );
+});
+
+test("Borth VM executes compiled nested if end branches", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "1 if 0 if 2 end 3 end" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ["[3]"],
+  );
+});
+
+test("Borth VM validates jump-if-false stack depth", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/vm.borth"
+
+        array-new
+        array-new "JUMP_IF_FALSE" array-push 1 array-push array-push
+        run-bytecode
+      `),
+    /JUMP_IF_FALSE requires a value on the stack/,
+  );
+});
+
 test("Borth VM panics for unknown instructions", () => {
   assert.throws(
     () =>

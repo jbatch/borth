@@ -2,11 +2,13 @@ import "./array.borth"
 
 # Tiny bytecode VM written in Borth.
 #
-# Current scope is deliberately tiny. It can execute the instruction arrays
-# produced by compiler.borth for integer addition programs:
+# Current scope is deliberately tiny. It can execute the inspectable instruction
+# arrays produced by compiler.borth for straight-line programs and basic if/end
+# branches:
 #
 #   ["PUSH" value]
 #   ["ADD"]
+#   ["JUMP_IF_FALSE" target]
 #   ["HALT"]
 #
 # The VM state is threaded through the interpreter loop as:
@@ -18,6 +20,13 @@ import "./array.borth"
 # Increment the instruction pointer under the VM stack.
 : inc-ip
     swap 1 + swap
+;
+
+# set-ip ( ip stack value -- ip stack )
+#
+# Set the instruction pointer to a value.
+: set-ip
+    rot drop swap
 ;
 
 # assert-stack-length ( stack expected word -- )
@@ -229,6 +238,19 @@ import "./array.borth"
     inc-ip
 ;
 
+# execute-jump-if-false ( ip stack falseJumpAddr -- ip stack )
+#
+# Pop a numeric flag from the VM value stack. Jump when it is 0; otherwise
+# continue with the next instruction.
+: execute-jump-if-false
+    over 1 "JUMP_IF_FALSE" assert-stack-length
+    swap array-pop 0 = if
+        swap set-ip
+    else
+        swap drop inc-ip
+    end
+;
+
 # execute-instruction ( ip stack instruction -- ip stack haltedFlag )
 #
 # Execute one instruction. The instruction pointer is advanced here for normal
@@ -289,11 +311,17 @@ import "./array.borth"
         prepare-binary-operation < array-push inc-ip 0
     else dup "GT" = if nip
         prepare-binary-operation > array-push inc-ip 0
+
+    else dup "JUMP_IF_FALSE" = if drop
+        # get jump address
+        1 array-get
+        execute-jump-if-false
+        0
     else dup "HALT" = if drop
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )
