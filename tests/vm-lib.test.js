@@ -155,6 +155,50 @@ test("Borth VM executes compiled nested if end branches", () => {
   );
 });
 
+test("Borth VM executes compiled if else true branches", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "1 if 2 else 3 end" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ["[2]"],
+  );
+});
+
+test("Borth VM executes compiled if else false branches", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "0 if 2 else 3 end" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ["[3]"],
+  );
+});
+
+test("Borth VM executes unconditional jumps", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/vm.borth"
+
+      array-new
+      array-new "JUMP" array-push 2 array-push array-push
+      array-new "PUSH" array-push 999 array-push array-push
+      array-new "PUSH" array-push 1 array-push array-push
+      array-new "HALT" array-push array-push
+      run-bytecode show print
+    `),
+    ["[1]"],
+  );
+});
+
 test("Borth VM validates jump-if-false stack depth", () => {
   assert.throws(
     () =>

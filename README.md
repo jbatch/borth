@@ -271,7 +271,7 @@ The first Borth compiler and VM slice lives in `lib/lexer.borth`,
 parse token strings into simple node arrays, compile programs into
 inspectable instruction arrays, and run that bytecode in a tiny Borth VM. The
 current slice includes arithmetic, comparisons, stack operations, strings,
-arrays, `if/end`, printing, debug formatting, and panic:
+arrays, `if/else/end`, printing, debug formatting, and panic:
 
 ```text
 import "lib/lexer.borth"
@@ -279,5 +279,5 @@ import "lib/parser.borth"
 import "lib/compiler.borth"
 import "lib/vm.borth"
 
-"1 if 2 end" lex-src parse-tokens compile-nodes run-bytecode show print
+"0 if 2 else 3 end" lex-src parse-tokens compile-nodes run-bytecode show print
 ```

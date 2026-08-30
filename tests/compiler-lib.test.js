@@ -82,6 +82,49 @@ test("compiler library compiles nested if end blocks", () => {
   );
 });
 
+test("compiler library compiles if else end with patched jumps", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+
+      "1 if 2 print else 3 print end" lex-src parse-tokens compile-nodes show print
+    `),
+    [
+      '[["PUSH" 1] ["JUMP_IF_FALSE" 5] ["PUSH" 2] ["PRINT"] ["JUMP" 7] ["PUSH" 3] ["PRINT"] ["HALT"]]',
+    ],
+  );
+});
+
+test("compiler library panics for else without if", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+
+        "else" lex-src parse-tokens compile-nodes show print
+      `),
+    /else without matching if/,
+  );
+});
+
+test("compiler library panics for duplicate else", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+
+        "1 if 2 else 3 else 4 end" lex-src parse-tokens compile-nodes show print
+      `),
+    /else after else/,
+  );
+});
+
 test("compiler library panics for end without if", () => {
   assert.throws(
     () =>

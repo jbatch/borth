@@ -73,9 +73,42 @@ variable compiler-block-stack
     compiler-block-stack !
 ;
 
+# compile-else ( -- )
+#
+# Close the true branch of an if/else block.
+# It emits a JUMP placeholder so the true branch can skip the false branch,
+# patches the earlier JUMP_IF_FALSE to land at the false branch, then stores an
+# else frame. The matching end patches the JUMP to land after the false branch.
+: compile-else
+    compiler-block-stack @ array-len 0 = if
+        "else without matching if" panic
+    end
+
+    # Emit the after-branch JUMP placeholder.
+    current-instruction
+    "JUMP" array-wrap -1 array-push emit-instruction
+
+    # Pop the open if frame.
+    compiler-block-stack @ array-pop swap compiler-block-stack !
+
+    # A second else sees the previous else frame on top of the block stack.
+    dup get-kind "if" = not if
+        get-kind "else after " swap str-cat panic
+    end
+
+    # Patch the if's false jump to the first instruction of the else branch.
+    get-value "JUMP_IF_FALSE" array-wrap current-instruction array-push patch-instruction
+
+    # ( ["else", instructionIndexOfUnpatchedJumpOverFalseBranch] )
+    "else" array-wrap swap array-push
+    compiler-block-stack @ swap array-push
+    compiler-block-stack !
+;
+
 # compile-end ( -- )
 #
-# Close an if block by patching its JUMP_IF_FALSE target to the next instruction.
+# Close an if or if/else block by patching its remaining jump placeholder to the
+# next instruction.
 : compile-end
     compiler-block-stack @ array-len 0 = if
         "end without matching if" panic
@@ -83,13 +116,19 @@ variable compiler-block-stack
 
     compiler-block-stack @ array-pop swap compiler-block-stack !
 
-    # assert frame kind == "if"
-    dup get-kind "if" = not if
-        "end without matching if" panic
-    end
+    # A plain if frame patches the false jump; an else frame patches the
+    # true-branch jump over the else body.
+    dup get-kind "if" = if
+        # Patch the if's jump target to the next instruction.
+        get-value "JUMP_IF_FALSE" array-wrap current-instruction array-push patch-instruction
+    else dup get-kind "else" = if
+        # Patch the else's jump target to the next instruction.
+        get-value "JUMP" array-wrap current-instruction array-push patch-instruction
+    else
+        "end without matching if/else" panic
+    end end
 
-    # Patch the if's jump target to the next instruction.
-    get-value "JUMP_IF_FALSE" array-wrap current-instruction array-push patch-instruction
+
 ;
 
 # assert-no-open-blocks ( -- )
@@ -162,6 +201,8 @@ variable compiler-block-stack
     # Control-flow operations.
     else dup "if" = if
         compile-if
+    else dup "else" = if
+        compile-else
     else dup "end" = if
         compile-end
 
@@ -177,7 +218,7 @@ variable compiler-block-stack
 
     else
         "Unknown word: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end
     drop
 ;
 

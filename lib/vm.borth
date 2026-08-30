@@ -238,6 +238,13 @@ import "./array.borth"
     inc-ip
 ;
 
+# execute-jump ( ip stack jumpAddr -- ip stack )
+#
+# Unconditionally set the instruction pointer to jumpAddr.
+: execute-jump
+    set-ip
+;
+
 # execute-jump-if-false ( ip stack falseJumpAddr -- ip stack )
 #
 # Pop a numeric flag from the VM value stack. Jump when it is 0; otherwise
@@ -312,16 +319,17 @@ import "./array.borth"
     else dup "GT" = if nip
         prepare-binary-operation > array-push inc-ip 0
 
+    else dup "JUMP" = if drop
+        # Get the jump target.
+        1 array-get execute-jump 0
     else dup "JUMP_IF_FALSE" = if drop
-        # get jump address
-        1 array-get
-        execute-jump-if-false
-        0
+        # Get the jump target.
+        1 array-get execute-jump-if-false 0
     else dup "HALT" = if drop
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

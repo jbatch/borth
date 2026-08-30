@@ -835,11 +835,16 @@ Compiler library decision:
   as control-flow words need to remember and patch earlier instruction indexes.
 - `compiler-instructions` stores the emitted instruction array for the current
   compilation.
-- `compiler-block-stack` stores unresolved control-flow frames. The first frame
-  shape is `["if" falseJumpIndex]`.
+- `compiler-block-stack` stores unresolved control-flow frames. Current frame
+  shapes are `["if" falseJumpIndex]` and `["else" afterJumpIndex]`.
 - Source-level `if ... end` compiles by emitting `["JUMP_IF_FALSE" -1]`,
   pushing an `if` frame, and patching the placeholder to the next instruction
   when `end` is compiled.
+- Source-level `if ... else ... end` emits an additional `["JUMP" -1]` at
+  `else` so the true branch skips the false branch. `else` patches the original
+  false jump to the start of the false branch, and `end` patches the
+  true-branch jump to the first instruction after the whole branch.
+- A duplicate `else` fails with `else after else`.
 - `compile-nodes` fails if any `if` block remains unclosed before `HALT`.
 - The current instruction format is intentionally inspectable data, not a final
   bytecode format. Use "instructions" for this Borth-level representation.
@@ -874,8 +879,9 @@ VM library decision:
   produced by `lib/compiler.borth`.
 - The VM state is threaded as `instructions ip stack`.
 - Current instruction support covers literal `PUSH`, arithmetic, comparisons,
-  stack operations, string operations, array operations, `JUMP_IF_FALSE`,
+  stack operations, string operations, array operations, `JUMP`, `JUMP_IF_FALSE`,
   `PRINT`, `PRINT_STACK`, `SHOW`, `PANIC`, and `HALT`.
+- `JUMP` unconditionally sets the instruction pointer to the compiled target.
 - `JUMP_IF_FALSE` pops a numeric flag from the interpreted VM stack. It sets the
   instruction pointer to the compiled target when the flag is `0`; otherwise it
   advances to the next instruction.
