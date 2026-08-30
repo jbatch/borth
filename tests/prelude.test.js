@@ -41,6 +41,14 @@ test("2dup copies the top two stack values", () => {
   assert.deepEqual(outputOf('1 "x" 2dup .s'), ['[1 "x" 1 "x"]']);
 });
 
+test("2over copies the third value from the top", () => {
+  assert.deepEqual(outputOf('1 "x" 3 2over .s'), ['[1 "x" 3 1]']);
+});
+
+test("3dup copies the top three stack values", () => {
+  assert.deepEqual(outputOf('1 "x" 3 3dup .s'), ['[1 "x" 3 1 "x" 3]']);
+});
+
 test("rot moves the third value to the top", () => {
   assert.deepEqual(outputOf("1 2 3 rot .s"), ["[2 3 1]"]);
 });

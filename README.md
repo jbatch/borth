@@ -58,6 +58,8 @@ array-new  ( -- array )
 array-push ( array A -- array )
 array-len  ( array -- number )
 array-get  ( array index -- A )
+array-slice ( array start length -- array )
+array-set   ( array index A -- array )
 
 random ( max -- n )
 @      ( addr -- A )
@@ -78,6 +80,8 @@ or    ( A B -- flag )
 nip   ( A B -- B )
 tuck  ( A B -- B A B )
 2dup  ( A B -- A B A B )
+2over ( A B C -- A B C A )
+3dup  ( A B C -- A B C A B C )
 random-between ( min max -- n )
 ```
 
@@ -123,6 +127,10 @@ array-new
 123 array-push
 show print
 ```
+
+`array-slice` uses half-open ranges: `start` is included and `start + length`
+is excluded. Empty slices are valid at array boundaries. `array-set` returns a
+new array with an existing item replaced; it does not append.
 
 User-defined words:
 

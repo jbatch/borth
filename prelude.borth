@@ -55,11 +55,26 @@
   swap over
 ;
 
+# ( A B C -- A B C A )
+#
+# Copy third value from the top.
+: 2over
+  rot dup 3 -roll
+;
+
 # ( A B -- A B A B )
 #
 # Copy the top two values.
 : 2dup
   over over
+;
+
+# ( A B C -- A B C A B C )
+#
+# Copy the top three values.
+: 3dup
+  # ( A B C A )
+  2over 2over 2over
 ;
 
 # ( A B C -- C A B)

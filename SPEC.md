@@ -879,8 +879,20 @@ Array helper decision:
 
 - `array-pop` lives in `lib/array.borth` as ordinary Borth code.
 - It rebuilds the array prefix and is intentionally O(n).
-- Do not promote it to a TypeScript VM primitive until the inefficiency blocks
-  the next small language milestone.
+- `array-valid-index? ( array index -- flag )` checks whether an index names
+  an existing item: `0 <= index < array-len`.
+- `array-slice ( array start len -- slice )` uses half-open ranges:
+  `[start, start + len)`.
+- Empty slices are valid at range boundaries, including `[] 0 0 array-slice`
+  and `[A B] 2 0 array-slice`.
+- `_array-assert-valid-range` is an internal helper for `array-slice`. Its error
+  messages intentionally name `array-slice`, so importers should use the public
+  helper rather than calling the assertion word directly.
+- `array-set ( array index value -- array )` replaces an existing item and
+  returns a new array. It does not append and does not mutate the input array.
+- `array-slice` and `array-set` both rebuild arrays using existing primitives.
+- Do not promote these helpers to TypeScript VM primitives until the
+  inefficiency blocks the next small language milestone.
 
 ## Near-Term Roadmap: Toward a Borth Compiler
 

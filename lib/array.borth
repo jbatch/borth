@@ -47,3 +47,109 @@
     repeat
     drop drop swap
 ;
+
+# array-valid-index? ( array index -- flag )
+#
+# Return 1 when index names an existing array item.
+# Valid indexes are zero-based: 0 <= index < array-len.
+: array-valid-index?
+    dup -1 > if
+        swap array-len <
+    else
+        0
+    end
+;
+
+# _array-assert-valid-range ( array start len -- array start len )
+#
+# Internal helper for array-slice. It preserves its inputs when the requested
+# half-open range is valid:
+#
+#   start >= 0
+#   len >= 0
+#   start <= array-len
+#   start + len <= array-len
+#
+# Empty ranges at valid boundaries are allowed, including slicing [] at 0 0.
+# Error messages intentionally name array-slice rather than this helper.
+: _array-assert-valid-range
+    3dup
+
+    # ( array start len )
+    over -1 > not if
+        "array-slice start must be non-negative" panic
+    end
+
+    dup -1 > not if
+        "array-slice length must be non-negative" panic
+    end
+
+    # ( start len array-len+1 )
+    rot array-len 1 +
+
+    # (  len start array-len+1 )
+    rot swap 2dup < not if
+        "array-slice start is past end of array" panic
+    end
+
+    # (  len+start array-len+1 )
+    -rot + swap < not if
+        "array-slice range is past end of array" panic
+    end
+;
+
+# array-slice ( array start len -- slice )
+#
+# Return a new array containing len items from the half-open range:
+#
+#   [start, start + len)
+#
+# The input array is not mutated.
+: array-slice
+    _array-assert-valid-range
+
+    # ( slice array start end )
+    over + array-new 3 -roll
+
+    # copy values from arr[start] til arr[end] into slice
+    loop
+        2dup = not
+    while
+        # ( slice array index end )
+        3 -roll 2dup array-get 3 roll swap array-push 3 -roll rot
+        # increment index
+        swap 1 + swap
+    repeat
+    drop drop drop
+;
+
+# array-set ( array targetIndex value -- array )
+#
+# Return a new array with value replacing the item at targetIndex.
+# targetIndex must name an existing item; array-set does not append.
+# The input array is not mutated.
+: array-set
+    # check targetIndex is within bounds
+    -rot 2dup array-valid-index? not if
+        "array-set called with index out of bounds" panic
+    end
+
+    #  value array targetIndex prefix
+    # copy from 0..targetIndex into prefix
+    2dup 0 swap array-slice
+
+    # push value into prefix
+    # ( array targetIndex prefix )
+    3 roll array-push
+
+    # ( prefix array targetIndex+1 len-target-1 )
+    # setup indexes for suffix slice
+    -rot over array-len over - 1 - swap 1 + swap
+
+    # copy suffix array into prefix if the slice len is not 0
+    dup 0 = not if
+        array-slice array-append
+    else
+        drop drop drop
+    end
+;
