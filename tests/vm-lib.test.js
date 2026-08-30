@@ -70,6 +70,49 @@ test("Borth VM executes PANIC by throwing the string on top of the stack", () =>
   );
 });
 
+test("Borth VM executes compiled string primitive bytecode", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "\\"hello\\" str-len \\"he\\" \\"llo\\" str-cat \\"hello\\" 1 3 str-slice \\"hello\\" \\"l\\" 3 str-index-of" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ['[5 "hello" "ell" 3]'],
+  );
+});
+
+test("Borth VM executes compiled array primitive bytecode", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "array-new 10 array-push 20 array-push dup array-len swap 1 array-get" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ["[2 20]"],
+  );
+});
+
+test("Borth VM validates stack depth before delegated string operations", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+        import "lib/vm.borth"
+
+        "\\"only-one\\" str-cat" lex-src parse-tokens compile-nodes run-bytecode
+      `),
+    /STR_CAT requires 2 values on the stack/,
+  );
+});
+
 test("Borth VM panics for unknown instructions", () => {
   assert.throws(
     () =>

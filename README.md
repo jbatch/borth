@@ -260,9 +260,10 @@ import "lib/strings.borth"
 
 The first Borth compiler and VM slice lives in `lib/lexer.borth`,
 `lib/parser.borth`, `lib/compiler.borth`, and `lib/vm.borth`. It can lex source,
-parse token strings into simple node arrays, compile straight-line integer and
-string programs into inspectable instruction arrays, and run that bytecode in a
-tiny Borth VM:
+parse token strings into simple node arrays, compile straight-line programs into
+inspectable instruction arrays, and run that bytecode in a tiny Borth VM. The
+current slice includes arithmetic, comparisons, stack operations, strings,
+arrays, printing, debug formatting, and panic:
 
 ```text
 import "lib/lexer.borth"

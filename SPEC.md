@@ -862,9 +862,16 @@ VM library decision:
 - `lib/vm.borth` is a tiny interpreter for the inspectable instruction arrays
   produced by `lib/compiler.borth`.
 - The VM state is threaded as `instructions ip stack`.
-- Current instruction support covers straight-line primitives, including literal
-  `PUSH`, arithmetic, comparisons, stack operations, `PRINT`, `PRINT_STACK`,
-  `SHOW`, `PANIC`, and `HALT`.
+- Current instruction support covers straight-line primitives, including
+  literal `PUSH`, arithmetic, comparisons, stack operations, string operations,
+  array operations, `PRINT`, `PRINT_STACK`, `SHOW`, `PANIC`, and `HALT`.
+- The Borth VM implementations of `STR_LEN`, `STR_CAT`, `STR_SLICE`,
+  `STR_INDEX_OF`, `ARRAY_NEW`, `ARRAY_PUSH`, `ARRAY_LEN`, and `ARRAY_GET`
+  delegate to the existing outer Borth words. This keeps the interpreter slice
+  small while preserving the same runtime behavior as normal source programs.
+- The Borth VM handlers validate VM stack depth before delegation. Type checks,
+  index checks, and string range checks still belong to the primitive words
+  being called.
 - `run-bytecode ( instructions -- stack )` returns the interpreted VM value
   stack rather than printing trace output.
 

@@ -38,12 +38,26 @@ import "./array.borth"
     drop drop
 ;
 
+# stack-pop-2 ( stack -- stack A B )
+#
+# Pop the top two values from a VM value stack, preserving their original order.
+: stack-pop-2
+    array-pop swap array-pop rot
+;
+
+# stack-pop-3 ( stack -- stack A B C )
+#
+# Pop the top three values from a VM value stack, preserving their original order.
+: stack-pop-3
+    array-pop swap stack-pop-2 3 roll
+;
+
 # prepare-binary-operation ( ip stack op -- ip stack a b )
 #
 # Validate that stack has two values, then pop b and a for a binary operation.
 : prepare-binary-operation
     swap dup rot 2 swap assert-stack-length
-    array-pop swap array-pop rot
+    stack-pop-2
 ;
 
 # execute-drop ( ip stack -- ip stack )
@@ -136,6 +150,85 @@ import "./array.borth"
     inc-ip
 ;
 
+# execute-str-len ( ip stack -- ip stack )
+#
+# Execute STR_LEN by replacing the top stack value with its string length.
+# Validate stack has at least 1 value: "STR_LEN requires a value on the stack"
+: execute-str-len
+    dup 1 "STR_LEN" assert-stack-length
+    array-pop str-len array-push
+    inc-ip
+;
+
+# execute-str-cat ( ip stack -- ip stack )
+#
+# Execute STR_CAT by replacing the top two stack values with their concatenation.
+# Validate stack has at least 2 values: "STR_CAT requires 2 values on the stack"
+: execute-str-cat
+    dup 2 "STR_CAT" assert-stack-length
+    stack-pop-2 str-cat array-push
+    inc-ip
+;
+
+# execute-str-slice ( ip stack -- ip stack )
+#
+# Execute STR_SLICE by replacing string/start/length with the sliced string.
+# Validate stack has at least 3 values: "STR_SLICE requires 3 values on the stack"
+: execute-str-slice
+    dup 3 "STR_SLICE" assert-stack-length
+    stack-pop-3 str-slice array-push
+    inc-ip
+;
+
+# execute-str-index-of ( ip stack -- ip stack )
+#
+# Execute STR_INDEX_OF by replacing string/needle/start with the found index.
+# It leaves -1 when the needle is not found.
+# Validate stack has at least 3 values: "STR_INDEX_OF requires 3 values on the stack"
+: execute-str-index-of
+    dup 3 "STR_INDEX_OF" assert-stack-length
+    stack-pop-3 str-index-of array-push
+    inc-ip
+;
+
+# execute-array-new ( ip stack -- ip stack )
+#
+# Execute ARRAY_NEW by pushing an empty array onto the stack.
+: execute-array-new
+    array-new array-push
+    inc-ip
+;
+
+# execute-array-len ( ip stack -- ip stack )
+#
+# Execute ARRAY_LEN by replacing the top stack value with its array length.
+# Validate stack has at least 1 value: "ARRAY_LEN requires a value on the stack"
+: execute-array-len
+    dup 1 "ARRAY_LEN" assert-stack-length
+    array-pop array-len array-push
+    inc-ip
+;
+
+# execute-array-push ( ip stack -- ip stack )
+#
+# Execute ARRAY_PUSH by replacing array/value with the appended array.
+# Validate stack has at least 2 values: "ARRAY_PUSH requires 2 values on the stack"
+: execute-array-push
+    dup 2 "ARRAY_PUSH" assert-stack-length
+    stack-pop-2 array-push array-push
+    inc-ip
+;
+
+# execute-array-get ( ip stack -- ip stack )
+#
+# Execute ARRAY_GET by replacing array/index with the indexed value.
+# Validate stack has at least 2 values: "ARRAY_GET requires 2 values on the stack"
+: execute-array-get
+    dup 2 "ARRAY_GET" assert-stack-length
+    stack-pop-2 array-get array-push
+    inc-ip
+;
+
 # execute-instruction ( ip stack instruction -- ip stack haltedFlag )
 #
 # Execute one instruction. The instruction pointer is advanced here for normal
@@ -164,6 +257,22 @@ import "./array.borth"
         drop execute-show 0
     else dup "PANIC" = if drop
         drop execute-panic 1
+    else dup "STR_LEN" = if drop
+        drop execute-str-len 0
+    else dup "STR_CAT" = if drop
+        drop execute-str-cat 0
+    else dup "STR_SLICE" = if drop
+        drop execute-str-slice 0
+    else dup "STR_INDEX_OF" = if drop
+        drop execute-str-index-of 0
+    else dup "ARRAY_NEW" = if drop
+        drop execute-array-new 0
+    else dup "ARRAY_LEN" = if drop
+        drop execute-array-len 0
+    else dup "ARRAY_PUSH" = if drop
+        drop execute-array-push 0
+    else dup "ARRAY_GET" = if drop
+        drop execute-array-get 0
     else dup "ADD" = if nip
         prepare-binary-operation + array-push inc-ip 0
     else dup "SUB" = if nip
@@ -184,7 +293,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

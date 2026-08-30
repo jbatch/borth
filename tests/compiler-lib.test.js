@@ -39,6 +39,21 @@ test("compiler library compiles string nodes into push instructions", () => {
   );
 });
 
+test("compiler library compiles string and array primitive words", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+
+      "str-len str-cat str-slice str-index-of array-new array-len array-push array-get" lex-src parse-tokens compile-nodes show print
+    `),
+    [
+      '[["STR_LEN"] ["STR_CAT"] ["STR_SLICE"] ["STR_INDEX_OF"] ["ARRAY_NEW"] ["ARRAY_LEN"] ["ARRAY_PUSH"] ["ARRAY_GET"] ["HALT"]]',
+    ],
+  );
+});
+
 test("compiler library panics for unknown words", () => {
   assert.throws(
     () =>

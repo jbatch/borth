@@ -71,6 +71,26 @@ import "./array.borth"
     else dup "rot" = if
         "ROT" array-wrap array-wrap
 
+    # String operations.
+    else dup "str-len" = if
+        "STR_LEN" array-wrap array-wrap
+    else dup "str-cat" = if
+        "STR_CAT" array-wrap array-wrap
+    else dup "str-slice" = if
+        "STR_SLICE" array-wrap array-wrap
+    else dup "str-index-of" = if
+        "STR_INDEX_OF" array-wrap array-wrap
+
+    # Array operations.
+    else dup "array-new" = if
+        "ARRAY_NEW" array-wrap array-wrap
+    else dup "array-len" = if
+        "ARRAY_LEN" array-wrap array-wrap
+    else dup "array-push" = if
+        "ARRAY_PUSH" array-wrap array-wrap
+    else dup "array-get" = if
+        "ARRAY_GET" array-wrap array-wrap
+
     # Utility operations.
     else dup "print" = if
         "PRINT" array-wrap array-wrap
@@ -83,7 +103,7 @@ import "./array.borth"
 
     else
         "Unknown word: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end
     nip
 ;
 
