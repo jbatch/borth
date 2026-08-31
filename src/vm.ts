@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import type { Instruction } from "./bytecode.js";
 import type { Address, ArrayValue, Value } from "./value.js";
 
@@ -13,6 +15,7 @@ export type VmState = {
 export type ExecuteOptions = {
   random?: () => number;
   read?: () => string;
+  readTextFile?: (path: string) => string;
   write?: (value: Value) => void;
 };
 
@@ -22,6 +25,8 @@ export function execute(
 ): VmState {
   const random = options.random ?? Math.random;
   const read = options.read;
+  const readTextFile =
+    options.readTextFile ?? ((path: string) => readFileSync(path, "utf8"));
   const write = options.write ?? console.log;
   const state: VmState = {
     ip: 0,
@@ -246,6 +251,12 @@ export function execute(
         state.stack.push(parseInputInteger(readInput(read, "READ_INT")));
         state.ip += 1;
         break;
+      case "READ_TEXT_FILE": {
+        const path = popString(state, "READ_TEXT_FILE");
+        state.stack.push(readTextFile(path));
+        state.ip += 1;
+        break;
+      }
       case "RET": {
         const returnAddress = state.callStack.pop();
 

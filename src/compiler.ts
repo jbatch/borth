@@ -535,6 +535,8 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "READ_LINE" };
     case "read-int":
       return { op: "READ_INT" };
+    case "read-text-file":
+      return { op: "READ_TEXT_FILE" };
     case "print":
       return { op: "PRINT" };
     case ".s":

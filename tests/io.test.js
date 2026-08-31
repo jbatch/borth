@@ -3,11 +3,12 @@ import test from "node:test";
 
 import { run } from "../dist/runner.js";
 
-function outputOf(source, input) {
+function outputOf(source, input = [], options = {}) {
   const output = [];
   const lines = [...input];
 
   run(source, {
+    ...options,
     read: () => {
       const line = lines.shift();
 
@@ -31,6 +32,49 @@ test("read-line can be called more than once", () => {
   assert.deepEqual(
     outputOf("read-line read-line swap print print", ["first", "second"]),
     ["first", "second"],
+  );
+});
+
+test("read-text-file pushes a UTF-8 text file onto the stack", () => {
+  assert.deepEqual(
+    outputOf('"tests/fixtures/read-text-file.txt" read-text-file print'),
+    ["hello from fixture\n"],
+  );
+});
+
+test("read-text-file can be provided by tests", () => {
+  assert.deepEqual(
+    outputOf('"notes.borth" read-text-file print', [], {
+      readTextFile: (path) => {
+        assert.equal(path, "notes.borth");
+        return "10 20 +";
+      },
+    }),
+    ["10 20 +"],
+  );
+});
+
+test("read-text-file requires a path", () => {
+  assert.throws(
+    () => run("read-text-file", { write: () => undefined }),
+    /READ_TEXT_FILE requires a value on the stack/,
+  );
+});
+
+test("read-text-file requires a string path", () => {
+  assert.throws(
+    () => run("123 read-text-file", { write: () => undefined }),
+    /READ_TEXT_FILE requires strings on the stack/,
+  );
+});
+
+test("read-text-file reports missing files", () => {
+  assert.throws(
+    () =>
+      run('"tests/fixtures/missing.txt" read-text-file', {
+        write: () => undefined,
+      }),
+    /ENOENT/,
   );
 });
 

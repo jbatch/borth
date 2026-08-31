@@ -66,6 +66,7 @@ random ( max -- n )
 !      ( A addr -- )
 read-line ( -- string )
 read-int  ( -- number )
+read-text-file ( path -- string )
 print ( A -- )
 .s    ( -- )
 panic ( string -- never )
@@ -210,11 +211,11 @@ repeat
 drop
 ```
 
-Comment lines start with `#`:
+`#` starts a comment when it appears where a new token could start:
 
 ```text
 # Square a number.
-10 dup * print
+10 dup * print # Prints 100.
 ```
 
 `read-line` reads one line from stdin:
@@ -227,6 +228,12 @@ printf 'hello\n' | yarn borth -- examples/echo.borth
 
 ```sh
 printf '21\n' | yarn borth -- examples/double-input.borth
+```
+
+`read-text-file` reads a UTF-8 text file and pushes its contents as a string:
+
+```text
+"examples/add.borth" read-text-file print
 ```
 
 `random` returns an integer from `0` to `max - 1`; `random-between` returns an integer in the inclusive range:

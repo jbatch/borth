@@ -390,8 +390,10 @@ should read source from a file and run it through the existing pipeline.
 
 Comment decision:
 
-- `#` starts a whole-line comment after optional leading whitespace.
-- Inline comments are intentionally not supported yet.
+- `#` starts a comment when it appears where a new token could start.
+- A comment runs until the next newline or the end of source.
+- This supports whole-line comments and inline comments after whitespace.
+- `#` inside a string or inside a larger word is not a comment marker.
 
 ## Milestone 3: First Conditional
 
@@ -804,6 +806,26 @@ Import decision:
   error reporting.
 - No VM opcode is needed; imports are a source loading and compiler-session
   feature.
+
+## Milestone 17a: Text File Input
+
+Goal:
+
+```text
+"examples/add.borth" read-text-file
+```
+
+should push the UTF-8 text contents of that file onto the stack.
+
+Text file input decision:
+
+- `read-text-file` is a VM primitive because it crosses the host file-system
+  boundary.
+- Stack effect: `( path -- string )`.
+- Paths are strings and are resolved by the host runtime.
+- Missing or unreadable files throw host file-system errors for now.
+- This is intentionally narrower than syscalls or file handles. It exists to
+  support tooling that wants to load source from files.
 
 ## Milestone 18: First Borth Compiler Library Slice
 

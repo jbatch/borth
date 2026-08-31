@@ -3,9 +3,9 @@
 # This module is importable library code: it defines words only and has no
 # top-level executable test code.
 #
-# Current lexer scope is deliberately small. It splits source into token strings
-# separated by spaces, skips empty tokens from leading, repeated, or trailing
-# spaces, and keeps quoted string literals together even when they contain spaces.
+# Current lexer scope is deliberately small. It splits source into token strings,
+# skips whitespace and comments, and keeps quoted string literals together even
+# when they contain spaces.
 #
 # String escape sequences are not handled yet.
 
@@ -27,12 +27,20 @@ variable lex-source
   lex-source @ str-len < not
 ;
 
+# lex-new-line? ( char -- flag )
+#
+# Return 1 when char is a newline.
+# TODO: Support carriage return too.
+: lex-new-line?
+  "\n" =
+;
+
 # lex-whitespace? ( char -- flag )
 #
-# Return 1 when char is the lexer delimiter.
-# Only the plain space character is treated as whitespace for now.
+# Return 1 when char is a lexer delimiter.
+# Only the plain space character and newline are treated as whitespace for now.
 : lex-whitespace?
-  " " =
+  dup " " = swap lex-new-line? or
 ;
 
 # lex-quote? ( char -- flag )
@@ -40,14 +48,6 @@ variable lex-source
 # Return 1 when char is a double quote.
 : lex-quote?
   "\"" =
-;
-
-# lex-new-line? ( char -- flag )
-#
-# Return 1 when char is a newline.
-# TODO: Support catching carriage return too
-: lex-new-line?
-  "\n" =
 ;
 
 # lex-end-of-word? ( index -- flag )
@@ -106,6 +106,13 @@ variable lex-source
 : lex-string-end
   # Skip the opening quote before scanning for the closing quote.
   1 +
+
+  # Check whether the opening quote was the final source character before
+  # attempting to read the first string character.
+  dup lex-at-end? if
+    "Unterminated string literal" panic
+  end
+
   loop
     dup lex-char-at lex-quote? not
   while
@@ -151,9 +158,39 @@ variable lex-source
   repeat
 ;
 
+# lex-start-of-comment? ( index -- flag )
+#
+# Return 1 when index points at `#`. Callers should only use this after
+# whitespace has been skipped, so `#` is at a token boundary.
+: lex-start-of-comment?
+  lex-char-at "#" =
+;
+
+# lex-skip-to-new-line ( index -- index )
+#
+# Return the index just after the next newline, or the source end if the comment
+# reaches EOF.
+: lex-skip-to-new-line
+  # Carry a stop flag so the loop can terminate at newline or EOF.
+  # ( index stop? )
+  loop
+    dup lex-at-end? if
+      1
+    else
+      dup lex-char-at "\n" = if
+        # increment index and stop skipping
+        1 + 1
+      else
+        1 + 0
+      end
+    end
+  until
+;
+
 # lex-src ( src -- tok-array )
 #
-# Split the whole source string into an array of token strings.
+# Split the whole source string into an array of token strings. A `#` at a token
+# boundary starts a comment that runs through the end of the line.
 : lex-src
   # Store src globally so helper words only need to thread the current index.
   lex-source !
@@ -165,10 +202,16 @@ variable lex-source
   while
     lex-skip-whitespace
     dup lex-at-end? not if
-      # Read the next token, push it into tok-array, and keep the new index.
-      # ( tok-array index -- tok-array end )
-      dup lex-token-end dup -rot lex-token-slice rot swap
-      array-push swap
+      # Comments behave like whitespace once the cursor is between tokens.
+      dup lex-start-of-comment? if
+        lex-skip-to-new-line
+      else
+        # Read the next token, push it into tok-array, and keep the new index.
+        # ( tok-array index -- tok-array end )
+        dup lex-token-end dup -rot lex-token-slice rot swap
+        array-push swap
+      end
+      lex-skip-whitespace
     end
   repeat
   drop

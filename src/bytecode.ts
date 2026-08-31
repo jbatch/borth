@@ -35,6 +35,7 @@ export type Instruction =
   | { op: "JUMP_IF_FALSE"; target: number }
   | { op: "READ_LINE" }
   | { op: "READ_INT" }
+  | { op: "READ_TEXT_FILE" }
   | { op: "PRINT" }
   | { op: "PRINT_STACK" }
   | { op: "PANIC" }

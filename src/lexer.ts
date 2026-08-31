@@ -12,20 +12,21 @@ export type StringToken = {
 };
 
 export function lex(source: string): Token[] {
-  const sourceWithoutComments = stripCommentLines(source);
   const tokens: Token[] = [];
 
-  for (let index = 0; index < sourceWithoutComments.length; ) {
-    const char = sourceWithoutComments[index];
+  for (let index = 0; index < source.length; ) {
+    const char = source[index];
 
     if (/\s/.test(char)) {
       index += 1;
+    } else if (char === "#") {
+      index = skipComment(source, index);
     } else if (char === '"') {
-      const string = readString(sourceWithoutComments, index);
+      const string = readString(source, index);
       tokens.push(string.token);
       index = string.nextIndex;
     } else {
-      const word = readWord(sourceWithoutComments, index);
+      const word = readWord(source, index);
       tokens.push(word.token);
       index = word.nextIndex;
     }
@@ -34,11 +35,14 @@ export function lex(source: string): Token[] {
   return tokens;
 }
 
-function stripCommentLines(source: string): string {
-  return source
-    .split(/\r?\n/)
-    .filter((line) => !line.trimStart().startsWith("#"))
-    .join("\n");
+function skipComment(source: string, startIndex: number): number {
+  let index = startIndex;
+
+  while (index < source.length && source[index] !== "\n") {
+    index += 1;
+  }
+
+  return index;
 }
 
 function readString(

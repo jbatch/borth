@@ -37,9 +37,10 @@
 # Stops when target == cur
 : fizzbuzz-to
     dup print-fb
-    # ( A B -- A B A==B )
-    2dup = if
-        # end
+    # Copy target and current so equality can consume the copies.
+    # ( target cur -- target cur target==cur )
+    over over = if
+        # Target reached.
         drop drop
     else
         1 + fizzbuzz-to
