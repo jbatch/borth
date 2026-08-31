@@ -1,4 +1,5 @@
 import "./array.borth"
+import "./map.borth"
 
 # Compiler helper words.
 #
@@ -14,6 +15,10 @@ import "./array.borth"
 
 variable compiler-instructions
 variable compiler-block-stack
+
+# compiler-words maps user-defined word names to instruction addresses.
+# For now this is a simple Borth map, so lookups are linear but easy to inspect.
+variable compiler-words
 
 # get-kind ( node -- kind )
 #
@@ -59,6 +64,53 @@ variable compiler-block-stack
     compiler-instructions !
 ;
 
+# record-word-name ( name -- )
+#
+# Record a new user-defined word at the current instruction address.
+# The name is recorded before the body is compiled so recursive calls can find
+# the word currently being defined.
+: record-word-name 
+    compiler-words @ swap 
+    2dup map-has? if
+        "word already defined: " swap str-cat panic
+    end
+    current-instruction map-set
+    compiler-words !
+;
+
+# user-defined-word? ( name -- flag )
+#
+# Return 1 when name is already known as a user-defined word.
+: user-defined-word? 
+    compiler-words @ swap map-has?
+;
+
+# user-defined-word-address ( name -- address )
+#
+# Resolve a user-defined word name to its bytecode address.
+# Unknown words are compiler errors because forward references are not supported.
+: user-defined-word-address
+    dup compiler-words @ swap map-get not if drop
+        "Unknown word: " swap show str-cat panic
+    end
+    nip
+;
+
+# push-open-block ( entry -- )
+#
+# Add an open block frame to compiler-block-stack.
+# Frames look like ["if" jumpIndex], ["else" jumpIndex], or [":" jumpIndex].
+: push-open-block
+    compiler-block-stack @ swap array-push compiler-block-stack !
+;
+
+# pop-open-block ( -- blockEntry )
+#
+# Remove and return the most recently opened block frame.
+: pop-open-block
+    compiler-block-stack @ array-pop swap compiler-block-stack !
+;
+
 # compile-if ( -- )
 #
 # Emit a JUMP_IF_FALSE placeholder and remember where it lives.
@@ -69,8 +121,7 @@ variable compiler-block-stack
 
     # ( ["if", instructionIndexOfUnpatchedJump] )
     "if" array-wrap swap array-push
-    compiler-block-stack @ swap array-push
-    compiler-block-stack !
+    push-open-block
 ;
 
 # compile-else ( -- )
@@ -89,7 +140,7 @@ variable compiler-block-stack
     "JUMP" array-wrap -1 array-push emit-instruction
 
     # Pop the open if frame.
-    compiler-block-stack @ array-pop swap compiler-block-stack !
+    pop-open-block
 
     # A second else sees the previous else frame on top of the block stack.
     dup get-kind "if" = not if
@@ -101,8 +152,7 @@ variable compiler-block-stack
 
     # ( ["else", instructionIndexOfUnpatchedJumpOverFalseBranch] )
     "else" array-wrap swap array-push
-    compiler-block-stack @ swap array-push
-    compiler-block-stack !
+    push-open-block
 ;
 
 # compile-end ( -- )
@@ -114,7 +164,7 @@ variable compiler-block-stack
         "end without matching if" panic
     end
 
-    compiler-block-stack @ array-pop swap compiler-block-stack !
+    pop-open-block
 
     # A plain if frame patches the false jump; an else frame patches the
     # true-branch jump over the else body.
@@ -127,8 +177,50 @@ variable compiler-block-stack
     else
         "end without matching if/else" panic
     end end
+;
 
+# compile-define ( node-array index -- node-array index )
+#
+# Start a user-defined word.
+# The current token must be ":". The next token is used as the word name.
+# A JUMP placeholder is emitted so normal execution skips over the definition
+# body, and ";" later patches that JUMP to land after the generated RET.
+: compile-define
+    compiler-block-stack @ array-len 0 = not if
+        "word definitions can only appear at the root level" panic
+    end
 
+    # Read the next node as the word name.
+    1 + 2dup array-get 1 array-get
+
+    # Emit ["JUMP", -1] to skip the body during normal execution.
+    current-instruction
+    "JUMP" array-wrap -1 array-push emit-instruction
+    ":" array-wrap swap array-push
+    push-open-block
+
+    # Record the entry address immediately after the skip jump.
+    record-word-name
+;
+
+# compile-end-definition ( -- )
+#
+# End a user-defined word by emitting RET, closing the ":" frame, and patching
+# the earlier skip jump to the first instruction after the word body.
+: compile-end-definition
+    compiler-block-stack @ array-len 0 = if
+        "; without matching :" panic
+    end
+
+    "RET" array-wrap emit-instruction
+    pop-open-block
+
+    dup get-kind ":" = not if
+        get-kind "; found with \"" swap str-cat "\" block still open" panic
+    end
+
+    # patch the jump after name to end of word body
+    get-value "JUMP" array-wrap current-instruction array-push patch-instruction
 ;
 
 # assert-no-open-blocks ( -- )
@@ -147,79 +239,86 @@ variable compiler-block-stack
 # Unknown words are fatal compiler errors for now.
 : compile-word
     # Arithmetic operations.
-    dup "+" = if
+    dup "+" = if drop
         "ADD" array-wrap emit-instruction
-    else dup "-" = if
+    else dup "-" = if drop
         "SUB" array-wrap emit-instruction
-    else dup "*" = if
+    else dup "*" = if drop
         "MUL" array-wrap emit-instruction
-    else dup "/" = if
+    else dup "/" = if drop
         "DIV" array-wrap emit-instruction
-    else dup "mod" = if
+    else dup "mod" = if drop
         "MOD" array-wrap emit-instruction
 
     # Boolean comparisons.
-    else dup "=" = if
+    else dup "=" = if drop
         "EQ" array-wrap emit-instruction
-    else dup "<" = if
+    else dup "<" = if drop
         "LT" array-wrap emit-instruction
-    else dup ">" = if
+    else dup ">" = if drop
         "GT" array-wrap emit-instruction
 
     # Stack operations.
-    else dup "drop" = if
+    else dup "drop" = if drop
         "DROP" array-wrap emit-instruction
-    else dup "dup" = if
+    else dup "dup" = if drop
         "DUP" array-wrap emit-instruction
-    else dup "swap" = if
+    else dup "swap" = if drop
         "SWAP" array-wrap emit-instruction
-    else dup "over" = if
+    else dup "over" = if drop
         "OVER" array-wrap emit-instruction
-    else dup "rot" = if
+    else dup "rot" = if drop
         "ROT" array-wrap emit-instruction
 
     # String operations.
-    else dup "str-len" = if
+    else dup "str-len" = if drop
         "STR_LEN" array-wrap emit-instruction
-    else dup "str-cat" = if
+    else dup "str-cat" = if drop
         "STR_CAT" array-wrap emit-instruction
-    else dup "str-slice" = if
+    else dup "str-slice" = if drop
         "STR_SLICE" array-wrap emit-instruction
-    else dup "str-index-of" = if
+    else dup "str-index-of" = if drop
         "STR_INDEX_OF" array-wrap emit-instruction
 
     # Array operations.
-    else dup "array-new" = if
+    else dup "array-new" = if drop
         "ARRAY_NEW" array-wrap emit-instruction
-    else dup "array-len" = if
+    else dup "array-len" = if drop
         "ARRAY_LEN" array-wrap emit-instruction
-    else dup "array-push" = if
+    else dup "array-push" = if drop
         "ARRAY_PUSH" array-wrap emit-instruction
-    else dup "array-get" = if
+    else dup "array-get" = if drop
         "ARRAY_GET" array-wrap emit-instruction
 
     # Control-flow operations.
-    else dup "if" = if
+    else dup "if" = if drop
         compile-if
-    else dup "else" = if
+    else dup "else" = if drop
         compile-else
-    else dup "end" = if
+    else dup "end" = if drop
         compile-end
 
+    else dup ":" = if drop
+        compile-define
+    else dup ";" = if drop
+        compile-end-definition
+
     # Utility operations.
-    else dup "print" = if
+    else dup "print" = if drop
         "PRINT" array-wrap emit-instruction
-    else dup ".s" = if
+    else dup ".s" = if drop
         "PRINT_STACK" array-wrap emit-instruction
-    else dup "show" = if
+    else dup "show" = if drop
         "SHOW" array-wrap emit-instruction
-    else dup "panic" = if
+    else dup "panic" = if drop
         "PANIC" array-wrap emit-instruction
 
-    else
-        "Unknown word: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end
-    drop
+    # Known user-defined words compile to CALL with their recorded bytecode address.
+    else 
+        user-defined-word-address
+        "CALL" array-wrap swap array-push emit-instruction
+
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # create-push-instruction ( node -- instruction )
@@ -258,6 +357,7 @@ variable compiler-block-stack
     # Initialize compiler state for this compilation.
     array-new compiler-instructions !
     array-new compiler-block-stack !
+    map-new compiler-words !
 
     # ( node-array index )
     0

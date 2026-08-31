@@ -2,39 +2,128 @@ import "./array.borth"
 
 # Tiny bytecode VM written in Borth.
 #
-# Current scope is deliberately tiny. It can execute the inspectable instruction
-# arrays produced by compiler.borth for straight-line programs and basic if/end
-# branches:
+# It executes the instruction arrays produced by compiler.borth:
 #
 #   ["PUSH" value]
 #   ["ADD"]
 #   ["JUMP_IF_FALSE" target]
+#   ["CALL" target]
+#   ["RET"]
 #   ["HALT"]
 #
-# The VM state is threaded through the interpreter loop as:
+# The VM state is represented by this shape:
 #
-#   instructions ip stack
+#   [instructions ip stack call-stack]
+#
+# The helpers below treat that array like a small object. Keeping state access
+# behind words makes the main loop easier to read and gives us one place to
+# change the representation later.
 
-# inc-ip ( ip stack -- ip stack )
+# vm-new ( instructions -- vm )
 #
-# Increment the instruction pointer under the VM stack.
-: inc-ip
-    swap 1 + swap
+# Create a new VM state with ip = 0, an empty value stack, and an empty call
+# stack.
+: vm-new
+    array-new swap 
+    array-push 
+    0 array-push
+    array-new array-push
+    array-new array-push
 ;
 
-# set-ip ( ip stack value -- ip stack )
-#
-# Set the instruction pointer to a value.
-: set-ip
-    rot drop swap
+# vm-instructions ( vm -- instructions )
+: vm-instructions
+    0 array-get
 ;
 
-# assert-stack-length ( stack expected word -- )
+# vm-ip ( vm -- ip )
+: vm-ip
+    1 array-get
+;
+
+# vm-stack ( vm -- stack )
+: vm-stack
+    2 array-get
+;
+
+# vm-call-stack ( vm -- call-stack )
+: vm-call-stack
+    3 array-get
+;
+
+# vm-current-instruction ( vm -- vm instruction )
 #
-# Panic if stack has fewer than expected values.
+# Leave the VM in place and push the instruction at its current ip.
+: vm-current-instruction
+    dup vm-instructions over vm-ip array-get
+;
+
+
+# vm-set-ip       ( vm ip -- vm )
+#
+# Return a copy of vm with a replaced instruction pointer.
+: vm-set-ip
+    1 swap array-set
+;
+
+# vm-inc-ip       ( vm -- vm )
+#
+# Advance the instruction pointer by one.
+: vm-inc-ip
+    dup vm-ip 1 + vm-set-ip
+;
+
+# vm-set-stack    ( vm stack -- vm )
+#
+# Return a copy of vm with a replaced value stack.
+: vm-set-stack
+     2 swap array-set
+;
+
+# vm-stack-push    ( vm value -- vm )
+#
+# Push a value onto the VM value stack.
+: vm-stack-push
+    # (  vm stack value)
+    swap dup vm-stack rot array-push vm-set-stack
+;
+
+# vm-set-call-stack ( vm call-stack -- vm )
+#
+# Return a copy of vm with a replaced call stack.
+: vm-set-call-stack
+     3 swap array-set
+;
+
+# vm-call-stack-push ( vm value -- vm )
+#
+# Push a value onto the VM call stack.
+: vm-call-stack-push
+     swap dup vm-call-stack rot array-push vm-set-call-stack
+;
+
+# vm-call-stack-pop ( vm -- vm value )
+#
+# Pop a value off the VM call stack.
+# Panics with the same error as the TypeScript VM when RET has nowhere to go.
+: vm-call-stack-pop
+     dup vm-call-stack  
+     dup array-len 0 = if
+        "RET requires a return address" panic
+     end
+     array-pop -rot vm-set-call-stack swap
+;
+
+# assert-stack-length ( vm expected word -- vm )
+#
+# Panic if the VM value stack has fewer than expected values.
 : assert-stack-length
+    # ( vm stack expected word )
+    rot dup vm-stack 3 roll 3 roll
+    # ( vm word expected stack-len )
     -rot swap array-len
 
+    # ( vm word expected )
     over < if
         dup 1 = if
             drop
@@ -61,213 +150,275 @@ import "./array.borth"
     array-pop swap stack-pop-2 3 roll
 ;
 
-# prepare-binary-operation ( ip stack op -- ip stack a b )
-#
-# Validate that stack has two values, then pop b and a for a binary operation.
+# prepare-binary-operation ( vm op -- vm a b )
+# 
+# Validate the VM value stack, pop b and a, then write the shortened stack back
+# into the VM before returning the operands.
 : prepare-binary-operation
-    swap dup rot 2 swap assert-stack-length
+    2 swap assert-stack-length
+    dup vm-stack
+    # ( vm stack a b )
     stack-pop-2
+    # ( vm a b )
+    # (  a b vm stack )
+    3 roll 3 roll vm-set-stack -rot
 ;
 
-# execute-drop ( ip stack -- ip stack )
+# execute-drop ( vm -- vm )
 #
 # Execute DROP by removing the top stack value and advancing ip.
 # Validate stack has at least 1 value: "DROP requires a value on the stack"
 : execute-drop
-    dup 1 "DROP" assert-stack-length
-    array-pop drop
-    inc-ip
+    1 "DROP" assert-stack-length
+    dup vm-stack 
+        array-pop drop 
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-dup ( ip stack -- ip stack )
+# execute-dup ( vm -- vm )
 #
 # Execute DUP by copying the top stack value and advancing ip.
 # Validate stack has at least 1 value: "DUP requires a value on the stack"
 : execute-dup
-    dup 1 "DUP" assert-stack-length
-    array-pop dup -rot array-push swap array-push
-    inc-ip
+    1 "DUP" assert-stack-length
+    dup vm-stack 
+        array-pop dup -rot array-push swap array-push 
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-swap ( ip stack -- ip stack )
+# execute-swap ( vm -- vm )
 #
 # Execute SWAP by exchanging the top two stack values and advancing ip.
 # Validate stack has at least 2 values: "SWAP requires 2 values on the stack"
 : execute-swap
-    dup 2 "SWAP" assert-stack-length
-    array-pop swap array-pop -rot swap array-push swap array-push
-    inc-ip
+    2 "SWAP" assert-stack-length
+    dup vm-stack 
+        array-pop swap array-pop -rot swap array-push swap array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-over ( ip stack -- ip stack )
+# execute-over ( vm -- vm )
 #
 # Execute OVER by copying the second stack value to the top and advancing ip.
 # Validate stack has at least 2 values: "OVER requires 2 values on the stack"
 : execute-over
-    dup 2 "OVER" assert-stack-length
-    array-pop swap array-pop dup -rot array-push rot array-push swap array-push
-    inc-ip
+    2 "OVER" assert-stack-length
+    dup vm-stack 
+        array-pop swap array-pop dup -rot array-push rot array-push swap array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-rot ( ip stack -- ip stack )
+# execute-rot ( vm -- vm )
 #
 # Execute ROT by moving the third stack value to the top and advancing ip.
 # Validate stack has at least 3 values: "ROT requires 3 values on the stack"
 : execute-rot
-    dup 3 "ROT" assert-stack-length
-    array-pop swap array-pop swap array-pop
-    -rot swap array-push rot array-push swap array-push
-    inc-ip
+    3 "ROT" assert-stack-length
+    dup vm-stack
+        array-pop swap array-pop swap array-pop
+        -rot swap array-push rot array-push swap array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-print ( ip stack -- ip stack )
+# execute-print ( vm -- vm )
 #
 # Execute PRINT by removing the top stack value, printing it, and advancing ip.
 # Validate stack has at least 1 value: "PRINT requires a value on the stack"
 : execute-print
-    dup 1 "PRINT" assert-stack-length
-    array-pop print
-    inc-ip
+    1 "PRINT" assert-stack-length
+    dup vm-stack
+        array-pop print
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-print-stack ( ip stack -- ip stack )
+# execute-print-stack ( vm -- vm )
 #
 # Execute PRINT_STACK by printing the VM stack state and advancing ip.
 : execute-print-stack
-    dup show print
-    inc-ip
+    dup vm-stack show print
+    vm-inc-ip
 ;
 
-# execute-show ( ip stack -- ip stack )
+# execute-show ( vm -- vm )
 #
 # Execute SHOW by replacing the top value with its string representation.
 # Validate stack has at least 1 value: "SHOW requires a value on the stack"
 : execute-show
-    dup 1 "SHOW" assert-stack-length
-    array-pop show array-push
-    inc-ip
+    1 "SHOW" assert-stack-length
+    dup vm-stack
+        array-pop show array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-panic ( ip stack -- ip stack )
+# execute-panic ( vm -- vm )
 #
 # Execute PANIC by throwing the string on top of the stack.
 # Validate stack has at least 1 value: "PANIC requires a value on the stack"
 : execute-panic
-    dup 1 "PANIC" assert-stack-length
+    1 "PANIC" assert-stack-length
     # TODO validate top of the stack is a string
-    array-pop panic
-    inc-ip
+    dup vm-stack
+        array-pop panic
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-str-len ( ip stack -- ip stack )
+# execute-str-len ( vm -- vm )
 #
 # Execute STR_LEN by replacing the top stack value with its string length.
 # Validate stack has at least 1 value: "STR_LEN requires a value on the stack"
 : execute-str-len
-    dup 1 "STR_LEN" assert-stack-length
-    array-pop str-len array-push
-    inc-ip
+    1 "STR_LEN" assert-stack-length
+    dup vm-stack
+        array-pop str-len array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-str-cat ( ip stack -- ip stack )
+# execute-str-cat ( vm -- vm )
 #
 # Execute STR_CAT by replacing the top two stack values with their concatenation.
 # Validate stack has at least 2 values: "STR_CAT requires 2 values on the stack"
 : execute-str-cat
-    dup 2 "STR_CAT" assert-stack-length
-    stack-pop-2 str-cat array-push
-    inc-ip
+    2 "STR_CAT" assert-stack-length
+    dup vm-stack
+        stack-pop-2 str-cat array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-str-slice ( ip stack -- ip stack )
+# execute-str-slice ( vm -- vm )
 #
 # Execute STR_SLICE by replacing string/start/length with the sliced string.
 # Validate stack has at least 3 values: "STR_SLICE requires 3 values on the stack"
 : execute-str-slice
-    dup 3 "STR_SLICE" assert-stack-length
-    stack-pop-3 str-slice array-push
-    inc-ip
+    3 "STR_SLICE" assert-stack-length
+    dup vm-stack
+        stack-pop-3 str-slice array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-str-index-of ( ip stack -- ip stack )
+# execute-str-index-of ( vm -- vm )
 #
 # Execute STR_INDEX_OF by replacing string/needle/start with the found index.
 # It leaves -1 when the needle is not found.
 # Validate stack has at least 3 values: "STR_INDEX_OF requires 3 values on the stack"
 : execute-str-index-of
-    dup 3 "STR_INDEX_OF" assert-stack-length
-    stack-pop-3 str-index-of array-push
-    inc-ip
+    3 "STR_INDEX_OF" assert-stack-length
+    dup vm-stack
+        stack-pop-3 str-index-of array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-array-new ( ip stack -- ip stack )
+# execute-array-new ( vm -- vm )
 #
 # Execute ARRAY_NEW by pushing an empty array onto the stack.
 : execute-array-new
-    array-new array-push
-    inc-ip
+    dup vm-stack
+        array-new array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-array-len ( ip stack -- ip stack )
+# execute-array-len ( vm -- vm )
 #
 # Execute ARRAY_LEN by replacing the top stack value with its array length.
 # Validate stack has at least 1 value: "ARRAY_LEN requires a value on the stack"
 : execute-array-len
-    dup 1 "ARRAY_LEN" assert-stack-length
-    array-pop array-len array-push
-    inc-ip
+    1 "ARRAY_LEN" assert-stack-length
+    dup vm-stack
+        array-pop array-len array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-array-push ( ip stack -- ip stack )
+# execute-array-push ( vm -- vm )
 #
 # Execute ARRAY_PUSH by replacing array/value with the appended array.
 # Validate stack has at least 2 values: "ARRAY_PUSH requires 2 values on the stack"
 : execute-array-push
-    dup 2 "ARRAY_PUSH" assert-stack-length
-    stack-pop-2 array-push array-push
-    inc-ip
+    2 "ARRAY_PUSH" assert-stack-length
+    dup vm-stack
+        stack-pop-2 array-push array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-array-get ( ip stack -- ip stack )
+# execute-array-get ( vm -- vm )
 #
 # Execute ARRAY_GET by replacing array/index with the indexed value.
 # Validate stack has at least 2 values: "ARRAY_GET requires 2 values on the stack"
 : execute-array-get
-    dup 2 "ARRAY_GET" assert-stack-length
-    stack-pop-2 array-get array-push
-    inc-ip
+    2 "ARRAY_GET" assert-stack-length
+    dup vm-stack
+        stack-pop-2 array-get array-push
+    vm-set-stack
+    vm-inc-ip
 ;
 
-# execute-jump ( ip stack jumpAddr -- ip stack )
+# execute-jump ( vm jumpAddr -- vm )
 #
-# Unconditionally set the instruction pointer to jumpAddr.
+# Unconditionally set the instruction pointer to jumpAddr. Jumps do not advance
+# ip after setting it.
 : execute-jump
-    set-ip
+    vm-set-ip
 ;
 
-# execute-jump-if-false ( ip stack falseJumpAddr -- ip stack )
+# execute-jump-if-false ( vm falseJumpAddr -- vm )
 #
 # Pop a numeric flag from the VM value stack. Jump when it is 0; otherwise
 # continue with the next instruction.
 : execute-jump-if-false
-    over 1 "JUMP_IF_FALSE" assert-stack-length
-    swap array-pop 0 = if
-        swap set-ip
-    else
-        swap drop inc-ip
-    end
+    swap 1 "JUMP_IF_FALSE" assert-stack-length
+    # ( falseJumpAddr vm stack )
+    dup vm-stack 
+        array-pop 0 = if
+            # ( stack vm )
+            -rot swap vm-set-ip
+        else
+            # ( stack vm )
+            -rot swap drop vm-inc-ip
+        end
+    swap vm-set-stack
 ;
 
-# execute-instruction ( ip stack instruction -- ip stack haltedFlag )
+# execute-call ( vm target -- vm )
+#
+# Push the next instruction address to the call stack, then set ip to target.
+# Calls do not advance ip after setting it.
+: execute-call
+    swap dup vm-ip 1 + vm-call-stack-push swap
+    vm-set-ip
+;
+
+# execute-ret ( vm -- vm )
+#
+# Pop the most recent return address from the call stack and jump back to it.
+# RET does not advance ip after setting it.
+: execute-ret
+    vm-call-stack-pop vm-set-ip
+;
+
+# execute-instruction ( vm instruction -- vm haltedFlag )
 #
 # Execute one instruction. The instruction pointer is advanced here for normal
-# instructions; HALT leaves it unchanged and returns a true halted flag.
+# instructions; jumps set it directly; HALT leaves it unchanged and returns a
+# true halted flag.
 : execute-instruction
     dup 0 array-get
     dup "PUSH" = if drop
         # Push the instruction operand onto the VM value stack.
-        1 array-get array-push
-        inc-ip 0
+        1 array-get vm-stack-push
+        vm-inc-ip 0
     else dup "DROP" = if drop
         drop execute-drop 0
     else dup "DUP" = if drop
@@ -303,21 +454,21 @@ import "./array.borth"
     else dup "ARRAY_GET" = if drop
         drop execute-array-get 0
     else dup "ADD" = if nip
-        prepare-binary-operation + array-push inc-ip 0
+        prepare-binary-operation + vm-stack-push vm-inc-ip 0
     else dup "SUB" = if nip
-        prepare-binary-operation - array-push inc-ip 0
+        prepare-binary-operation - vm-stack-push vm-inc-ip 0
     else dup "MUL" = if nip
-        prepare-binary-operation * array-push inc-ip 0
+        prepare-binary-operation * vm-stack-push vm-inc-ip 0
     else dup "DIV" = if nip
-        prepare-binary-operation / array-push inc-ip 0
+        prepare-binary-operation / vm-stack-push vm-inc-ip 0
     else dup "MOD" = if nip
-        prepare-binary-operation mod array-push inc-ip 0
+        prepare-binary-operation mod vm-stack-push vm-inc-ip 0
     else dup "EQ" = if nip
-        prepare-binary-operation = array-push inc-ip 0
+        prepare-binary-operation = vm-stack-push vm-inc-ip 0
     else dup "LT" = if nip
-        prepare-binary-operation < array-push inc-ip 0
+        prepare-binary-operation < vm-stack-push vm-inc-ip 0
     else dup "GT" = if nip
-        prepare-binary-operation > array-push inc-ip 0
+        prepare-binary-operation > vm-stack-push vm-inc-ip 0
 
     else dup "JUMP" = if drop
         # Get the jump target.
@@ -325,24 +476,28 @@ import "./array.borth"
     else dup "JUMP_IF_FALSE" = if drop
         # Get the jump target.
         1 array-get execute-jump-if-false 0
+    else dup "CALL" = if drop
+        # Get the jump target.
+        1 array-get
+        execute-call 0
+    else dup "RET" = if drop drop
+        execute-ret 0
     else dup "HALT" = if drop
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )
 #
 # Run bytecode from instruction 0 until HALT, then return the VM value stack.
 : run-bytecode
-    # ( instructions -- instructions ip stack )
-    0 array-new
+    # ( instructions -- vm )
+    vm-new
     loop
-        # Rotate so instructions and ip are next to each other for array-get.
-        -rot
-        2dup array-get 3 roll swap
+        vm-current-instruction
         execute-instruction
     until
-    nip nip
+    vm-stack
 ;

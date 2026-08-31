@@ -199,6 +199,64 @@ test("Borth VM executes unconditional jumps", () => {
   );
 });
 
+test("Borth VM executes call and ret instructions", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/vm.borth"
+
+      array-new
+      array-new "CALL" array-push 2 array-push array-push
+      array-new "HALT" array-push array-push
+      array-new "PUSH" array-push 10 array-push array-push
+      array-new "RET" array-push array-push
+      run-bytecode show print
+    `),
+    ["[10]"],
+  );
+});
+
+test("Borth VM executes compiled user-defined word calls", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      ": square dup * ; 10 square" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ["[100]"],
+  );
+});
+
+test("Borth VM executes compiled recursive user-defined word calls", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      ": fact dup 2 < if drop 1 else dup 1 - fact * end ; 5 fact" lex-src parse-tokens compile-nodes run-bytecode show print
+    `),
+    ["[120]"],
+  );
+});
+
+test("Borth VM panics when ret has no return address", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/vm.borth"
+
+        array-new
+        array-new "RET" array-push array-push
+        run-bytecode
+      `),
+    /RET requires a return address/,
+  );
+});
+
 test("Borth VM validates jump-if-false stack depth", () => {
   assert.throws(
     () =>

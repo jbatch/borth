@@ -3,5 +3,5 @@ import "../lib/parser.borth"
 import "../lib/compiler.borth"
 import "../lib/vm.borth"
 
- "0 if 2 else 3 end print" lex-src parse-tokens compile-nodes run-bytecode .s
-# "1 if 2 print else 3 print end" lex-src parse-tokens compile-nodes show print
+
+": square dup * ; 10 square" lex-src parse-tokens compile-nodes run-bytecode show print

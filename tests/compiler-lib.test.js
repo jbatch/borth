@@ -97,6 +97,36 @@ test("compiler library compiles if else end with patched jumps", () => {
   );
 });
 
+test("compiler library compiles user-defined words to call instructions", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+
+      ": square dup * ; 10 square" lex-src parse-tokens compile-nodes show print
+    `),
+    [
+      '[["JUMP" 4] ["DUP"] ["MUL"] ["RET"] ["PUSH" 10] ["CALL" 1] ["HALT"]]',
+    ],
+  );
+});
+
+test("compiler library compiles recursive user-defined words", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+
+      ": fact dup 2 < if drop 1 else dup 1 - fact * end ; 5 fact" lex-src parse-tokens compile-nodes show print
+    `),
+    [
+      '[["JUMP" 14] ["DUP"] ["PUSH" 2] ["LT"] ["JUMP_IF_FALSE" 8] ["DROP"] ["PUSH" 1] ["JUMP" 13] ["DUP"] ["PUSH" 1] ["SUB"] ["CALL" 1] ["MUL"] ["RET"] ["PUSH" 5] ["CALL" 1] ["HALT"]]',
+    ],
+  );
+});
+
 test("compiler library panics for else without if", () => {
   assert.throws(
     () =>
@@ -164,6 +194,34 @@ test("compiler library panics for unknown words", () => {
         "10 nope +" lex-src parse-tokens compile-nodes show print
       `),
     /Unknown word: "nope"/,
+  );
+});
+
+test("compiler library panics for words used before definition", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+
+        "10 square : square dup * ;" lex-src parse-tokens compile-nodes show print
+      `),
+    /Unknown word: "square"/,
+  );
+});
+
+test("compiler library panics for duplicate user-defined words", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+
+        ": square dup * ; : square dup * ;" lex-src parse-tokens compile-nodes show print
+      `),
+    /word already defined: square/,
   );
 });
 

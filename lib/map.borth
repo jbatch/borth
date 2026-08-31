@@ -1,0 +1,59 @@
+import "./array.borth"
+# representation for now:
+# map = [ [key value] [key value] ... ]
+
+# _map-entry-new ( key value -- entry )
+: _map-entry-new
+    # [ key, value ]
+    array-new rot array-push swap array-push
+;
+
+: _map-entry-key
+    0 array-get
+;
+
+: _map-entry-value
+    1 array-get
+;
+
+# map-new  ( -- map )
+: map-new 
+    array-new
+;
+
+# map-get  ( map key -- value found? )
+#
+# value will be the value stored fot the key if found, else []
+: map-get 
+    # ( key map index found? )
+    swap 0 array-new
+    loop
+        # ( map index found? -- not-found and not-EOL )
+        3dup array-len 0 = -rot swap array-len <  and
+    while
+        # ( key map index cur )
+        drop 3dup array-get dup _map-entry-key rot = if
+            # return cur (found)
+        else
+            drop array-new
+        end
+        swap 1 + swap
+    repeat
+    nip nip nip
+    dup array-len 2 = if 
+        1 array-get 1
+    else
+        drop 0 0
+    end
+;
+
+# map-set  ( map key value -- map )
+: map-set
+    _map-entry-new
+    array-push    
+;
+
+# map-has? ( map key -- found? )
+: map-has?
+    map-get nip
+;
