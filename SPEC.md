@@ -858,7 +858,8 @@ Compiler library decision:
 - `compiler-instructions` stores the emitted instruction array for the current
   compilation.
 - `compiler-block-stack` stores unresolved control-flow frames. Current frame
-  shapes are `["if" falseJumpIndex]` and `["else" afterJumpIndex]`.
+  shapes are `["if" falseJumpIndex]`, `["else" afterJumpIndex]`,
+  `["loop" startIndex]`, and `["while" startIndex falseJumpIndex]`.
 - Source-level `if ... end` compiles by emitting `["JUMP_IF_FALSE" -1]`,
   pushing an `if` frame, and patching the placeholder to the next instruction
   when `end` is compiled.
@@ -867,7 +868,8 @@ Compiler library decision:
   false jump to the start of the false branch, and `end` patches the
   true-branch jump to the first instruction after the whole branch.
 - A duplicate `else` fails with `else after else`.
-- `compile-nodes` fails if any `if` block remains unclosed before `HALT`.
+- `compile-nodes` fails if any control-flow block remains unclosed before
+  `HALT`.
 - The current instruction format is intentionally inspectable data, not a final
   bytecode format. Use "instructions" for this Borth-level representation.
 - Compiler failures use `panic` for now so invalid input stops immediately

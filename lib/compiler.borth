@@ -99,7 +99,8 @@ variable compiler-words
 # push-open-block ( entry -- )
 #
 # Add an open block frame to compiler-block-stack.
-# Frames look like ["if" jumpIndex], ["else" jumpIndex], or [":" jumpIndex].
+# Frames look like ["if" jumpIndex], ["else" jumpIndex], [":" jumpIndex],
+# ["loop" startIndex], or ["while" startIndex falseJumpIndex].
 : push-open-block
     compiler-block-stack @ swap array-push compiler-block-stack !
 ;
@@ -109,6 +110,27 @@ variable compiler-words
 # Remove and return the most recently opened block frame.
 : pop-open-block
     compiler-block-stack @ array-pop swap compiler-block-stack !
+;
+
+# pop-expected-open-block ( expectedKind errorMsg -- openBlock )
+#
+# Pop the current block frame and ensure it has the expected kind.
+# The caller provides the panic message so each control word can explain what
+# kind of closer was missing.
+: pop-expected-open-block
+    compiler-block-stack @ array-len 0 = if
+        panic
+    end
+
+    # Get the most recent block frame.
+    # ( expectedKind errorMsg block )
+    pop-open-block
+
+    rot over get-kind = not if
+        swap panic
+    end
+    # Drop errorMessage and return block.
+    nip
 ;
 
 # compile-if ( -- )
@@ -178,6 +200,68 @@ variable compiler-words
         "end without matching if/else" panic
     end end
 ;
+
+# compile-loop ( -- )
+#
+# Mark the address that a matching until or repeat should jump back to.
+: compile-loop
+    current-instruction
+    # ( ["loop", startIndex] )
+    "loop" array-wrap swap array-push
+    push-open-block
+;
+
+# compile-until ( -- )
+#
+# Close a post-condition loop. The generated JUMP_IF_FALSE consumes the flag
+# left by the loop body and jumps back to the loop start while the flag is 0.
+: compile-until
+    "loop" "until without matching loop" pop-expected-open-block
+
+    # Get startIndex from the loop block frame.
+    get-value
+
+    # Emit ["JUMP_IF_FALSE", startIndex].
+    "JUMP_IF_FALSE" array-wrap swap array-push emit-instruction
+;
+
+# compile-while ( -- )
+#
+# Split a loop into condition and body. The generated JUMP_IF_FALSE placeholder
+# consumes the condition flag and is patched by repeat to exit the loop.
+: compile-while
+    "loop" "while without matching loop" pop-expected-open-block
+
+    # ( startIndex falseJumpIndex )
+    get-value current-instruction
+
+    # while consumes flag:
+    # false -> patched by repeat later
+    # true -> fall through to loop body
+    "JUMP_IF_FALSE" array-wrap -1 array-push emit-instruction
+
+    # ( ["while", startIndex, falseJumpIndex] )
+    "while" array-wrap rot array-push swap array-push
+    push-open-block
+;
+
+# compile-repeat ( -- )
+#
+# Close a loop/while/repeat block. Emit the back jump, then patch while's false
+# jump to the instruction after that back jump.
+: compile-repeat
+    "while" "repeat without matching while" pop-expected-open-block
+
+    # ( openBlock -- startIndex falseJumpIndex )
+    dup 2 array-get swap 1 array-get swap
+
+    # Emit ["JUMP", startIndex].
+    "JUMP" array-wrap rot array-push emit-instruction
+
+    # Patch falseJumpIndex to ["JUMP_IF_FALSE", current-instruction].
+    "JUMP_IF_FALSE" array-wrap current-instruction array-push patch-instruction
+;
+
 
 # compile-define ( node-array index -- node-array index )
 #
@@ -297,6 +381,14 @@ variable compiler-words
         compile-else
     else dup "end" = if drop
         compile-end
+    else dup "loop" = if drop
+        compile-loop
+    else dup "until" = if drop
+        compile-until
+    else dup "while" = if drop
+        compile-while
+    else dup "repeat" = if drop
+        compile-repeat
 
     else dup ":" = if drop
         compile-define
@@ -318,7 +410,7 @@ variable compiler-words
         user-defined-word-address
         "CALL" array-wrap swap array-push emit-instruction
 
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # create-push-instruction ( node -- instruction )
