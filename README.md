@@ -21,6 +21,25 @@ yarn borth -- examples/counter.borth
 yarn borth -- examples/while-count.borth
 ```
 
+VS Code syntax highlighting lives in `vscode-borth/`. To test it locally in an
+Extension Development Host:
+
+```sh
+code --extensionDevelopmentPath="$PWD/vscode-borth" "$PWD"
+```
+
+Then open a `.borth` file in the Extension Development Host window.
+
+To install it into normal VS Code windows, package it as a `.vsix` extension:
+
+```sh
+cd vscode-borth
+npx --yes @vscode/vsce package
+code --install-extension borth-syntax-0.0.1.vsix
+```
+
+After reinstalling a changed `.vsix`, reload any open VS Code windows.
+
 Expected output:
 
 ```text

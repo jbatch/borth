@@ -1,0 +1,36 @@
+{
+  "name": "borth-syntax",
+  "displayName": "Borth Syntax",
+  "description": "Syntax highlighting for Borth .borth files.",
+  "version": "0.0.1",
+  "publisher": "borth",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "borth",
+        "aliases": [
+          "Borth",
+          "borth"
+        ],
+        "extensions": [
+          ".borth"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "borth",
+        "scopeName": "source.borth",
+        "path": "./syntaxes/borth.tmLanguage.json"
+      }
+    ]
+  }
+}

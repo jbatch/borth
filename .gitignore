@@ -1,4 +1,5 @@
 node_modules/
 dist/
+vscode-borth/*.vsix
 
 .DS_Store

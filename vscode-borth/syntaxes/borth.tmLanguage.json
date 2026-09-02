@@ -1,0 +1,199 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Borth",
+  "scopeName": "source.borth",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#definitions"
+    },
+    {
+      "include": "#variables"
+    },
+    {
+      "include": "#imports"
+    },
+    {
+      "include": "#control"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#vmWords"
+    },
+    {
+      "include": "#libraryWords"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.borth",
+          "begin": "(?<!\\S)#",
+          "end": "$",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.borth"
+            }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.borth",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.borth"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.borth"
+            }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.borth",
+              "match": "\\\\[\"\\\\n]"
+            },
+            {
+              "name": "invalid.illegal.escape.borth",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "definitions": {
+      "patterns": [
+        {
+          "name": "meta.definition.word.borth",
+          "match": "(?<!\\S)(:)(\\s+)([^\\s]+)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.definition.begin.borth"
+            },
+            "3": {
+              "name": "entity.name.function.borth"
+            }
+          }
+        },
+        {
+          "name": "keyword.other.definition.end.borth",
+          "match": "(?<!\\S);(?!\\S)"
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "meta.definition.variable.borth",
+          "match": "(?<!\\S)(variable)(\\s+)([^\\s]+)",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.variable.borth"
+            },
+            "3": {
+              "name": "variable.other.definition.borth"
+            }
+          }
+        },
+        {
+          "name": "keyword.operator.memory.borth",
+          "match": "(?<!\\S)(?:@|!)(?!\\S)"
+        }
+      ]
+    },
+    "imports": {
+      "patterns": [
+        {
+          "name": "keyword.control.import.borth",
+          "match": "(?<!\\S)import(?!\\S)"
+        }
+      ]
+    },
+    "control": {
+      "patterns": [
+        {
+          "name": "keyword.control.conditional.borth",
+          "match": "(?<!\\S)(?:if|else|end)(?!\\S)"
+        },
+        {
+          "name": "keyword.control.loop.borth",
+          "match": "(?<!\\S)(?:loop|while|until|repeat)(?!\\S)"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.integer.borth",
+          "match": "(?<!\\S)-?\\d+(?!\\S)"
+        }
+      ]
+    },
+    "vmWords": {
+      "patterns": [
+        {
+          "name": "support.function.stack.borth",
+          "match": "(?<!\\S)(?:drop|dup|swap|over|rot|roll|-roll)(?!\\S)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.borth",
+          "match": "(?<!\\S)(?:\\+|-|\\*|/|mod)(?!\\S)"
+        },
+        {
+          "name": "keyword.operator.comparison.borth",
+          "match": "(?<!\\S)(?:=|<|>)(?!\\S)"
+        },
+        {
+          "name": "support.function.string.borth",
+          "match": "(?<!\\S)(?:str-len|str-cat|str-slice|str-index-of|show)(?!\\S)"
+        },
+        {
+          "name": "support.function.array.borth",
+          "match": "(?<!\\S)(?:array-new|array-push|array-len|array-get)(?!\\S)"
+        },
+        {
+          "name": "support.function.io.borth",
+          "match": "(?<!\\S)(?:read-line|read-int|read-text-file|print|\\.s|panic)(?!\\S)"
+        },
+        {
+          "name": "support.function.random.borth",
+          "match": "(?<!\\S)random(?!\\S)"
+        }
+      ]
+    },
+    "libraryWords": {
+      "patterns": [
+        {
+          "name": "support.function.prelude.borth",
+          "match": "(?<!\\S)(?:not|and|or|nip|tuck|2dup|2over|3dup|-rot|random-between)(?!\\S)"
+        },
+        {
+          "name": "support.function.library.array.borth",
+          "match": "(?<!\\S)(?:array-append|array-last|array-pop|array-valid-index\\?|array-slice|array-set)(?!\\S)"
+        },
+        {
+          "name": "support.function.library.string.borth",
+          "match": "(?<!\\S)(?:digit\\?|char-at|str-int\\?|char-to-int|str-to-int-from-index|str-to-int)(?!\\S)"
+        },
+        {
+          "name": "support.function.library.map.borth",
+          "match": "(?<!\\S)(?:map-new|map-get|map-set|map-has\\?)(?!\\S)"
+        }
+      ]
+    }
+  }
+}
