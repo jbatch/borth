@@ -13,7 +13,7 @@ import "./array.borth"
 #
 # The VM state is represented by this shape:
 #
-#   [instructions ip stack call-stack]
+#   [instructions ip stack call-stack memory]
 #
 # The helpers below treat that array like a small object. Keeping state access
 # behind words makes the main loop easier to read and gives us one place to
@@ -21,12 +21,13 @@ import "./array.borth"
 
 # vm-new ( instructions -- vm )
 #
-# Create a new VM state with ip = 0, an empty value stack, and an empty call
-# stack.
+# Create a new VM state with ip = 0, an empty value stack, an empty call stack,
+# and empty memory.
 : vm-new
     array-new swap 
     array-push 
     0 array-push
+    array-new array-push
     array-new array-push
     array-new array-push
 ;
@@ -51,11 +52,31 @@ import "./array.borth"
     3 array-get
 ;
 
+# vm-memory ( vm -- memory )
+#
+# Return the VM memory array. Variables are stored as values in this array.
+: vm-memory
+    4 array-get
+;
+
 # vm-current-instruction ( vm -- vm instruction )
 #
 # Leave the VM in place and push the instruction at its current ip.
 : vm-current-instruction
     dup vm-instructions over vm-ip array-get
+;
+
+# vm-value-at-memory-address ( vm addr -- value )
+#
+# Read the value stored in VM memory at addr.
+: vm-value-at-memory-address
+    # ( addr memory )
+    swap vm-memory
+    # validate addr is valid memory address
+    2dup array-len < not if
+        "Cannot access memory out of bounds" panic
+    end
+    swap array-get
 ;
 
 
@@ -78,6 +99,13 @@ import "./array.borth"
 # Return a copy of vm with a replaced value stack.
 : vm-set-stack
      2 swap array-set
+;
+
+# vm-set-memory    ( vm memory -- vm )
+#
+# Return a copy of vm with a replaced memory.
+: vm-set-memory
+     4 swap array-set
 ;
 
 # vm-stack-push    ( vm value -- vm )
@@ -112,6 +140,23 @@ import "./array.borth"
         "RET requires a return address" panic
      end
      array-pop -rot vm-set-call-stack swap
+;
+
+# vm-memory-update ( vm addr value -- vm )
+#
+# Return a copy of vm with memory[addr] replaced by value.
+: vm-memory-update
+    -rot
+    # ( value vm addr memory )
+    over vm-memory
+    # validate addr is valid memory address
+    2dup array-len < not if
+        "Cannot write to memory out of bounds" panic
+    end
+    # ( value vm addr memory -- vm memory addr value )
+    swap 3 roll
+    array-set
+    vm-set-memory
 ;
 
 # assert-stack-length ( vm expected word -- vm )
@@ -224,6 +269,54 @@ import "./array.borth"
     vm-set-stack
     vm-inc-ip
 ;
+
+# execute-allocate-variable ( vm -- vm )
+#
+# Execute ALLOC_VARIABLE by appending one zero-initialized cell to VM memory.
+# This does not push the new address; variable names push addresses when used.
+: execute-allocate-variable
+    dup vm-memory
+        # push 0 to end of memory
+        0 array-push  
+    vm-set-memory
+    vm-inc-ip
+;
+
+# execute-store-variable ( vm -- vm )
+#
+# Execute STORE.
+# Stack effect: ( value addr -- )
+: execute-store-variable
+    2 "STORE" assert-stack-length
+
+    dup vm-stack
+        # pop address and value off the stack
+        # ( vm stack addr value  )
+        array-pop swap array-pop rot swap
+        # ( stack vm addr value )
+        3 roll -rot
+        vm-memory-update swap
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-fetch-variable ( vm -- vm )
+#
+# Execute FETCH.
+# Stack effect: ( addr -- value )
+: execute-fetch-variable
+    1 "FETCH" assert-stack-length
+
+     dup dup vm-stack
+        # pop address off the stack
+        # ( vm vm stack addr )
+        array-pop
+        # ( vm stack )
+        rot swap vm-value-at-memory-address array-push 
+    vm-set-stack
+    vm-inc-ip
+;
+
 
 # execute-print ( vm -- vm )
 #
@@ -429,6 +522,12 @@ import "./array.borth"
         drop execute-over 0
     else dup "ROT" = if drop
         drop execute-rot 0
+    else dup "ALLOC_VARIABLE" = if drop
+        drop execute-allocate-variable 0
+    else dup "STORE" = if drop
+        drop execute-store-variable 0
+    else dup "FETCH" = if drop
+        drop execute-fetch-variable 0
     else dup "PRINT" = if drop
         drop execute-print 0
     else dup "PRINT_STACK" = if drop
@@ -486,7 +585,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

@@ -23,7 +23,7 @@ import "./array.borth"
 
 # map-get  ( map key -- value found? )
 #
-# value will be the value stored fot the key if found, else []
+# value will be the value stored for the key if found, else []
 : map-get 
     # ( key map index found? )
     swap 0 array-new
@@ -56,4 +56,11 @@ import "./array.borth"
 # map-has? ( map key -- found? )
 : map-has?
     map-get nip
+;
+
+# map-size ( map -- size )
+#
+# Return the number of entries in the simple array-backed map.
+: map-size
+    array-len
 ;

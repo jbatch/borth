@@ -4,4 +4,4 @@ import "../lib/compiler.borth"
 import "../lib/vm.borth"
 
 
-"examples/fizzbuzz.borth" read-text-file lex-src parse-tokens compile-nodes run-bytecode show print
+"examples/counter.borth" read-text-file lex-src parse-tokens compile-nodes run-bytecode show print

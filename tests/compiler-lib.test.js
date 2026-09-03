@@ -179,7 +179,7 @@ test("compiler library panics for if without end", () => {
 
         "1 if 2" lex-src parse-tokens compile-nodes show print
       `),
-    /if without matching end/,
+    /unclosed block words after end of source/,
   );
 });
 

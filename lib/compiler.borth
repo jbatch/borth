@@ -20,6 +20,10 @@ variable compiler-block-stack
 # For now this is a simple Borth map, so lookups are linear but easy to inspect.
 variable compiler-words
 
+# compiler-variables maps user-defined variable names to indexes in VM memory.
+# A later use of the variable name compiles to PUSH <memory-index>.
+variable compiler-variables
+
 # get-kind ( node -- kind )
 #
 # Return the kind field from a parser node, such as "integer", "string", or "word".
@@ -74,6 +78,8 @@ variable compiler-words
     2dup map-has? if
         "word already defined: " swap str-cat panic
     end
+    # TODO: Also reject names that collide with compiler-variables or built-in
+    # words once the compiler has a single helper for checking the word namespace.
     current-instruction map-set
     compiler-words !
 ;
@@ -91,6 +97,42 @@ variable compiler-words
 # Unknown words are compiler errors because forward references are not supported.
 : user-defined-word-address
     dup compiler-words @ swap map-get not if drop
+        "Unknown word: " swap show str-cat panic
+    end
+    nip
+;
+
+# user-defined-variable? ( name -- flag )
+#
+# Return 1 when name is already known as a user-defined variable.
+: user-defined-variable?
+    compiler-variables @ swap map-has? 
+;
+
+# next-variable-index (  -- index )
+#
+# Return the memory index that will be assigned to the next variable declaration.
+: next-variable-index
+    compiler-variables @ map-size
+;
+
+# define-variable ( name -- )
+#
+# Record a user-defined variable name and assign it the next VM memory index.
+: define-variable
+    # TODO: Reject names that collide with compiler-words, compiler-variables,
+    # or built-in words once name availability checking is centralized.
+    compiler-variables @
+        swap next-variable-index map-set
+    compiler-variables !
+;
+
+# get-variable-address ( name -- address)
+#
+# Resolve a user-defined variable name to its VM memory index.
+# Unknown variables are compiler errors because forward references are not supported.
+: get-variable-address
+    dup compiler-variables @ swap map-get not if drop
         "Unknown word: " swap show str-cat panic
     end
     nip
@@ -132,6 +174,36 @@ variable compiler-words
     # Drop errorMessage and return block.
     nip
 ;
+
+# assert-no-open-blocks ( errorMsg -- )
+#
+# Ensure every opened control-flow block was closed before HALT is emitted.
+: assert-no-open-blocks
+    compiler-block-stack @ array-len 0 = not if
+        panic
+    end
+    drop
+;
+
+# compile-variable ( node-array index -- node-array index )
+#
+# Compile a top-level variable declaration.
+# The declaration reserves one VM memory cell at runtime with ALLOC_VARIABLE.
+# Later uses of the variable name compile to PUSH of the recorded memory index.
+: compile-variable
+    "variable definitions can only appear at the root level" assert-no-open-blocks
+
+    # TODO: Check that there is a following name node and that it is a word.
+    # Read the next node as the word name.
+    # ( node-array index name )) 
+    1 + 2dup array-get 1 array-get
+
+    # TODO support checking for reserved words (built ins or user defined words)
+    define-variable
+
+    "ALLOC_VARIABLE" array-wrap emit-instruction 
+;
+
 
 # compile-if ( -- )
 #
@@ -270,12 +342,12 @@ variable compiler-words
 # A JUMP placeholder is emitted so normal execution skips over the definition
 # body, and ";" later patches that JUMP to land after the generated RET.
 : compile-define
-    compiler-block-stack @ array-len 0 = not if
-        "word definitions can only appear at the root level" panic
-    end
+    "word definitions can only appear at the root level" assert-no-open-blocks
 
     # Read the next node as the word name.
     1 + 2dup array-get 1 array-get
+
+    # TODO support checking for reserved words
 
     # Emit ["JUMP", -1] to skip the body during normal execution.
     current-instruction
@@ -305,15 +377,6 @@ variable compiler-words
 
     # patch the jump after name to end of word body
     get-value "JUMP" array-wrap current-instruction array-push patch-instruction
-;
-
-# assert-no-open-blocks ( -- )
-#
-# Ensure every opened control-flow block was closed before HALT is emitted.
-: assert-no-open-blocks
-    compiler-block-stack @ array-len 0 = not if
-        "if without matching end" panic
-    end
 ;
 
 # compile-word ( wordValue -- )
@@ -353,6 +416,15 @@ variable compiler-words
         "OVER" array-wrap emit-instruction
     else dup "rot" = if drop
         "ROT" array-wrap emit-instruction
+    
+    # Memory operations.
+     else dup "variable" = if drop
+        compile-variable
+     else dup "!" = if drop
+        "STORE" array-wrap emit-instruction
+     else dup "@" = if drop
+        "FETCH" array-wrap emit-instruction
+
 
     # String operations.
     else dup "str-len" = if drop
@@ -406,11 +478,19 @@ variable compiler-words
         "PANIC" array-wrap emit-instruction
 
     # Known user-defined words compile to CALL with their recorded bytecode address.
-    else 
-        user-defined-word-address
-        "CALL" array-wrap swap array-push emit-instruction
+    else
+        dup user-defined-word? if
+            user-defined-word-address
+            "CALL" array-wrap swap array-push emit-instruction
+        else dup user-defined-variable? if
+            get-variable-address
+            "PUSH" array-wrap swap array-push emit-instruction
+        else
+            "Unknown word: " swap show str-cat panic
+        end end
 
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # create-push-instruction ( node -- instruction )
@@ -450,11 +530,12 @@ variable compiler-words
     array-new compiler-instructions !
     array-new compiler-block-stack !
     map-new compiler-words !
+    map-new compiler-variables !
 
     # ( node-array index )
     0
     loop
-        over array-len 2dup swap - 0 > nip
+        over array-len 2dup swap - 0 > nip 
     while
         # Compile the node at index emitting any instructions generated.
         # ( instruction-array node-array index -- instruction-array node-array index )
@@ -463,7 +544,9 @@ variable compiler-words
         1 +
     repeat
     drop drop
-    assert-no-open-blocks
+    # TODO: Inspect the top open block here so this can report the specific
+    # missing closer instead of a generic end-of-source block error.
+    "unclosed block words after end of source" assert-no-open-blocks
     "HALT" array-wrap emit-instruction
     compiler-instructions @
 ;
