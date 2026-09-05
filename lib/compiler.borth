@@ -10,19 +10,124 @@ import "./map.borth"
 #   ["ADD"]
 #   ["HALT"]
 #
-# Compilation uses global compiler state so control-flow words can remember
-# instruction indexes and patch earlier instructions when blocks close.
+# Compilation threads one explicit state object through most compiler words.
+# The state object layout is:
+#
+#   [ nodes node-index instructions block-stack words variables ]
+#
+# `nodes` is the parser output being compiled. `node-index` points at the node
+# currently being compiled. The remaining fields are mutable compiler-session
+# state: emitted bytecode, open control-flow/definition blocks, user-defined
+# word addresses, and variable memory indexes.
 
-variable compiler-instructions
-variable compiler-block-stack
+variable COMPILER_DEBUG
 
-# compiler-words maps user-defined word names to instruction addresses.
-# For now this is a simple Borth map, so lookups are linear but easy to inspect.
-variable compiler-words
+# compiler-new ( node-array -- compiler )
+#
+# Create a new compiler state for one parser node array.
+: compiler-new
+    array-new
+    swap array-push         # nodes
+    0 array-push            # node-index
+    array-new array-push    # instructions
+    array-new array-push    # block-stack
+    map-new array-push      # words
+    map-new array-push      # variables
+;
 
-# compiler-variables maps user-defined variable names to indexes in VM memory.
-# A later use of the variable name compiles to PUSH <memory-index>.
-variable compiler-variables
+# compiler-nodes ( state -- nodes )
+: compiler-nodes
+    0 array-get
+;
+
+# compiler-node-index ( state -- index )
+: compiler-node-index
+    1 array-get
+;
+
+# compiler-instructions ( state -- instructions )
+: compiler-instructions
+    2 array-get
+;
+
+# compiler-block-stack ( state -- block-stack )
+: compiler-block-stack
+    3 array-get
+;
+
+# compiler-words ( state -- words )
+: compiler-words
+    4 array-get
+;
+
+# compiler-variables ( state -- variables )
+: compiler-variables
+    5 array-get
+;
+
+# compiler-set-nodes ( state nodes -- state )
+: compiler-set-nodes
+    0 swap array-set
+;
+
+# compiler-set-node-index ( state index -- state )
+: compiler-set-node-index
+    1 swap array-set
+;
+
+# compiler-set-instructions ( state instructions -- state )
+: compiler-set-instructions
+    2 swap array-set
+;
+
+# compiler-set-block-stack ( state block-stack -- state )
+: compiler-set-block-stack
+    3 swap array-set
+;
+
+# compiler-set-words ( state words -- state )
+: compiler-set-words
+    4 swap array-set
+;
+
+# compiler-set-variables ( state variables -- state )
+: compiler-set-variables
+    5 swap array-set
+;
+
+# compiler-finished? ( state -- flag )
+#
+# Return 1 once node-index has reached or passed the number of nodes.
+: compiler-finished?
+    dup compiler-nodes array-len
+    swap compiler-node-index
+    swap < not
+;
+
+# compiler-increment-node-index ( state -- state )
+#
+# Move the compiler to the next parser node.
+: compiler-increment-node-index
+    dup compiler-node-index
+        1 +
+    compiler-set-node-index
+;
+
+# compiler-cur-node ( state -- node )
+#
+# Return the parser node at the current node-index.
+: compiler-cur-node
+    dup compiler-nodes
+    swap compiler-node-index array-get
+;
+
+# compiler-debug? ( -- flag )
+#
+# Return 1 when ad hoc compiler trace printing is enabled.
+: compiler-debug?
+    COMPILER_DEBUG @ 1 =
+;
+
 
 # get-kind ( node -- kind )
 #
@@ -45,195 +150,240 @@ variable compiler-variables
     array-new swap array-push
 ;
 
-# emit-instruction ( instruction -- )
+# emit-instruction ( state instruction -- state )
 #
 # Append one instruction to compiler-instructions.
 : emit-instruction
-    compiler-instructions @ swap array-push
-    compiler-instructions !
+    swap dup
+    # ( instruction state -- instruction state instructions )
+    compiler-instructions
+        rot array-push
+    compiler-set-instructions
 ;
 
-# current-instruction ( -- index )
+# compiler-next-instruction-index ( state -- index )
 #
 # Return the index where the next emitted instruction will be written.
-: current-instruction
-    compiler-instructions @ array-len
+: compiler-next-instruction-index
+    compiler-instructions array-len
 ;
 
-# patch-instruction ( index instruction -- )
+# patch-instruction ( state index instruction -- state )
 #
 # Replace an already-emitted instruction. Used for control-flow backpatching.
 : patch-instruction
-    compiler-instructions @ -rot array-set
-    compiler-instructions !
+    rot dup
+    # ( state index instruction -- state instructions index instruction )
+    compiler-instructions
+        3 roll 3 roll array-set
+    compiler-set-instructions
 ;
 
-# record-word-name ( name -- )
+# record-word-name ( state name -- state )
 #
 # Record a new user-defined word at the current instruction address.
 # The name is recorded before the body is compiled so recursive calls can find
 # the word currently being defined.
-: record-word-name 
-    compiler-words @ swap 
-    2dup map-has? if
-        "word already defined: " swap str-cat panic
-    end
-    # TODO: Also reject names that collide with compiler-variables or built-in
-    # words once the compiler has a single helper for checking the word namespace.
-    current-instruction map-set
-    compiler-words !
+: record-word-name
+    # Put the compiler state under the name so the words map can be updated.
+    # ( state name -- name state )
+    swap dup compiler-words
+        rot
+        # ( state words name )
+        2dup map-has? if
+            "word already defined: " swap str-cat panic
+        end
+        # TODO: Also reject names that collide with compiler-variables or built-in
+        # words once the compiler has a single helper for checking the word namespace.
+        2over compiler-next-instruction-index map-set
+    compiler-set-words
 ;
 
-# user-defined-word? ( name -- flag )
+# user-defined-word? ( state name -- flag )
 #
 # Return 1 when name is already known as a user-defined word.
-: user-defined-word? 
-    compiler-words @ swap map-has?
+: user-defined-word?
+    swap compiler-words swap map-has?
 ;
 
-# user-defined-word-address ( name -- address )
+# user-defined-word-address ( state name -- address )
 #
 # Resolve a user-defined word name to its bytecode address.
 # Unknown words are compiler errors because forward references are not supported.
 : user-defined-word-address
-    dup compiler-words @ swap map-get not if drop
+    # Keep a copy of the name for the error message if lookup fails.
+    # ( state name -- state name name )
+    dup
+    # ( state name name -- name value found-flag )
+    rot compiler-words swap map-get not if drop
         "Unknown word: " swap show str-cat panic
     end
     nip
 ;
 
-# user-defined-variable? ( name -- flag )
+# user-defined-variable? ( state name -- flag )
 #
 # Return 1 when name is already known as a user-defined variable.
 : user-defined-variable?
-    compiler-variables @ swap map-has? 
+    swap compiler-variables swap map-has?
 ;
 
-# next-variable-index (  -- index )
+# next-variable-index ( state -- index )
 #
 # Return the memory index that will be assigned to the next variable declaration.
 : next-variable-index
-    compiler-variables @ map-size
+    compiler-variables map-size
 ;
 
-# define-variable ( name -- )
+# define-variable ( state name -- state )
 #
 # Record a user-defined variable name and assign it the next VM memory index.
 : define-variable
     # TODO: Reject names that collide with compiler-words, compiler-variables,
     # or built-in words once name availability checking is centralized.
-    compiler-variables @
-        swap next-variable-index map-set
-    compiler-variables !
+    swap
+    # ( state name -- name state variables )
+    dup compiler-variables
+        # Store the next memory index under the variable name.
+        # ( name state variables -- state variables )
+        rot 2over next-variable-index map-set
+    compiler-set-variables
 ;
 
-# get-variable-address ( name -- address)
+# get-variable-address ( state name -- address )
 #
 # Resolve a user-defined variable name to its VM memory index.
 # Unknown variables are compiler errors because forward references are not supported.
 : get-variable-address
-    dup compiler-variables @ swap map-get not if drop
+    # Keep the variable name for the error message if lookup fails.
+    # ( state name -- name value found-flag )
+    swap compiler-variables over map-get not if drop
         "Unknown word: " swap show str-cat panic
     end
     nip
 ;
 
-# push-open-block ( entry -- )
+# push-open-block ( state entry -- state )
 #
 # Add an open block frame to compiler-block-stack.
 # Frames look like ["if" jumpIndex], ["else" jumpIndex], [":" jumpIndex],
 # ["loop" startIndex], or ["while" startIndex falseJumpIndex].
 : push-open-block
-    compiler-block-stack @ swap array-push compiler-block-stack !
+    swap
+    # ( state entry -- entry state block-stack )
+    dup compiler-block-stack
+        rot array-push
+    compiler-set-block-stack
 ;
 
-# pop-open-block ( -- blockEntry )
+# pop-open-block ( state -- state blockEntry )
 #
 # Remove and return the most recently opened block frame.
 : pop-open-block
-    compiler-block-stack @ array-pop swap compiler-block-stack !
+    dup
+    # ( state block-stack )
+    compiler-block-stack
+        array-pop -rot
+    compiler-set-block-stack
+    swap
 ;
 
-# pop-expected-open-block ( expectedKind errorMsg -- openBlock )
+# pop-expected-open-block ( state expectedKind errorMsg -- state openBlock )
 #
 # Pop the current block frame and ensure it has the expected kind.
 # The caller provides the panic message so each control word can explain what
 # kind of closer was missing.
 : pop-expected-open-block
-    compiler-block-stack @ array-len 0 = if
-        panic
-    end
-
-    # Get the most recent block frame.
-    # ( expectedKind errorMsg block )
-    pop-open-block
-
-    rot over get-kind = not if
+    # Bring state to the top so the current block stack can be inspected.
+    # ( state expectedKind errorMsg -- expectedKind errorMsg state )
+    rot dup
+    compiler-block-stack array-len 0 = if
         swap panic
     end
+    # ( expectedKind errorMsg state )
+
+    # Get the most recent block frame.
+    # ( expectedKind errorMsg state block )
+    pop-open-block
+
+    # Compare the block kind with expectedKind.
+    # ( expectedKind errorMsg state block -- errorMsg state block )
+    3 roll over get-kind = not if
+        rot panic
+    end
     # Drop errorMessage and return block.
-    nip
+    rot drop
 ;
 
-# assert-no-open-blocks ( errorMsg -- )
+# assert-no-open-blocks ( state errorMsg -- )
 #
 # Ensure every opened control-flow block was closed before HALT is emitted.
 : assert-no-open-blocks
-    compiler-block-stack @ array-len 0 = not if
+    swap compiler-block-stack array-len 0 = not if
         panic
     end
     drop
 ;
 
-# compile-variable ( node-array index -- node-array index )
+# compile-variable ( state -- state )
 #
 # Compile a top-level variable declaration.
+#
+# The current node is expected to be `variable`. This word advances node-index
+# to consume the following name node, so the main compile loop will resume after
+# the declaration.
 # The declaration reserves one VM memory cell at runtime with ALLOC_VARIABLE.
 # Later uses of the variable name compile to PUSH of the recorded memory index.
 : compile-variable
-    "variable definitions can only appear at the root level" assert-no-open-blocks
+    dup "variable definitions can only appear at the root level" assert-no-open-blocks
 
     # TODO: Check that there is a following name node and that it is a word.
-    # Read the next node as the word name.
-    # ( node-array index name )) 
-    1 + 2dup array-get 1 array-get
+    # Move from `variable` to its name node and read that node's value.
+    # ( state -- state name )
+    compiler-increment-node-index dup compiler-cur-node 1 array-get
 
-    # TODO support checking for reserved words (built ins or user defined words)
+    # TODO: Reject reserved names once namespace checks are centralized.
     define-variable
 
-    "ALLOC_VARIABLE" array-wrap emit-instruction 
+    "ALLOC_VARIABLE" array-wrap emit-instruction
 ;
 
-
-# compile-if ( -- )
+# compile-if ( state -- state )
 #
 # Emit a JUMP_IF_FALSE placeholder and remember where it lives.
 # The matching end patches that instruction to jump past the true branch.
 : compile-if
-    current-instruction
-    "JUMP_IF_FALSE" array-wrap -1 array-push emit-instruction
+    # Capture the placeholder's index before emitting it.
+    # ( state -- state jumpIfFalseIndex )
+    dup compiler-next-instruction-index
+    # ( state jumpIfFalseIndex -- jumpIfFalseIndex state )
+    "JUMP_IF_FALSE" array-wrap -1 array-push rot swap emit-instruction
 
-    # ( ["if", instructionIndexOfUnpatchedJump] )
-    "if" array-wrap swap array-push
+    # Remember where the false jump placeholder lives.
+    # ( state jumpIfFalseIndex -- state ["if", jumpIfFalseIndex] )
+    "if" array-wrap rot array-push
     push-open-block
 ;
 
-# compile-else ( -- )
+# compile-else ( state -- state )
 #
 # Close the true branch of an if/else block.
 # It emits a JUMP placeholder so the true branch can skip the false branch,
 # patches the earlier JUMP_IF_FALSE to land at the false branch, then stores an
 # else frame. The matching end patches the JUMP to land after the false branch.
 : compile-else
-    compiler-block-stack @ array-len 0 = if
+    dup compiler-block-stack array-len 0 = if
         "else without matching if" panic
     end
 
     # Emit the after-branch JUMP placeholder.
-    current-instruction
+    # Keep its index so the later `end` can patch it.
+    # ( state -- afterJumpIndex state )
+    dup compiler-next-instruction-index swap
     "JUMP" array-wrap -1 array-push emit-instruction
 
     # Pop the open if frame.
+    # ( afterJumpIndex state -- afterJumpIndex state block )
     pop-open-block
 
     # A second else sees the previous else frame on top of the block stack.
@@ -242,19 +392,20 @@ variable compiler-variables
     end
 
     # Patch the if's false jump to the first instruction of the else branch.
-    get-value "JUMP_IF_FALSE" array-wrap current-instruction array-push patch-instruction
+    # ( afterJumpIndex state block -- afterJumpIndex state )
+    get-value "JUMP_IF_FALSE" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
 
-    # ( ["else", instructionIndexOfUnpatchedJumpOverFalseBranch] )
-    "else" array-wrap swap array-push
+    # Store the after-branch jump placeholder for `end`.
+    "else" array-wrap rot array-push
     push-open-block
 ;
 
-# compile-end ( -- )
+# compile-end ( state -- state )
 #
 # Close an if or if/else block by patching its remaining jump placeholder to the
 # next instruction.
 : compile-end
-    compiler-block-stack @ array-len 0 = if
+    dup compiler-block-stack array-len 0 = if
         "end without matching if" panic
     end
 
@@ -262,28 +413,30 @@ variable compiler-variables
 
     # A plain if frame patches the false jump; an else frame patches the
     # true-branch jump over the else body.
+    # ( state block )
     dup get-kind "if" = if
         # Patch the if's jump target to the next instruction.
-        get-value "JUMP_IF_FALSE" array-wrap current-instruction array-push patch-instruction
+        # ( state block -- state )
+        get-value "JUMP_IF_FALSE" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
     else dup get-kind "else" = if
         # Patch the else's jump target to the next instruction.
-        get-value "JUMP" array-wrap current-instruction array-push patch-instruction
+        get-value "JUMP" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
     else
         "end without matching if/else" panic
     end end
 ;
 
-# compile-loop ( -- )
+# compile-loop ( state -- state )
 #
 # Mark the address that a matching until or repeat should jump back to.
 : compile-loop
-    current-instruction
-    # ( ["loop", startIndex] )
+    dup compiler-next-instruction-index
+    # ( state startIndex -- state ["loop", startIndex] )
     "loop" array-wrap swap array-push
     push-open-block
 ;
 
-# compile-until ( -- )
+# compile-until ( state -- state )
 #
 # Close a post-condition loop. The generated JUMP_IF_FALSE consumes the flag
 # left by the loop body and jumps back to the loop start while the flag is 0.
@@ -291,95 +444,105 @@ variable compiler-variables
     "loop" "until without matching loop" pop-expected-open-block
 
     # Get startIndex from the loop block frame.
+    # ( state block -- state startIndex )
     get-value
 
     # Emit ["JUMP_IF_FALSE", startIndex].
     "JUMP_IF_FALSE" array-wrap swap array-push emit-instruction
 ;
 
-# compile-while ( -- )
+# compile-while ( state -- state )
 #
 # Split a loop into condition and body. The generated JUMP_IF_FALSE placeholder
 # consumes the condition flag and is patched by repeat to exit the loop.
 : compile-while
     "loop" "while without matching loop" pop-expected-open-block
 
-    # ( startIndex falseJumpIndex )
-    get-value current-instruction
+    # Read startIndex from the loop frame and capture the placeholder index.
+    # ( state block -- state startIndex falseJumpIndex )
+    get-value over compiler-next-instruction-index
 
     # while consumes flag:
     # false -> patched by repeat later
     # true -> fall through to loop body
-    "JUMP_IF_FALSE" array-wrap -1 array-push emit-instruction
+    # ( state startIndex falseJumpIndex -- startIndex falseJumpIndex state )
+    "JUMP_IF_FALSE" array-wrap -1 array-push 3 roll swap emit-instruction
 
-    # ( ["while", startIndex, falseJumpIndex] )
-    "while" array-wrap rot array-push swap array-push
+    # ( state ["while", startIndex, falseJumpIndex] )
+    -rot "while" array-wrap rot array-push swap array-push
     push-open-block
 ;
 
-# compile-repeat ( -- )
+# compile-repeat ( state -- state )
 #
 # Close a loop/while/repeat block. Emit the back jump, then patch while's false
 # jump to the instruction after that back jump.
 : compile-repeat
     "while" "repeat without matching while" pop-expected-open-block
 
-    # ( openBlock -- startIndex falseJumpIndex )
+    # ( state openBlock -- state startIndex falseJumpIndex )
     dup 2 array-get swap 1 array-get swap
 
     # Emit ["JUMP", startIndex].
-    "JUMP" array-wrap rot array-push emit-instruction
+    # ( state startIndex falseJumpIndex -- falseJumpIndex state )
+    "JUMP" array-wrap rot array-push rot swap emit-instruction
 
-    # Patch falseJumpIndex to ["JUMP_IF_FALSE", current-instruction].
-    "JUMP_IF_FALSE" array-wrap current-instruction array-push patch-instruction
+    # Patch falseJumpIndex to ["JUMP_IF_FALSE", loopEndIndex].
+    "JUMP_IF_FALSE" array-wrap over compiler-next-instruction-index array-push rot swap patch-instruction
 ;
 
 
-# compile-define ( node-array index -- node-array index )
+# compile-define ( state -- state )
 #
 # Start a user-defined word.
-# The current token must be ":". The next token is used as the word name.
+# The current node must be `:`. This word advances node-index to consume the
+# following name node, so the main compile loop will resume at the first body
+# node.
 # A JUMP placeholder is emitted so normal execution skips over the definition
 # body, and ";" later patches that JUMP to land after the generated RET.
 : compile-define
-    "word definitions can only appear at the root level" assert-no-open-blocks
+    dup "word definitions can only appear at the root level" assert-no-open-blocks
 
-    # Read the next node as the word name.
-    1 + 2dup array-get 1 array-get
+    # Move from `:` to its name node and read that node's value.
+    # ( state -- state word-name )
+    compiler-increment-node-index dup compiler-cur-node 1 array-get
 
-    # TODO support checking for reserved words
+    # TODO: Reject reserved names once namespace checks are centralized.
 
     # Emit ["JUMP", -1] to skip the body during normal execution.
-    current-instruction
-    "JUMP" array-wrap -1 array-push emit-instruction
-    ":" array-wrap swap array-push
+    # ( state word-name -- word-name unpatchedJumpIndex state )
+    over compiler-next-instruction-index
+    "JUMP" array-wrap -1 array-push 3 roll swap emit-instruction
+    ":" array-wrap rot array-push
+    # ( word-name state -- state )
     push-open-block
 
     # Record the entry address immediately after the skip jump.
-    record-word-name
+    swap record-word-name
 ;
 
-# compile-end-definition ( -- )
+# compile-end-definition ( state -- state )
 #
 # End a user-defined word by emitting RET, closing the ":" frame, and patching
 # the earlier skip jump to the first instruction after the word body.
 : compile-end-definition
-    compiler-block-stack @ array-len 0 = if
+    dup compiler-block-stack array-len 0 = if
         "; without matching :" panic
     end
 
     "RET" array-wrap emit-instruction
+    # ( state -- state block )
     pop-open-block
 
     dup get-kind ":" = not if
         get-kind "; found with \"" swap str-cat "\" block still open" panic
     end
 
-    # patch the jump after name to end of word body
-    get-value "JUMP" array-wrap current-instruction array-push patch-instruction
+    # Patch the definition-skipping jump to the end of the word body.
+    get-value "JUMP" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
 ;
 
-# compile-word ( wordValue -- )
+# compile-word ( state wordValue -- state )
 #
 # Compile a word node's value by emitting zero or one instructions.
 # Control words may update compiler state instead of emitting normal bytecode.
@@ -416,7 +579,7 @@ variable compiler-variables
         "OVER" array-wrap emit-instruction
     else dup "rot" = if drop
         "ROT" array-wrap emit-instruction
-    
+
     # Memory operations.
      else dup "variable" = if drop
         compile-variable
@@ -479,17 +642,15 @@ variable compiler-variables
 
     # Known user-defined words compile to CALL with their recorded bytecode address.
     else
-        dup user-defined-word? if
-            user-defined-word-address
+        dup 2over swap  user-defined-word? if
+            over swap user-defined-word-address
             "CALL" array-wrap swap array-push emit-instruction
-        else dup user-defined-variable? if
-            get-variable-address
+        else dup 2over swap user-defined-variable? if
+            over swap get-variable-address
             "PUSH" array-wrap swap array-push emit-instruction
         else
             "Unknown word: " swap show str-cat panic
         end end
-
-
     end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
@@ -504,7 +665,7 @@ variable compiler-variables
     swap array-push
 ;
 
-# compile-node ( node -- )
+# compile-node ( state node -- state )
 #
 # Compile one parser node by emitting instructions into compiler-instructions.
 # Literal nodes compile to PUSH; word nodes compile through compile-word.
@@ -527,26 +688,24 @@ variable compiler-variables
 # Compile every parser node into one flat instruction stream and append HALT.
 : compile-nodes
     # Initialize compiler state for this compilation.
-    array-new compiler-instructions !
-    array-new compiler-block-stack !
-    map-new compiler-words !
-    map-new compiler-variables !
+    0 COMPILER_DEBUG !
+    compiler-new
 
-    # ( node-array index )
-    0
     loop
-        over array-len 2dup swap - 0 > nip 
+        dup compiler-finished? not
     while
         # Compile the node at index emitting any instructions generated.
-        # ( instruction-array node-array index -- instruction-array node-array index )
-        2dup array-get compile-node
-        # increment index
-        1 +
+        # ( state -- state )
+        dup compiler-cur-node
+        compiler-debug? if
+            "Compiling node" over show str-cat print .s
+        end
+        compile-node
+        compiler-increment-node-index
     repeat
-    drop drop
     # TODO: Inspect the top open block here so this can report the specific
     # missing closer instead of a generic end-of-source block error.
-    "unclosed block words after end of source" assert-no-open-blocks
+    dup "unclosed block words after end of source" assert-no-open-blocks
     "HALT" array-wrap emit-instruction
-    compiler-instructions @
+    compiler-instructions
 ;
