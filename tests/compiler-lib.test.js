@@ -231,7 +231,9 @@ test("compiler library panics for unknown node kinds", () => {
       outputOf(`
         import "lib/compiler.borth"
 
-        array-new "mystery" array-push 123 array-push compile-node
+        array-new
+          array-new "mystery" array-push 123 array-push array-push
+        compile-nodes
       `),
     /Unknown node kind: "mystery"/,
   );

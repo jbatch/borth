@@ -13,23 +13,31 @@ import "./map.borth"
 # Compilation threads one explicit state object through most compiler words.
 # The state object layout is:
 #
-#   [ nodes node-index instructions block-stack words variables ]
+#   [ nodes node-index instructions allow-top-level-code block-stack words variables ]
 #
 # `nodes` is the parser output being compiled. `node-index` points at the node
-# currently being compiled. The remaining fields are mutable compiler-session
-# state: emitted bytecode, open control-flow/definition blocks, user-defined
-# word addresses, and variable memory indexes.
+# currently being compiled. `allow-top-level-code` controls whether loose
+# executable source is legal outside a definition; imported modules will use 0.
+# The remaining fields are mutable compiler-session state: emitted bytecode,
+# open control-flow/definition blocks, user-defined word addresses, and variable
+# memory indexes.
 
 variable COMPILER_DEBUG
 
-# compiler-new ( node-array -- compiler )
+# compiler-new ( node-array allow-top-level-code -- compiler )
 #
 # Create a new compiler state for one parser node array.
+#
+# allow-top-level-code is a numeric flag. Entry programs pass 1. Imported
+# modules will pass 0 so they can define words and variables without running
+# loose stack code at import time.
 : compiler-new
+    swap
     array-new
     swap array-push         # nodes
     0 array-push            # node-index
     array-new array-push    # instructions
+    swap array-push         # allow-top-level-code
     array-new array-push    # block-stack
     map-new array-push      # words
     map-new array-push      # variables
@@ -50,19 +58,27 @@ variable COMPILER_DEBUG
     2 array-get
 ;
 
+# compiler-allow-top-level-code ( state -- allow-top-level-code )
+#
+# Return the flag that decides whether executable source is legal outside a
+# definition.
+: compiler-allow-top-level-code
+    3 array-get
+;
+
 # compiler-block-stack ( state -- block-stack )
 : compiler-block-stack
-    3 array-get
+    4 array-get
 ;
 
 # compiler-words ( state -- words )
 : compiler-words
-    4 array-get
+    5 array-get
 ;
 
 # compiler-variables ( state -- variables )
 : compiler-variables
-    5 array-get
+    6 array-get
 ;
 
 # compiler-set-nodes ( state nodes -- state )
@@ -82,17 +98,17 @@ variable COMPILER_DEBUG
 
 # compiler-set-block-stack ( state block-stack -- state )
 : compiler-set-block-stack
-    3 swap array-set
+    4 swap array-set
 ;
 
 # compiler-set-words ( state words -- state )
 : compiler-set-words
-    4 swap array-set
+    5 swap array-set
 ;
 
 # compiler-set-variables ( state variables -- state )
 : compiler-set-variables
-    5 swap array-set
+    6 swap array-set
 ;
 
 # compiler-finished? ( state -- flag )
@@ -113,10 +129,10 @@ variable COMPILER_DEBUG
     compiler-set-node-index
 ;
 
-# compiler-cur-node ( state -- node )
+# compiler-current-node ( state -- node )
 #
 # Return the parser node at the current node-index.
-: compiler-cur-node
+: compiler-current-node
     dup compiler-nodes
     swap compiler-node-index array-get
 ;
@@ -129,17 +145,17 @@ variable COMPILER_DEBUG
 ;
 
 
-# get-kind ( node -- kind )
+# node-kind ( node -- kind )
 #
 # Return the kind field from a parser node, such as "integer", "string", or "word".
-: get-kind
+: node-kind
     0 array-get
 ;
 
-# get-value ( node -- value )
+# node-value ( node -- value )
 #
 # Return the value field from a parser node.
-: get-value
+: node-value
     1 array-get
 ;
 
@@ -166,6 +182,25 @@ variable COMPILER_DEBUG
 # Return the index where the next emitted instruction will be written.
 : compiler-next-instruction-index
     compiler-instructions array-len
+;
+
+# assert-top-level-code-allowed ( state errorMsg -- )
+#
+# Panic with errorMsg when compiling an executable node at module top level.
+#
+# Imported modules should be able to contain definitions, variables, and later
+# imports, but they should not run loose stack effects simply because they were
+# imported. This helper is the policy gate used before compiling literals and
+# executable word nodes.
+: assert-top-level-code-allowed
+    swap
+    dup compiler-allow-top-level-code not if
+        # TODO: Replace the block-stack check with an explicit
+        # compiler-inside-definition? helper before imports start compiling real
+        # module files.
+        compiler-block-stack array-len 0 = not if panic end
+    else drop end
+    drop
 ;
 
 # patch-instruction ( state index instruction -- state )
@@ -308,7 +343,7 @@ variable COMPILER_DEBUG
 
     # Compare the block kind with expectedKind.
     # ( expectedKind errorMsg state block -- errorMsg state block )
-    3 roll over get-kind = not if
+    3 roll over node-kind = not if
         rot panic
     end
     # Drop errorMessage and return block.
@@ -340,7 +375,7 @@ variable COMPILER_DEBUG
     # TODO: Check that there is a following name node and that it is a word.
     # Move from `variable` to its name node and read that node's value.
     # ( state -- state name )
-    compiler-increment-node-index dup compiler-cur-node 1 array-get
+    compiler-increment-node-index dup compiler-current-node 1 array-get
 
     # TODO: Reject reserved names once namespace checks are centralized.
     define-variable
@@ -387,13 +422,13 @@ variable COMPILER_DEBUG
     pop-open-block
 
     # A second else sees the previous else frame on top of the block stack.
-    dup get-kind "if" = not if
-        get-kind "else after " swap str-cat panic
+    dup node-kind "if" = not if
+        node-kind "else after " swap str-cat panic
     end
 
     # Patch the if's false jump to the first instruction of the else branch.
     # ( afterJumpIndex state block -- afterJumpIndex state )
-    get-value "JUMP_IF_FALSE" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
+    node-value "JUMP_IF_FALSE" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
 
     # Store the after-branch jump placeholder for `end`.
     "else" array-wrap rot array-push
@@ -414,13 +449,13 @@ variable COMPILER_DEBUG
     # A plain if frame patches the false jump; an else frame patches the
     # true-branch jump over the else body.
     # ( state block )
-    dup get-kind "if" = if
+    dup node-kind "if" = if
         # Patch the if's jump target to the next instruction.
         # ( state block -- state )
-        get-value "JUMP_IF_FALSE" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
-    else dup get-kind "else" = if
+        node-value "JUMP_IF_FALSE" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
+    else dup node-kind "else" = if
         # Patch the else's jump target to the next instruction.
-        get-value "JUMP" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
+        node-value "JUMP" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
     else
         "end without matching if/else" panic
     end end
@@ -445,7 +480,7 @@ variable COMPILER_DEBUG
 
     # Get startIndex from the loop block frame.
     # ( state block -- state startIndex )
-    get-value
+    node-value
 
     # Emit ["JUMP_IF_FALSE", startIndex].
     "JUMP_IF_FALSE" array-wrap swap array-push emit-instruction
@@ -460,7 +495,7 @@ variable COMPILER_DEBUG
 
     # Read startIndex from the loop frame and capture the placeholder index.
     # ( state block -- state startIndex falseJumpIndex )
-    get-value over compiler-next-instruction-index
+    node-value over compiler-next-instruction-index
 
     # while consumes flag:
     # false -> patched by repeat later
@@ -505,7 +540,7 @@ variable COMPILER_DEBUG
 
     # Move from `:` to its name node and read that node's value.
     # ( state -- state word-name )
-    compiler-increment-node-index dup compiler-cur-node 1 array-get
+    compiler-increment-node-index dup compiler-current-node 1 array-get
 
     # TODO: Reject reserved names once namespace checks are centralized.
 
@@ -534,12 +569,12 @@ variable COMPILER_DEBUG
     # ( state -- state block )
     pop-open-block
 
-    dup get-kind ":" = not if
-        get-kind "; found with \"" swap str-cat "\" block still open" panic
+    dup node-kind ":" = not if
+        node-kind "; found with \"" swap str-cat "\" block still open" panic
     end
 
     # Patch the definition-skipping jump to the end of the word body.
-    get-value "JUMP" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
+    node-value "JUMP" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
 ;
 
 # compile-word ( state wordValue -- state )
@@ -660,33 +695,188 @@ variable COMPILER_DEBUG
 # The node value is used as-is.
 : create-push-instruction
     # ( value ["PUSH"] )
-    get-value "PUSH" array-wrap
+    node-value "PUSH" array-wrap
     # ( ["PUSH" value] )
     swap array-push
 ;
 
-# compile-node ( state node -- state )
+# compile-literal-node ( state node -- state )
 #
-# Compile one parser node by emitting instructions into compiler-instructions.
-# Literal nodes compile to PUSH; word nodes compile through compile-word.
-: compile-node
-    dup get-kind
+# Compile an integer or string node to a PUSH instruction.
+#
+# Literal nodes are executable code because they push values onto the runtime
+# stack, so imported-module mode rejects them at top level.
+: compile-literal-node
+    over "Imported modules cannot push literals to the stack at the top level" assert-top-level-code-allowed
+    create-push-instruction emit-instruction
+;
+
+# compile-executable-word-node ( state node -- state )
+#
+# Compile a word node that has already been classified as executable.
+#
+# This handles primitive words, control-flow words that operate inside executable
+# code, definition terminators, user-defined word calls, and variable address
+# pushes. Declaration forms such as `:` and `variable` are intentionally handled
+# before this word by compile-word-node.
+: compile-executable-word-node
+    over "Imported modules cannot call executable words at the top level" assert-top-level-code-allowed
+    node-value
+    # Arithmetic operations.
+    dup "+" = if drop
+        "ADD" array-wrap emit-instruction
+    else dup "-" = if drop
+        "SUB" array-wrap emit-instruction
+    else dup "*" = if drop
+        "MUL" array-wrap emit-instruction
+    else dup "/" = if drop
+        "DIV" array-wrap emit-instruction
+    else dup "mod" = if drop
+        "MOD" array-wrap emit-instruction
+
+    # Boolean comparisons.
+    else dup "=" = if drop
+        "EQ" array-wrap emit-instruction
+    else dup "<" = if drop
+        "LT" array-wrap emit-instruction
+    else dup ">" = if drop
+        "GT" array-wrap emit-instruction
+
+    # Stack operations.
+    else dup "drop" = if drop
+        "DROP" array-wrap emit-instruction
+    else dup "dup" = if drop
+        "DUP" array-wrap emit-instruction
+    else dup "swap" = if drop
+        "SWAP" array-wrap emit-instruction
+    else dup "over" = if drop
+        "OVER" array-wrap emit-instruction
+    else dup "rot" = if drop
+        "ROT" array-wrap emit-instruction
+
+    # Memory operations.
+     else dup "!" = if drop
+        "STORE" array-wrap emit-instruction
+     else dup "@" = if drop
+        "FETCH" array-wrap emit-instruction
+
+
+    # String operations.
+    else dup "str-len" = if drop
+        "STR_LEN" array-wrap emit-instruction
+    else dup "str-cat" = if drop
+        "STR_CAT" array-wrap emit-instruction
+    else dup "str-slice" = if drop
+        "STR_SLICE" array-wrap emit-instruction
+    else dup "str-index-of" = if drop
+        "STR_INDEX_OF" array-wrap emit-instruction
+
+    # Array operations.
+    else dup "array-new" = if drop
+        "ARRAY_NEW" array-wrap emit-instruction
+    else dup "array-len" = if drop
+        "ARRAY_LEN" array-wrap emit-instruction
+    else dup "array-push" = if drop
+        "ARRAY_PUSH" array-wrap emit-instruction
+    else dup "array-get" = if drop
+        "ARRAY_GET" array-wrap emit-instruction
+
+    # Control-flow operations.
+    else dup "if" = if drop
+        compile-if
+    else dup "else" = if drop
+        compile-else
+    else dup "end" = if drop
+        compile-end
+    else dup "loop" = if drop
+        compile-loop
+    else dup "until" = if drop
+        compile-until
+    else dup "while" = if drop
+        compile-while
+    else dup "repeat" = if drop
+        compile-repeat
+
+    else dup ";" = if drop
+        compile-end-definition
+
+    # Utility operations.
+    else dup "print" = if drop
+        "PRINT" array-wrap emit-instruction
+    else dup ".s" = if drop
+        "PRINT_STACK" array-wrap emit-instruction
+    else dup "show" = if drop
+        "SHOW" array-wrap emit-instruction
+    else dup "panic" = if drop
+        "PANIC" array-wrap emit-instruction
+
+    # Known user-defined words compile to CALL with their recorded bytecode address.
+    else
+        dup 2over swap  user-defined-word? if
+            over swap user-defined-word-address
+            "CALL" array-wrap swap array-push emit-instruction
+        else dup 2over swap user-defined-variable? if
+            over swap get-variable-address
+            "PUSH" array-wrap swap array-push emit-instruction
+        else
+            "Unknown word: " swap show str-cat panic
+        end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+;
+
+# compile-word-node ( state node -- state )
+#
+# Dispatch a parser word node by language role.
+#
+# Declaration forms can consume extra nodes and are legal at module top level.
+# Ordinary executable words are delegated to compile-executable-word-node, which
+# enforces the top-level-code mode before emitting bytecode.
+: compile-word-node
+    dup node-value
+    dup ":" = if
+        drop drop compile-define
+    else dup "variable" = if
+        drop drop compile-variable
+    else
+        drop compile-executable-word-node
+    end end
+;
+
+# compile-next-node ( state -- state )
+#
+# Compile the current parser node and advance node-index.
+#
+# This is the main source-form dispatcher. It chooses literal handling for
+# integer/string nodes, word dispatch for word nodes, and reports unknown parser
+# node kinds before the loop advances.
+: compile-next-node
+    dup compiler-current-node
+    compiler-debug? if
+        "Compiling node" over show str-cat print .s
+    end
+
+    dup node-kind
     dup "integer" = if
-        drop create-push-instruction emit-instruction
+        drop compile-literal-node
     else dup "string" = if
-        drop create-push-instruction emit-instruction
+        drop compile-literal-node
     else dup "word" = if
-        drop get-value compile-word
+        drop compile-word-node
     else
         "Unknown node kind: " over show str-cat panic
     end end end
+
+    compiler-increment-node-index
 ;
 
-
-# compile-nodes ( node-array -- instruction-array )
+# compile-nodes-with-mode ( node-array allow-top-level-code -- instruction-array )
 #
 # Compile every parser node into one flat instruction stream and append HALT.
-: compile-nodes
+#
+# This is the configurable entry point used by future import support. Passing 1
+# allows normal executable programs. Passing 0 rejects executable source at
+# module top level while still allowing declarations.
+: compile-nodes-with-mode
     # Initialize compiler state for this compilation.
     0 COMPILER_DEBUG !
     compiler-new
@@ -694,18 +884,18 @@ variable COMPILER_DEBUG
     loop
         dup compiler-finished? not
     while
-        # Compile the node at index emitting any instructions generated.
-        # ( state -- state )
-        dup compiler-cur-node
-        compiler-debug? if
-            "Compiling node" over show str-cat print .s
-        end
-        compile-node
-        compiler-increment-node-index
+        compile-next-node
     repeat
     # TODO: Inspect the top open block here so this can report the specific
     # missing closer instead of a generic end-of-source block error.
     dup "unclosed block words after end of source" assert-no-open-blocks
     "HALT" array-wrap emit-instruction
     compiler-instructions
+;
+
+# compile-nodes ( node-array -- instruction-array )
+#
+# Compile parser nodes as a normal entry program.
+: compile-nodes
+    1 compile-nodes-with-mode
 ;
