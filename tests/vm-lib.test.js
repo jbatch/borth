@@ -3,10 +3,11 @@ import test from "node:test";
 
 import { run } from "../dist/runner.js";
 
-function outputOf(source) {
+function outputOf(source, options = {}) {
   const output = [];
 
   run(source, {
+    ...options,
     write: (value) => output.push(value),
   });
 
@@ -95,6 +96,94 @@ test("Borth VM executes compiled array primitive bytecode", () => {
       "array-new 10 array-push 20 array-push dup array-len swap 1 array-get" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[2 20]"],
+  );
+});
+
+test("Borth VM executes compiled roll bytecode", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "1 2 3 2 roll" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+      "2 3 1 2 -roll" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+    `),
+    ["[2 3 1]", "[1 2 3]"],
+  );
+});
+
+test("Borth VM executes compiled host IO bytecode", () => {
+  const lines = ["hello", "42"];
+
+  assert.deepEqual(
+    outputOf(
+      `
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+        import "lib/vm.borth"
+
+        "read-line read-int" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+      `,
+      {
+        read: () => {
+          const line = lines.shift();
+
+          if (line === undefined) {
+            throw new Error("test input exhausted");
+          }
+
+          return line;
+        },
+      },
+    ),
+    ['["hello" 42]'],
+  );
+});
+
+test("Borth VM executes compiled file and path bytecode", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "\\"tests/fixtures/read-text-file.txt\\" read-text-file \\"/repo/examples/main.borth\\" path-dirname \\"/repo/examples\\" \\"../lib/parser.borth\\" path-resolve" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+    `),
+    ['["hello from fixture\\n" "/repo/examples" "/repo/lib/parser.borth"]'],
+  );
+});
+
+test("Borth VM executes compiled cwd and random bytecode", () => {
+  const randomValues = [0, 0.999];
+
+  assert.deepEqual(
+    outputOf(
+      `
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+        import "lib/vm.borth"
+
+        "cwd 10 random 10 random" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+      `,
+      {
+        cwd: () => "/repo",
+        random: () => {
+          const value = randomValues.shift();
+
+          if (value === undefined) {
+            throw new Error("test random values exhausted");
+          }
+
+          return value;
+        },
+      },
+    ),
+    ['["/repo" 0 9]'],
   );
 });
 

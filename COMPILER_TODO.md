@@ -13,12 +13,10 @@ Status labels:
 
 ## Suggested Next Order
 
-1. Verify and clean up the newly added primitive compile mappings and Borth VM
-   handlers.
-2. Add focused tests for those mappings and handlers.
-3. Add unresolved deferred-word validation to the Borth compiler.
-4. Add import tracking and cycle detection.
-5. Centralize compiler namespace validation.
+1. Add unresolved deferred-word validation to the Borth compiler.
+2. Add import tracking and cycle detection.
+3. Centralize compiler namespace validation.
+4. Improve source-aware compiler errors.
 
 ## Compiler Parity Gaps
 
@@ -27,23 +25,13 @@ the Borth-written compiler/VM path.
 
 ### Quick Win
 
-- Add focused tests for the newly added primitive compile mappings:
-  `roll`, `-roll`, `random`, `read-line`, `read-int`, `read-text-file`, `cwd`,
-  `path-dirname`, and `path-resolve`.
-- Remove the debug stack print from the Borth VM `PATH_RESOLVE` handler if it
-  was only temporary tracing.
-- Make sure the Borth VM `RANDOM` handler reports "not halted" after execution,
-  matching the other ordinary instruction handlers.
-
-### Doable Now
-
-- Add focused tests for the newly added Borth VM instruction handlers: `ROLL`,
-  `ROLL_REVERSE`, `RANDOM`, `READ_LINE`, `READ_INT`, `READ_TEXT_FILE`, `CWD`,
-  `PATH_DIRNAME`, and `PATH_RESOLVE`.
 - Check unresolved deferred words before `compile-nodes` returns. The
   TypeScript compiler fails with `deferred word never defined: name`; the Borth
   compiler records and patches deferred call sites, but does not yet do the
   final unresolved-deferred validation pass.
+
+### Doable Now
+
 - Centralize name validation so words, variables, deferred words, built-in
   words, and reserved syntax all share one collision rule.
 

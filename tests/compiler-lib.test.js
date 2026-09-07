@@ -54,6 +54,21 @@ test("compiler library compiles string and array primitive words", () => {
   );
 });
 
+test("compiler library compiles stack, host, and random primitive words", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+
+      "roll -roll random read-line read-int read-text-file cwd path-dirname path-resolve" lex-src parse-tokens "<test>" compile-nodes show print
+    `),
+    [
+      '[["ROLL"] ["ROLL_REVERSE"] ["RANDOM"] ["READ_LINE"] ["READ_INT"] ["READ_TEXT_FILE"] ["CWD"] ["PATH_DIRNAME"] ["PATH_RESOLVE"] ["HALT"]]',
+    ],
+  );
+});
+
 test("compiler library compiles if end with a patched false jump", () => {
   assert.deepEqual(
     outputOf(`
