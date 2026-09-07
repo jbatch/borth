@@ -270,6 +270,114 @@ import "./array.borth"
     vm-inc-ip
 ;
 
+# execute-roll ( vm -- vm )
+#
+# Execute ROLL. The interpreted stack provides a depth `n`; the VM moves the
+# value `n` slots below the top to the top of the interpreted stack.
+#
+# Example interpreted stack:
+#
+#   [A B C D 3] -> [B C D A]
+: execute-roll
+    2 "ROLL" assert-stack-length
+    dup vm-stack
+        # Remove the depth from the interpreted stack before reshaping values.
+        # ( depth vm stack )
+        array-pop 1 + -rot
+    vm-set-stack
+    dup vm-stack
+        # ( vm stack depth )
+        rot
+        # Check there are enough values on the stack to do the roll.
+        # ( vm stack depth )
+        2over over "ROLL"  assert-stack-length drop
+        # ( vm stack array depth )
+        array-new swap
+        # Pull n items off the stack and push them into an array in reverse
+        # order. Stack [A B C D] becomes temporary array [D C B A].
+        loop
+            dup 0 >
+        while
+            # Pop a value off the stack and push it into the temporary array.
+            # ( vm stack array count )
+            rot array-pop 3 roll swap array-push rot
+            1 -
+        repeat
+        # ( vm stack array )
+        drop
+        # Hold the deepest value, restore the other values, then push the held
+        # value onto the top.
+        # ( vm A stack array )
+        array-pop -rot
+        loop
+            dup array-len 0 >
+        while
+            # ( vm A stack array )
+            array-pop rot swap array-push swap
+            # ( vm A stack array )
+        repeat
+        drop swap array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-roll-reverse ( vm -- vm )
+#
+# Execute ROLL_REVERSE. The interpreted stack provides a depth `n`; the VM moves
+# the top value down to that depth.
+#
+# Example interpreted stack:
+#
+#   [A B C D 3] -> [D A B C]
+: execute-roll-reverse
+    2 "ROLL_REVERSE" assert-stack-length
+    dup vm-stack
+        # Remove the depth from the interpreted stack before reshaping values.
+        # ( depth vm stack )
+        array-pop 1 + -rot
+    vm-set-stack
+    dup vm-stack
+        # ( vm stack depth )
+        rot
+        # Check there are enough values on the stack to do the reverse roll.
+        # ( vm stack depth )
+        2over over "ROLL"  assert-stack-length drop
+        # Pop the top value and keep it aside until the lower values have been
+        # restored.
+        # ( vm D stack depth )
+        swap array-pop -rot swap
+        # ( vm D stack array depth )
+        array-new swap 1 -
+        # Pull n-1 items off the stack and push them into an array in reverse
+        # order. Stack [A B C] becomes temporary array [C B A].
+        loop
+            dup 0 >
+        while
+            # Pop a value off the stack and push it into the temporary array.
+            # ( vm D stack array count )
+            rot array-pop 3 roll swap array-push rot
+            1 -
+        repeat
+        # ( vm D stack array )
+        drop
+        # Push the held top value at the lower position, then restore the
+        # remaining values above it.
+        # ( vm stack array )
+        -rot swap array-push swap
+        # Push temporary array values back onto the stack in pop order.
+        # ( vm stack array )
+        loop
+            dup array-len 0 >
+        while
+            # ( vm stack array )
+            array-pop rot swap array-push swap
+            # ( vm stack array )
+        repeat
+        drop
+    vm-set-stack
+    vm-inc-ip
+;
+
 # execute-allocate-variable ( vm -- vm )
 #
 # Execute ALLOC_VARIABLE by appending one zero-initialized cell to VM memory.
@@ -363,6 +471,18 @@ import "./array.borth"
     vm-inc-ip
 ;
 
+# execute-random ( vm -- vm )
+#
+# Execute RANDOM by replacing the interpreted stack's maximum value with a host
+# random integer in the same range as the outer `random` word.
+: execute-random
+    1 "RANDOM" assert-stack-length
+    dup vm-stack
+        array-pop random array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
 # execute-str-len ( vm -- vm )
 #
 # Execute STR_LEN by replacing the top stack value with its string length.
@@ -411,6 +531,77 @@ import "./array.borth"
     vm-set-stack
     vm-inc-ip
 ;
+
+# execute-read-line ( vm -- vm )
+#
+# Execute READ_LINE by appending one host input line to the interpreted stack.
+: execute-read-line
+    dup vm-stack
+        read-line array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-read-int ( vm -- vm )
+#
+# Execute READ_INT by appending one parsed host input integer to the interpreted
+# stack.
+: execute-read-int
+    dup vm-stack
+        read-int array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-read-text-file ( vm -- vm )
+#
+# Execute READ_TEXT_FILE by replacing a path on the interpreted stack with that
+# file's text contents.
+: execute-read-text-file
+    1 "READ_TEXT_FILE" assert-stack-length
+    dup vm-stack
+        array-pop read-text-file array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-cwd ( vm -- vm )
+#
+# Execute CWD by appending the host current working directory to the interpreted
+# stack.
+: execute-cwd
+    dup vm-stack
+        cwd array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-path-dirname ( vm -- vm )
+#
+# Execute PATH_DIRNAME by replacing a path on the interpreted stack with its
+# containing directory.
+: execute-path-dirname
+    1 "PATH_DIRNAME" assert-stack-length
+    dup vm-stack
+        array-pop path-dirname array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-path-resolve ( vm -- vm )
+#
+# Execute PATH_RESOLVE by replacing base/path on the interpreted stack with the
+# resolved host path.
+: execute-path-resolve
+    2 "PATH_RESOLVE" assert-stack-length
+    dup vm-stack
+        # ( vm stack A B)
+        array-pop swap array-pop rot
+        path-resolve array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
 
 # execute-array-new ( vm -- vm )
 #
@@ -522,6 +713,10 @@ import "./array.borth"
         drop execute-over 0
     else dup "ROT" = if drop
         drop execute-rot 0
+    else dup "ROLL" = if drop
+        drop execute-roll 0
+    else dup "ROLL_REVERSE" = if drop
+        drop execute-roll-reverse 0
     else dup "ALLOC_VARIABLE" = if drop
         drop execute-allocate-variable 0
     else dup "STORE" = if drop
@@ -536,6 +731,8 @@ import "./array.borth"
         drop execute-show 0
     else dup "PANIC" = if drop
         drop execute-panic 1
+    else dup "RANDOM" = if drop
+        drop execute-random 0
     else dup "STR_LEN" = if drop
         drop execute-str-len 0
     else dup "STR_CAT" = if drop
@@ -544,6 +741,18 @@ import "./array.borth"
         drop execute-str-slice 0
     else dup "STR_INDEX_OF" = if drop
         drop execute-str-index-of 0
+    else dup "READ_LINE" = if drop
+        drop execute-read-line 0
+    else dup "READ_INT" = if drop
+        drop execute-read-int 0
+    else dup "READ_TEXT_FILE" = if drop
+        drop execute-read-text-file 0
+    else dup "CWD" = if drop
+        drop execute-cwd 0
+    else dup "PATH_DIRNAME" = if drop
+        drop execute-path-dirname 0
+    else dup "PATH_RESOLVE" = if drop
+        drop execute-path-resolve 0
     else dup "ARRAY_NEW" = if drop
         drop execute-array-new 0
     else dup "ARRAY_LEN" = if drop
@@ -585,7 +794,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

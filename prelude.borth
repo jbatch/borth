@@ -98,5 +98,6 @@
 # This is built from the VM primitive `random`, which expects a range size and
 # returns 0..size-1.
 : random-between
+  # ( min max -- RAND((min-1)+max) + min)
   over - 1 + random +
 ;

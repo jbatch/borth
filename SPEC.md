@@ -40,8 +40,8 @@ and merging its bytecode, word declarations, and variable declarations back into
 the importing compiler.
 
 The Borth-written compiler now intentionally supports forward declarations via
-`deferred` / `defer`, because module import compilation introduced a real source
-ordering cycle between import handling and normal node dispatch.
+`deferred`, because module import compilation introduced a real source ordering
+cycle between import handling and normal node dispatch.
 
 Known remaining import work in the Borth-written compiler:
 
@@ -82,14 +82,13 @@ effects. Current declarations are:
 : name ... ;        # word definition
 variable name       # global storage cell
 deferred name       # word declared now and defined later
-defer name          # shorter spelling for deferred
 import "path"       # load declarations from another source file
 ```
 
-`deferred`/`defer` exists to handle genuine source-order cycles during
-bootstrapping. Calls to a deferred word compile to placeholder call
-instructions, and the compiler patches those call sites when the word definition
-is later compiled. Compilation fails if a deferred word is never defined.
+`deferred` exists to handle genuine source-order cycles during bootstrapping.
+Calls to a deferred word compile to placeholder call instructions, and the
+compiler patches those call sites when the word definition is later compiled.
+Compilation fails if a deferred word is never defined.
 
 ## Core Philosophy
 
@@ -965,8 +964,9 @@ VM library decision:
   produced by `lib/compiler.borth`.
 - The VM state is threaded as `instructions ip stack`.
 - Current instruction support covers literal `PUSH`, arithmetic, comparisons,
-  stack operations, string operations, array operations, `JUMP`, `JUMP_IF_FALSE`,
-  `PRINT`, `PRINT_STACK`, `SHOW`, `PANIC`, and `HALT`.
+  stack operations, string operations, array operations, host IO/path
+  primitives, random numbers, `JUMP`, `JUMP_IF_FALSE`, `CALL`, `RET`, `PRINT`,
+  `PRINT_STACK`, `SHOW`, `PANIC`, and `HALT`.
 - `JUMP` unconditionally sets the instruction pointer to the compiled target.
 - `JUMP_IF_FALSE` pops a numeric flag from the interpreted VM stack. It sets the
   instruction pointer to the compiled target when the flag is `0`; otherwise it

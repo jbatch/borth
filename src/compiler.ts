@@ -265,7 +265,7 @@ function compileDeferred(
   const name = nameNode.name;
 
   if (isReservedWord(name)) {
-    throw new Error(`cannot defer reserved word: ${name}`);
+    throw new Error(`cannot declare reserved word as deferred: ${name}`);
   }
 
   if (isUserWordNameTaken(state, name)) {
@@ -319,7 +319,6 @@ function compileControlWord(state: CompilerState, name: string): boolean {
       return true;
     case "import":
       throw new Error("imports are only supported at top level");
-    case "defer":
     case "deferred":
       throw new Error("deferred declarations are only supported at top level");
     case ";":
@@ -689,7 +688,7 @@ function isWord(node: AstNode, name: string): node is Word {
 }
 
 function isDeferredDeclaration(node: AstNode): node is Word {
-  return isWord(node, "deferred") || isWord(node, "defer");
+  return isWord(node, "deferred");
 }
 
 function isReservedWord(name: string): boolean {
@@ -705,7 +704,6 @@ function isReservedWord(name: string): boolean {
     name === "repeat" ||
     name === "import" ||
     name === "variable" ||
-    name === "defer" ||
     name === "deferred" ||
     compileBuiltInWord(name) !== undefined
   );

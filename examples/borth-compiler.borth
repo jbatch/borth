@@ -3,4 +3,4 @@ import "../lib/parser.borth"
 import "../lib/compiler.borth"
 import "../lib/vm.borth"
 
-"examples/import-math.borth" dup read-text-file lex-src parse-tokens swap compile-nodes run-bytecode show print
+"100 random" lex-src parse-tokens "REPL" compile-nodes run-bytecode show "" print print

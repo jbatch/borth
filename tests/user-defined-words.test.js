@@ -85,18 +85,13 @@ test("deferred words can be called before their definition", () => {
   );
 });
 
-test("defer is accepted as a shorter deferred declaration", () => {
-  assert.deepEqual(
-    outputOf(`
-      defer square
-
-      7 square print
-
-      : square
-        dup *
-      ;
-    `),
-    [49],
+test("defer is not a deferred declaration alias", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        defer square
+      `),
+    /Unknown word: defer/,
   );
 });
 

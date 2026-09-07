@@ -29,6 +29,8 @@ yarn pretty-borth-value
 Pass a value as an argument, pipe one in, or run it interactively and paste at
 the `value>` prompt.
 
+Compiler parity gaps and cleanup TODOs are tracked in `COMPILER_TODO.md`.
+
 VS Code syntax highlighting lives in `vscode-borth/`. To test it locally in an
 Extension Development Host:
 
@@ -293,11 +295,10 @@ count @ print
 ```
 
 `deferred` declares a word before its definition, allowing recursive compiler
-helpers and other source-order cycles to be expressed explicitly. `defer` is
-accepted as a shorter spelling:
+helpers and other source-order cycles to be expressed explicitly:
 
 ```text
-defer square
+deferred square
 
 : print-square
   square print
@@ -335,8 +336,8 @@ The first Borth compiler and VM slice lives in `lib/lexer.borth`,
 parse token strings into simple node arrays, compile programs into inspectable
 instruction arrays, and run that bytecode in a tiny Borth VM. The current slice
 includes arithmetic, comparisons, stack operations, strings, arrays, variables,
-forward declarations, imports, `if/else/end`, printing, debug formatting, and
-panic:
+forward declarations, imports, `if/else/end`, host IO/path primitives, random
+numbers, printing, debug formatting, and panic:
 
 ```text
 import "lib/lexer.borth"

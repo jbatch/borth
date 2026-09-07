@@ -832,6 +832,10 @@ deferred compile-next-node
         "OVER" array-wrap emit-instruction
     else dup "rot" = if drop
         "ROT" array-wrap emit-instruction
+    else dup "roll" = if drop
+        "ROLL" array-wrap emit-instruction
+    else dup "-roll" = if drop
+        "ROLL_REVERSE" array-wrap emit-instruction
 
     # Memory operations.
      else dup "!" = if drop
@@ -849,6 +853,22 @@ deferred compile-next-node
         "STR_SLICE" array-wrap emit-instruction
     else dup "str-index-of" = if drop
         "STR_INDEX_OF" array-wrap emit-instruction
+
+    # Host I/O operations.
+    else dup "read-line" = if drop
+        "READ_LINE" array-wrap emit-instruction
+    else dup "read-int" = if drop
+        "READ_INT" array-wrap emit-instruction
+    else dup "read-text-file" = if drop
+        "READ_TEXT_FILE" array-wrap emit-instruction
+
+    # Host path operations.
+    else dup "cwd" = if drop
+        "CWD" array-wrap emit-instruction
+    else dup "path-dirname" = if drop
+        "PATH_DIRNAME" array-wrap emit-instruction
+    else dup "path-resolve" = if drop
+        "PATH_RESOLVE" array-wrap emit-instruction
 
     # Array operations.
     else dup "array-new" = if drop
@@ -875,7 +895,6 @@ deferred compile-next-node
         compile-while
     else dup "repeat" = if drop
         compile-repeat
-
     else dup ";" = if drop
         compile-end-definition
 
@@ -888,6 +907,8 @@ deferred compile-next-node
         "SHOW" array-wrap emit-instruction
     else dup "panic" = if drop
         "PANIC" array-wrap emit-instruction
+    else dup "random" = if drop
+        "RANDOM" array-wrap emit-instruction
 
     # Known user-defined words compile to CALL with their recorded bytecode address.
     else
@@ -908,7 +929,7 @@ deferred compile-next-node
         else
             "Unknown word: " swap show str-cat panic
         end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # compile-word-node ( state node -- state )
