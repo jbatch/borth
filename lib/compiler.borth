@@ -1,5 +1,7 @@
 import "./array.borth"
 import "./map.borth"
+import "./lexer.borth"
+import "./parser.borth"
 
 # Compiler helper words.
 #
@@ -13,7 +15,7 @@ import "./map.borth"
 # Compilation threads one explicit state object through most compiler words.
 # The state object layout is:
 #
-#   [ nodes node-index instructions allow-top-level-code block-stack words variables ]
+#   [ file-path nodes node-index instructions allow-top-level-code block-stack words variables deferred-calls ]
 #
 # `nodes` is the parser output being compiled. `node-index` points at the node
 # currently being compiled. `allow-top-level-code` controls whether loose
@@ -24,7 +26,7 @@ import "./map.borth"
 
 variable COMPILER_DEBUG
 
-# compiler-new ( node-array allow-top-level-code -- compiler )
+# compiler-new ( node-array file-path allow-top-level-code -- compiler )
 #
 # Create a new compiler state for one parser node array.
 #
@@ -32,8 +34,9 @@ variable COMPILER_DEBUG
 # modules will pass 0 so they can define words and variables without running
 # loose stack code at import time.
 : compiler-new
-    swap
+    -rot
     array-new
+    swap array-push         # file-path
     swap array-push         # nodes
     0 array-push            # node-index
     array-new array-push    # instructions
@@ -41,21 +44,27 @@ variable COMPILER_DEBUG
     array-new array-push    # block-stack
     map-new array-push      # words
     map-new array-push      # variables
+    map-new array-push      # deferred-calls
+;
+
+# compiler-file-path ( state -- file-path )
+: compiler-file-path
+    0 array-get
 ;
 
 # compiler-nodes ( state -- nodes )
 : compiler-nodes
-    0 array-get
+    1 array-get
 ;
 
 # compiler-node-index ( state -- index )
 : compiler-node-index
-    1 array-get
+    2 array-get
 ;
 
 # compiler-instructions ( state -- instructions )
 : compiler-instructions
-    2 array-get
+    3 array-get
 ;
 
 # compiler-allow-top-level-code ( state -- allow-top-level-code )
@@ -63,52 +72,67 @@ variable COMPILER_DEBUG
 # Return the flag that decides whether executable source is legal outside a
 # definition.
 : compiler-allow-top-level-code
-    3 array-get
+    4 array-get
 ;
 
 # compiler-block-stack ( state -- block-stack )
 : compiler-block-stack
-    4 array-get
+    5 array-get
 ;
 
 # compiler-words ( state -- words )
 : compiler-words
-    5 array-get
+    6 array-get
 ;
 
 # compiler-variables ( state -- variables )
 : compiler-variables
-    6 array-get
+    7 array-get
+;
+
+# compiler-deferred-calls ( state -- deferred-calls )
+: compiler-deferred-calls
+    8 array-get
+;
+
+# compiler-set-file-path ( state file-path -- state )
+: compiler-set-file-path
+    0 swap array-set
 ;
 
 # compiler-set-nodes ( state nodes -- state )
 : compiler-set-nodes
-    0 swap array-set
+    1 swap array-set
 ;
 
 # compiler-set-node-index ( state index -- state )
 : compiler-set-node-index
-    1 swap array-set
+    2 swap array-set
 ;
 
 # compiler-set-instructions ( state instructions -- state )
 : compiler-set-instructions
-    2 swap array-set
+    3 swap array-set
 ;
 
 # compiler-set-block-stack ( state block-stack -- state )
 : compiler-set-block-stack
-    4 swap array-set
+    5 swap array-set
 ;
 
 # compiler-set-words ( state words -- state )
 : compiler-set-words
-    5 swap array-set
+    6 swap array-set
 ;
 
 # compiler-set-variables ( state variables -- state )
 : compiler-set-variables
-    6 swap array-set
+    7 swap array-set
+;
+
+# compiler-set-deferred-calls ( state deferred-calls -- state )
+: compiler-set-deferred-calls
+    8 swap array-set
 ;
 
 # compiler-finished? ( state -- flag )
@@ -142,6 +166,21 @@ variable COMPILER_DEBUG
 # Return 1 when ad hoc compiler trace printing is enabled.
 : compiler-debug?
     COMPILER_DEBUG @ 1 =
+;
+
+# module-compiler-new ( state file-path node-array -- module-compiler )
+: module-compiler-new
+    array-new
+    rot array-push                          # file-path
+    swap array-push                         # nodes
+    0 array-push                            # node-index
+    over compiler-instructions array-push   # instructions
+    0 array-push                            # allow-top-level-code
+    array-new array-push                    # block-stack
+    over compiler-words array-push          # words
+    over compiler-variables array-push      # variables
+    array-new array-push                    # deferred-calls
+    nip
 ;
 
 
@@ -198,7 +237,7 @@ variable COMPILER_DEBUG
         # TODO: Replace the block-stack check with an explicit
         # compiler-inside-definition? helper before imports start compiling real
         # module files.
-        compiler-block-stack array-len 0 = not if panic end
+        compiler-block-stack array-len 0 = if panic end
     else drop end
     drop
 ;
@@ -231,6 +270,21 @@ variable COMPILER_DEBUG
         # TODO: Also reject names that collide with compiler-variables or built-in
         # words once the compiler has a single helper for checking the word namespace.
         2over compiler-next-instruction-index map-set
+    compiler-set-words
+;
+
+: declare-deferred-word
+    swap dup compiler-words
+        rot
+        # ( state words name )
+        2dup map-has? if
+            "word already defined: " swap str-cat panic
+        end
+        # TODO: Also reject names that collide with compiler-variables or built-in
+        # words once the compiler has a single helper for checking the word namespace.
+
+        # record name in words list with placeholder -1 value to be patched once definition is found
+        -1 map-set
     compiler-set-words
 ;
 
@@ -358,6 +412,68 @@ variable COMPILER_DEBUG
         panic
     end
     drop
+;
+
+# record-deferred-call ( state name instruction-index -- state )
+: record-deferred-call
+    # check if deferred-calls map already has an entry for this word
+    # ( instruction-index state name state )
+    -rot over
+    # ( instruction-index state name deferred-calls )
+    compiler-deferred-calls
+        # ( instruction-index state deferred-calls name )
+        swap
+        # ( instruction-index state deferred-calls name )
+        2dup map-has? if
+            # ( state deferred-calls )
+            # ( state deferred-calls )
+            2dup map-get drop 4 roll array-push map-set
+        else
+            # (  state deferred-calls name [instruction-index] )
+            # (  state deferred-calls )
+            3 roll array-wrap map-set
+        end
+    compiler-set-deferred-calls
+;
+
+# patch-deferred-call ( state instruction-index -- state )
+: patch-deferred-call
+    # ( state instructions instruction-index  )
+    over compiler-instructions swap
+        # ( state instructions instruction-index instruction )
+        2dup array-get
+        dup node-kind "CALL" = not if
+            "Tried to patch deferred CALL but instruction was type: \"" over node-kind str-cat "\"" str-cat panic
+        end
+        # ( state instructions instruction-index )
+        drop
+        # ( state instructions )
+        "CALL" array-wrap 3over compiler-next-instruction-index array-push array-set
+    compiler-set-instructions
+;
+
+# patch-deferred-calls ( state name  -- state )
+: patch-deferred-calls
+    over
+    # ( state name deferred-calls )
+    compiler-deferred-calls
+        # ( state name deferred-calls name deferred-calls )
+        2dup swap map-get not if
+            "Tried to patch deferred calls but \"" nip over str-cat "\" not currently deferred" panic
+        end
+        # patch all call sites to next-current-instruction-index
+        # ( state name deferred-calls list )
+        loop
+            dup array-len 0 >
+        while
+            # ( name deferred-calls list state index  )
+            array-pop 4 roll swap
+            # ( state name deferred-calls list )
+            patch-deferred-call 3 -roll
+        repeat
+        # ( state deferred-calls  )
+        2over swap map-set nip
+    compiler-set-deferred-calls
 ;
 
 # compile-variable ( state -- state )
@@ -552,8 +668,37 @@ variable COMPILER_DEBUG
     # ( word-name state -- state )
     push-open-block
 
-    # Record the entry address immediately after the skip jump.
-    swap record-word-name
+    # if word was previously deferred patch any calls else record name and addr in words
+    2dup compiler-words swap map-get if
+        # ( word-name state addr -- word-name state )
+        -1 = if
+            over patch-deferred-calls
+            # ( word-name -- state )
+            swap over compiler-words
+                swap 2over compiler-next-instruction-index map-set
+            compiler-set-words
+        else
+            "word already defined: " 2over str-cat panic
+        end
+    else
+        # drop extra zero from map-get
+        drop
+        # Record the entry address immediately after the skip jump.
+        swap record-word-name
+    end
+
+
+;
+
+: compile-deferred
+    dup "deferred word definitions can only appear at the root level" assert-no-open-blocks
+
+    # ( state -- state word-name )
+    compiler-increment-node-index dup compiler-current-node 1 array-get
+
+    # TODO: Reject reserved names once namespace checks are centralized.
+
+    declare-deferred-word
 ;
 
 # compile-end-definition ( state -- state )
@@ -577,116 +722,50 @@ variable COMPILER_DEBUG
     node-value "JUMP" array-wrap 2over compiler-next-instruction-index array-push patch-instruction
 ;
 
-# compile-word ( state wordValue -- state )
-#
-# Compile a word node's value by emitting zero or one instructions.
-# Control words may update compiler state instead of emitting normal bytecode.
-# Unknown words are fatal compiler errors for now.
-: compile-word
-    # Arithmetic operations.
-    dup "+" = if drop
-        "ADD" array-wrap emit-instruction
-    else dup "-" = if drop
-        "SUB" array-wrap emit-instruction
-    else dup "*" = if drop
-        "MUL" array-wrap emit-instruction
-    else dup "/" = if drop
-        "DIV" array-wrap emit-instruction
-    else dup "mod" = if drop
-        "MOD" array-wrap emit-instruction
+# compile-import requires compile-next-node which calls compile-word-node which calls compile-import.
+# this breaks that loop
+deferred compile-next-node
 
-    # Boolean comparisons.
-    else dup "=" = if drop
-        "EQ" array-wrap emit-instruction
-    else dup "<" = if drop
-        "LT" array-wrap emit-instruction
-    else dup ">" = if drop
-        "GT" array-wrap emit-instruction
+: compile-import
+    dup "module imports can only appear at the root level" assert-no-open-blocks
 
-    # Stack operations.
-    else dup "drop" = if drop
-        "DROP" array-wrap emit-instruction
-    else dup "dup" = if drop
-        "DUP" array-wrap emit-instruction
-    else dup "swap" = if drop
-        "SWAP" array-wrap emit-instruction
-    else dup "over" = if drop
-        "OVER" array-wrap emit-instruction
-    else dup "rot" = if drop
-        "ROT" array-wrap emit-instruction
+    # ( state -- state file-path )
+    compiler-increment-node-index dup compiler-current-node 1 array-get
 
-    # Memory operations.
-     else dup "variable" = if drop
-        compile-variable
-     else dup "!" = if drop
-        "STORE" array-wrap emit-instruction
-     else dup "@" = if drop
-        "FETCH" array-wrap emit-instruction
+    # read file
+    # ( state absolute-file-path absolute-file-path )
+    over compiler-file-path path-dirname swap path-resolve dup
+    # ( state absolute-file-path file-str )
+    read-text-file
+    # lex
+    # ( state absolute-file-path tokens )
+    lex-src
+    # parse
+    # ( state absolute-file-path nodes )
+    parse-tokens
+    # make child/module compiler state
+    # ( state state absolute-file-path nodes )
+    2over -rot
+    module-compiler-new
 
+    # TODO handle already imported modules and circular dependencies
 
-    # String operations.
-    else dup "str-len" = if drop
-        "STR_LEN" array-wrap emit-instruction
-    else dup "str-cat" = if drop
-        "STR_CAT" array-wrap emit-instruction
-    else dup "str-slice" = if drop
-        "STR_SLICE" array-wrap emit-instruction
-    else dup "str-index-of" = if drop
-        "STR_INDEX_OF" array-wrap emit-instruction
+    # compile module nodes without emitting HALT
+    loop
+        dup compiler-finished? not
+    while
+        compile-next-node
+    repeat
+    # TODO: Inspect the top open block here so this can report the specific
+    # missing closer instead of a generic end-of-source block error.
+    dup "unclosed block words after end of module source" assert-no-open-blocks
 
-    # Array operations.
-    else dup "array-new" = if drop
-        "ARRAY_NEW" array-wrap emit-instruction
-    else dup "array-len" = if drop
-        "ARRAY_LEN" array-wrap emit-instruction
-    else dup "array-push" = if drop
-        "ARRAY_PUSH" array-wrap emit-instruction
-    else dup "array-get" = if drop
-        "ARRAY_GET" array-wrap emit-instruction
-
-    # Control-flow operations.
-    else dup "if" = if drop
-        compile-if
-    else dup "else" = if drop
-        compile-else
-    else dup "end" = if drop
-        compile-end
-    else dup "loop" = if drop
-        compile-loop
-    else dup "until" = if drop
-        compile-until
-    else dup "while" = if drop
-        compile-while
-    else dup "repeat" = if drop
-        compile-repeat
-
-    else dup ":" = if drop
-        compile-define
-    else dup ";" = if drop
-        compile-end-definition
-
-    # Utility operations.
-    else dup "print" = if drop
-        "PRINT" array-wrap emit-instruction
-    else dup ".s" = if drop
-        "PRINT_STACK" array-wrap emit-instruction
-    else dup "show" = if drop
-        "SHOW" array-wrap emit-instruction
-    else dup "panic" = if drop
-        "PANIC" array-wrap emit-instruction
-
-    # Known user-defined words compile to CALL with their recorded bytecode address.
-    else
-        dup 2over swap  user-defined-word? if
-            over swap user-defined-word-address
-            "CALL" array-wrap swap array-push emit-instruction
-        else dup 2over swap user-defined-variable? if
-            over swap get-variable-address
-            "PUSH" array-wrap swap array-push emit-instruction
-        else
-            "Unknown word: " swap show str-cat panic
-        end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    # copy updated instructions/words/variables back
+    swap
+    over compiler-instructions compiler-set-instructions
+    over compiler-words compiler-set-words
+    over compiler-variables compiler-set-variables
+    nip
 ;
 
 # create-push-instruction ( node -- instruction )
@@ -813,7 +892,15 @@ variable COMPILER_DEBUG
     # Known user-defined words compile to CALL with their recorded bytecode address.
     else
         dup 2over swap  user-defined-word? if
-            over swap user-defined-word-address
+            over swap dup -rot user-defined-word-address
+            # record deferred call if word address points to -1
+            # ( state name addr )
+            dup -1 = if
+                # ( state addr )
+                -rot over compiler-next-instruction-index record-deferred-call swap
+            else
+                nip
+            end
             "CALL" array-wrap swap array-push emit-instruction
         else dup 2over swap user-defined-variable? if
             over swap get-variable-address
@@ -835,11 +922,15 @@ variable COMPILER_DEBUG
     dup node-value
     dup ":" = if
         drop drop compile-define
+    else dup "deferred" = if
+        drop drop compile-deferred
     else dup "variable" = if
         drop drop compile-variable
+    else dup "import" = if
+        drop drop compile-import
     else
         drop compile-executable-word-node
-    end end
+    end end end end
 ;
 
 # compile-next-node ( state -- state )
@@ -852,7 +943,7 @@ variable COMPILER_DEBUG
 : compile-next-node
     dup compiler-current-node
     compiler-debug? if
-        "Compiling node" over show str-cat print .s
+        "Compiling node" over show str-cat print .s "" print
     end
 
     dup node-kind
@@ -869,7 +960,7 @@ variable COMPILER_DEBUG
     compiler-increment-node-index
 ;
 
-# compile-nodes-with-mode ( node-array allow-top-level-code -- instruction-array )
+# compile-nodes-with-mode ( node-array file-path allow-top-level-code -- instruction-array )
 #
 # Compile every parser node into one flat instruction stream and append HALT.
 #
@@ -893,7 +984,7 @@ variable COMPILER_DEBUG
     compiler-instructions
 ;
 
-# compile-nodes ( node-array -- instruction-array )
+# compile-nodes ( node-array file-path -- instruction-array )
 #
 # Compile parser nodes as a normal entry program.
 : compile-nodes

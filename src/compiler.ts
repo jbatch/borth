@@ -21,11 +21,13 @@ export type CompilerState = {
   blockStack: BlockKind[];
   definitions: Map<string, number>;
   variables: Map<string, number>;
+  deferredCalls: Map<string, number[]>;
 };
 
 export type CompileProgramOptions = {
   allowTopLevelCode: boolean;
   importModule?: (path: string) => void;
+  sourcePath?: string;
 };
 
 export function createCompilerState(): CompilerState {
@@ -36,6 +38,7 @@ export function createCompilerState(): CompilerState {
     blockStack: [],
     definitions: new Map(),
     variables: new Map(),
+    deferredCalls: new Map(),
   };
 }
 
@@ -57,10 +60,18 @@ export function compileProgram(
       index = compileDefinition(state, program.body, index);
     } else if (isWord(node, "variable")) {
       index = compileVariable(state, program.body, index);
+    } else if (isDeferredDeclaration(node)) {
+      index = compileDeferred(state, program.body, index);
     } else if (isWord(node, "import")) {
       index = compileImport(state, program.body, index, options.importModule);
     } else if (!options.allowTopLevelCode) {
-      throw new Error("imported module cannot contain top-level executable code");
+      throw new Error(
+        `imported module cannot contain top-level executable code: ${formatSourceLocation(
+          options.sourcePath,
+          index,
+          node,
+        )}`,
+      );
     } else {
       compileNode(state, node);
     }
@@ -74,6 +85,12 @@ export function finishCompile(state: CompilerState): Instruction[] {
 
   if (state.loopStack.length > 0) {
     throw new Error("loop without matching until or repeat");
+  }
+
+  for (const [name, target] of state.definitions) {
+    if (target === -1) {
+      throw new Error(`deferred word never defined: ${name}`);
+    }
   }
 
   state.instructions.push({ op: "HALT" });
@@ -134,13 +151,21 @@ function compileDefinition(
     throw new Error(`cannot define reserved word: ${name}`);
   }
 
-  if (isUserWordNameTaken(state, name)) {
+  if (state.variables.has(name)) {
+    throw new Error(`word already defined: ${name}`);
+  }
+
+  const previousDefinition = state.definitions.get(name);
+
+  if (previousDefinition !== undefined && previousDefinition !== -1) {
     throw new Error(`word already defined: ${name}`);
   }
 
   const skipDefinitionJumpIndex = state.instructions.length;
   state.instructions.push({ op: "JUMP", target: -1 });
-  state.definitions.set(name, state.instructions.length);
+  const definitionStart = state.instructions.length;
+  state.definitions.set(name, definitionStart);
+  patchDeferredCalls(state, name, definitionStart);
 
   for (let index = colonIndex + 2; index < nodes.length; index += 1) {
     const node = nodes[index];
@@ -167,6 +192,10 @@ function compileDefinition(
 
     if (isWord(node, "variable")) {
       throw new Error("variable declarations are only supported at top level");
+    }
+
+    if (isDeferredDeclaration(node)) {
+      throw new Error("deferred declarations are only supported at top level");
     }
 
     if (isWord(node, "import")) {
@@ -214,6 +243,41 @@ function compileVariable(
   return variableIndex + 1;
 }
 
+function compileDeferred(
+  state: CompilerState,
+  nodes: AstNode[],
+  deferredIndex: number,
+): number {
+  if (state.blockStack.length > 0) {
+    throw new Error("deferred declarations cannot appear inside control flow");
+  }
+
+  const nameNode = nodes[deferredIndex + 1];
+
+  if (nameNode === undefined) {
+    throw new Error("deferred requires a word name");
+  }
+
+  if (nameNode.kind !== "word") {
+    throw new Error("deferred name must be a word");
+  }
+
+  const name = nameNode.name;
+
+  if (isReservedWord(name)) {
+    throw new Error(`cannot defer reserved word: ${name}`);
+  }
+
+  if (isUserWordNameTaken(state, name)) {
+    throw new Error(`word already defined: ${name}`);
+  }
+
+  state.definitions.set(name, -1);
+  state.deferredCalls.set(name, []);
+
+  return deferredIndex + 1;
+}
+
 function compileNode(state: CompilerState, node: AstNode): void {
   switch (node.kind) {
     case "integer":
@@ -255,6 +319,9 @@ function compileControlWord(state: CompilerState, name: string): boolean {
       return true;
     case "import":
       throw new Error("imports are only supported at top level");
+    case "defer":
+    case "deferred":
+      throw new Error("deferred declarations are only supported at top level");
     case ";":
       throw new Error("; without matching :");
     default:
@@ -460,6 +527,10 @@ function compileWord(state: CompilerState, name: string): Instruction {
   const target = state.definitions.get(name);
 
   if (target !== undefined) {
+    if (target === -1) {
+      recordDeferredCall(state, name, state.instructions.length);
+    }
+
     return { op: "CALL", target };
   }
 
@@ -473,6 +544,65 @@ function compileWord(state: CompilerState, name: string): Instruction {
   }
 
   throw new Error(`Unknown word: ${name}`);
+}
+
+function recordDeferredCall(
+  state: CompilerState,
+  name: string,
+  instructionIndex: number,
+): void {
+  const calls = state.deferredCalls.get(name);
+
+  if (calls === undefined) {
+    throw new Error(`Compiler error: missing deferred call list for ${name}`);
+  }
+
+  calls.push(instructionIndex);
+}
+
+function patchDeferredCalls(
+  state: CompilerState,
+  name: string,
+  target: number,
+): void {
+  const calls = state.deferredCalls.get(name);
+
+  if (calls === undefined) {
+    return;
+  }
+
+  for (const instructionIndex of calls) {
+    const instruction = state.instructions[instructionIndex];
+
+    if (instruction.op !== "CALL") {
+      throw new Error("Compiler error: invalid deferred call placeholder");
+    }
+
+    instruction.target = target;
+  }
+
+  state.deferredCalls.delete(name);
+}
+
+function formatSourceLocation(
+  sourcePath: string | undefined,
+  nodeIndex: number,
+  node: AstNode,
+): string {
+  const source = sourcePath ?? "<anonymous source>";
+
+  return `${source} node ${nodeIndex} ${formatNode(node)}`;
+}
+
+function formatNode(node: AstNode): string {
+  switch (node.kind) {
+    case "integer":
+      return `integer ${node.value}`;
+    case "string":
+      return `string ${JSON.stringify(node.value)}`;
+    case "word":
+      return `word ${JSON.stringify(node.name)}`;
+  }
 }
 
 function compileBuiltInWord(name: string): Instruction | undefined {
@@ -537,6 +667,12 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "READ_INT" };
     case "read-text-file":
       return { op: "READ_TEXT_FILE" };
+    case "cwd":
+      return { op: "CWD" };
+    case "path-dirname":
+      return { op: "PATH_DIRNAME" };
+    case "path-resolve":
+      return { op: "PATH_RESOLVE" };
     case "print":
       return { op: "PRINT" };
     case ".s":
@@ -552,6 +688,10 @@ function isWord(node: AstNode, name: string): node is Word {
   return node.kind === "word" && node.name === name;
 }
 
+function isDeferredDeclaration(node: AstNode): node is Word {
+  return isWord(node, "deferred") || isWord(node, "defer");
+}
+
 function isReservedWord(name: string): boolean {
   return (
     name === ":" ||
@@ -565,6 +705,8 @@ function isReservedWord(name: string): boolean {
     name === "repeat" ||
     name === "import" ||
     name === "variable" ||
+    name === "defer" ||
+    name === "deferred" ||
     compileBuiltInWord(name) !== undefined
   );
 }

@@ -1,0 +1,10 @@
+# Path helpers currently live in the host VM because OS path syntax and
+# normalization rules are host concerns.
+#
+# TODO: Revisit which pieces can be implemented in Borth once imports and the
+# self-hosted compiler have a clearer module-loading shape.
+#
+# Current host primitives:
+# cwd          ( -- path )
+# path-dirname ( path -- dir )
+# path-resolve ( base path -- path )

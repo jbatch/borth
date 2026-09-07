@@ -1,0 +1,11 @@
+
+deferred squared
+
+10 squared
+2 squared
+
+: squared
+    dup *
+;
+
+3 squared

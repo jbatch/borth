@@ -8,6 +8,7 @@
     "borth": "node dist/main.js",
     "start": "node dist/main.js",
     "dev": "tsc && node dist/main.js",
+    "pretty-borth-value": "node tools/pretty-borth-value.js",
     "test": "npm run build && node --test tests/*.test.js"
   },
   "devDependencies": {

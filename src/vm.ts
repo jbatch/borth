@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 import type { Instruction } from "./bytecode.js";
 import type { Address, ArrayValue, Value } from "./value.js";
@@ -13,6 +14,7 @@ export type VmState = {
 };
 
 export type ExecuteOptions = {
+  cwd?: () => string;
   random?: () => number;
   read?: () => string;
   readTextFile?: (path: string) => string;
@@ -23,6 +25,7 @@ export function execute(
   instructions: Instruction[],
   options: ExecuteOptions = {},
 ): VmState {
+  const cwd = options.cwd ?? process.cwd;
   const random = options.random ?? Math.random;
   const read = options.read;
   const readTextFile =
@@ -254,6 +257,23 @@ export function execute(
       case "READ_TEXT_FILE": {
         const path = popString(state, "READ_TEXT_FILE");
         state.stack.push(readTextFile(path));
+        state.ip += 1;
+        break;
+      }
+      case "CWD":
+        state.stack.push(cwd());
+        state.ip += 1;
+        break;
+      case "PATH_DIRNAME": {
+        const path = popString(state, "PATH_DIRNAME");
+        state.stack.push(dirname(path));
+        state.ip += 1;
+        break;
+      }
+      case "PATH_RESOLVE": {
+        const path = popString(state, "PATH_RESOLVE");
+        const base = popString(state, "PATH_RESOLVE");
+        state.stack.push(resolve(base, path));
         state.ip += 1;
         break;
       }

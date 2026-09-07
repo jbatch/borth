@@ -21,7 +21,7 @@ test("Borth VM runs compiled integer addition bytecode", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "10 20 +" lex-src parse-tokens compile-nodes run-bytecode show print
+      "10 20 +" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[30]"],
   );
@@ -35,7 +35,7 @@ test("Borth VM runs compiled string print bytecode", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "\\"Hello, World\\" print" lex-src parse-tokens compile-nodes run-bytecode show print
+      "\\"Hello, World\\" print" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["Hello, World", "[]"],
   );
@@ -49,7 +49,7 @@ test("Borth VM executes SHOW by replacing a value with its debug string", () => 
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "\\"Hello\\" show" lex-src parse-tokens compile-nodes run-bytecode show print
+      "\\"Hello\\" show" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ['["\\"Hello\\""]'],
   );
@@ -64,7 +64,7 @@ test("Borth VM executes PANIC by throwing the string on top of the stack", () =>
         import "lib/compiler.borth"
         import "lib/vm.borth"
 
-        "\\"boom\\" panic 1" lex-src parse-tokens compile-nodes run-bytecode show print
+        "\\"boom\\" panic 1" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
       `),
     /boom/,
   );
@@ -78,7 +78,7 @@ test("Borth VM executes compiled string primitive bytecode", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "\\"hello\\" str-len \\"he\\" \\"llo\\" str-cat \\"hello\\" 1 3 str-slice \\"hello\\" \\"l\\" 3 str-index-of" lex-src parse-tokens compile-nodes run-bytecode show print
+      "\\"hello\\" str-len \\"he\\" \\"llo\\" str-cat \\"hello\\" 1 3 str-slice \\"hello\\" \\"l\\" 3 str-index-of" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ['[5 "hello" "ell" 3]'],
   );
@@ -92,7 +92,7 @@ test("Borth VM executes compiled array primitive bytecode", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "array-new 10 array-push 20 array-push dup array-len swap 1 array-get" lex-src parse-tokens compile-nodes run-bytecode show print
+      "array-new 10 array-push 20 array-push dup array-len swap 1 array-get" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[2 20]"],
   );
@@ -107,7 +107,7 @@ test("Borth VM validates stack depth before delegated string operations", () => 
         import "lib/compiler.borth"
         import "lib/vm.borth"
 
-        "\\"only-one\\" str-cat" lex-src parse-tokens compile-nodes run-bytecode
+        "\\"only-one\\" str-cat" lex-src parse-tokens "<test>" compile-nodes run-bytecode
       `),
     /STR_CAT requires 2 values on the stack/,
   );
@@ -121,7 +121,7 @@ test("Borth VM executes compiled if end true branches", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "1 if 2 end" lex-src parse-tokens compile-nodes run-bytecode show print
+      "1 if 2 end" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[2]"],
   );
@@ -135,7 +135,7 @@ test("Borth VM skips compiled if end false branches", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "0 if 2 end" lex-src parse-tokens compile-nodes run-bytecode show print
+      "0 if 2 end" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[]"],
   );
@@ -149,7 +149,7 @@ test("Borth VM executes compiled nested if end branches", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "1 if 0 if 2 end 3 end" lex-src parse-tokens compile-nodes run-bytecode show print
+      "1 if 0 if 2 end 3 end" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[3]"],
   );
@@ -163,7 +163,7 @@ test("Borth VM executes compiled if else true branches", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "1 if 2 else 3 end" lex-src parse-tokens compile-nodes run-bytecode show print
+      "1 if 2 else 3 end" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[2]"],
   );
@@ -177,7 +177,7 @@ test("Borth VM executes compiled if else false branches", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "0 if 2 else 3 end" lex-src parse-tokens compile-nodes run-bytecode show print
+      "0 if 2 else 3 end" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[3]"],
   );
@@ -223,7 +223,7 @@ test("Borth VM executes compiled user-defined word calls", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      ": square dup * ; 10 square" lex-src parse-tokens compile-nodes run-bytecode show print
+      ": square dup * ; 10 square" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[100]"],
   );
@@ -237,7 +237,7 @@ test("Borth VM executes compiled recursive user-defined word calls", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      ": fact dup 2 < if drop 1 else dup 1 - fact * end ; 5 fact" lex-src parse-tokens compile-nodes run-bytecode show print
+      ": fact dup 2 < if drop 1 else dup 1 - fact * end ; 5 fact" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
     `),
     ["[120]"],
   );

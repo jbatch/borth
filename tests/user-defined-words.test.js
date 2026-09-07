@@ -70,6 +70,79 @@ test("using a word before it is defined throws", () => {
   );
 });
 
+test("deferred words can be called before their definition", () => {
+  assert.deepEqual(
+    outputOf(`
+      deferred square
+
+      10 square print
+
+      : square
+        dup *
+      ;
+    `),
+    [100],
+  );
+});
+
+test("defer is accepted as a shorter deferred declaration", () => {
+  assert.deepEqual(
+    outputOf(`
+      defer square
+
+      7 square print
+
+      : square
+        dup *
+      ;
+    `),
+    [49],
+  );
+});
+
+test("definitions can call later deferred definitions", () => {
+  assert.deepEqual(
+    outputOf(`
+      deferred square
+
+      : print-square
+        square print
+      ;
+
+      : square
+        dup *
+      ;
+
+      8 print-square
+    `),
+    [64],
+  );
+});
+
+test("unresolved deferred words throw", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        deferred square
+
+        10 square print
+      `),
+    /deferred word never defined: square/,
+  );
+});
+
+test("deferred declarations are only supported at top level", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        : bad
+          deferred square
+        ;
+      `),
+    /deferred declarations are only supported at top level/,
+  );
+});
+
 test("unclosed definitions throw", () => {
   assert.throws(
     () =>

@@ -183,6 +183,37 @@ test("imported modules cannot contain top-level executable code", () => {
   );
 });
 
+test("imported modules can declare deferred words", () => {
+  const root = makeWorkspace();
+
+  writeModule(
+    root,
+    "lib.borth",
+    `
+      deferred square
+
+      : print-square
+        square print
+      ;
+
+      : square
+        dup *
+      ;
+    `,
+  );
+  const entryPath = writeModule(
+    root,
+    "main.borth",
+    `
+      import "lib.borth"
+
+      6 print-square
+    `,
+  );
+
+  assert.deepEqual(outputOfFile(entryPath), [36]);
+});
+
 test("import cycles throw", () => {
   const root = makeWorkspace();
 

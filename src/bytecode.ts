@@ -36,6 +36,9 @@ export type Instruction =
   | { op: "READ_LINE" }
   | { op: "READ_INT" }
   | { op: "READ_TEXT_FILE" }
+  | { op: "CWD" }
+  | { op: "PATH_DIRNAME" }
+  | { op: "PATH_RESOLVE" }
   | { op: "PRINT" }
   | { op: "PRINT_STACK" }
   | { op: "PANIC" }

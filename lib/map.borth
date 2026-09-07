@@ -17,14 +17,14 @@ import "./array.borth"
 ;
 
 # map-new  ( -- map )
-: map-new 
+: map-new
     array-new
 ;
 
 # map-get  ( map key -- value found? )
 #
 # value will be the value stored for the key if found, else []
-: map-get 
+: map-get
     # ( key map index found? )
     swap 0 array-new
     loop
@@ -40,23 +40,63 @@ import "./array.borth"
         swap 1 + swap
     repeat
     nip nip nip
-    dup array-len 2 = if 
+    dup array-len 2 = if
         1 array-get 1
     else
         drop 0 0
     end
 ;
 
-# map-set  ( map key value -- map )
-: map-set
-    _map-entry-new
-    array-push    
+# _map-update-entry ( map entry -- map)
+#
+# requires map to have entry or it will panic
+: _map-update-entry
+    # entry key map index
+    swap over _map-entry-key swap 0
+    loop
+        # Loop over whole array
+        2dup swap array-len <
+    while
+        # ( entry map index cur-entry-key key found? )
+        2dup array-get _map-entry-key 3 roll 2dup =
+        if
+            # update map at index to be entry value
+            # (  index entry map  )
+            drop drop -rot 2over 2over array-set
+            # get stack back into the order loop expects
+            # ( index entry map -- entry key map index  )
+            swap dup _map-entry-key -rot 3 -roll rot
+        else
+            # ( entry map index cur-entry-key key -- entry key map index)
+            nip -rot
+        end
+        # inc index
+        1 +
+    repeat
+    # ( entry key map index)
+    drop nip nip
 ;
 
 # map-has? ( map key -- found? )
 : map-has?
     map-get nip
 ;
+
+# map-set  ( map key value -- map )
+: map-set
+    # ( map entry )
+    _map-entry-new
+    # if entry already exists for key update it, else add to the end
+    # ( entry map )
+    swap over _map-entry-key over swap map-has? if
+        swap _map-update-entry
+    else
+        # ( entry map -- map)
+        swap array-push
+    end
+;
+
+
 
 # map-size ( map -- size )
 #

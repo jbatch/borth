@@ -2,7 +2,10 @@
 
 Tiny experimental stack-based language.
 
-Current scope: tiny programs can run through lexer, parser, compiler, bytecode, and VM.
+Current scope: tiny programs can run through lexer, parser, compiler, bytecode,
+and VM. The TypeScript implementation remains the bootstrap, but the Borth
+standard library now includes a Borth-written lexer, parser, compiler, and VM
+slice that can compile and run small imported programs.
 
 ```sh
 yarn install
@@ -19,7 +22,12 @@ yarn borth -- examples/next-token-rest.borth
 yarn borth -- examples/random-print.borth
 yarn borth -- examples/counter.borth
 yarn borth -- examples/while-count.borth
+yarn pretty-borth-value
 ```
+
+`yarn pretty-borth-value` pretty-prints Borth debug values such as nested arrays.
+Pass a value as an argument, pipe one in, or run it interactively and paste at
+the `value>` prompt.
 
 VS Code syntax highlighting lives in `vscode-borth/`. To test it locally in an
 Extension Development Host:
@@ -86,6 +94,9 @@ random ( max -- n )
 read-line ( -- string )
 read-int  ( -- number )
 read-text-file ( path -- string )
+cwd ( -- path )
+path-dirname ( path -- dir )
+path-resolve ( base path -- path )
 print ( A -- )
 .s    ( -- )
 panic ( string -- never )
@@ -255,6 +266,17 @@ printf '21\n' | yarn borth -- examples/double-input.borth
 "examples/add.borth" read-text-file print
 ```
 
+Path primitives expose small pieces of the host OS path model:
+
+```text
+cwd print
+"/repo/examples/main.borth" path-dirname print
+"/repo/examples" "../lib/parser.borth" path-resolve print
+```
+
+`read-text-file` reads the path it is given. Import resolution is responsible
+for turning source-relative paths into full paths before reading imported files.
+
 `random` returns an integer from `0` to `max - 1`; `random-between` returns an integer in the inclusive range:
 
 ```text
@@ -268,6 +290,22 @@ an address and `!` stores into an address.
 variable count
 0 count !
 count @ print
+```
+
+`deferred` declares a word before its definition, allowing recursive compiler
+helpers and other source-order cycles to be expressed explicitly. `defer` is
+accepted as a shorter spelling:
+
+```text
+defer square
+
+: print-square
+  square print
+;
+
+: square
+  dup *
+;
 ```
 
 Files can import definitions and variables from other Borth files. Imports are
@@ -294,10 +332,11 @@ import "lib/strings.borth"
 
 The first Borth compiler and VM slice lives in `lib/lexer.borth`,
 `lib/parser.borth`, `lib/compiler.borth`, and `lib/vm.borth`. It can lex source,
-parse token strings into simple node arrays, compile programs into
-inspectable instruction arrays, and run that bytecode in a tiny Borth VM. The
-current slice includes arithmetic, comparisons, stack operations, strings,
-arrays, `if/else/end`, printing, debug formatting, and panic:
+parse token strings into simple node arrays, compile programs into inspectable
+instruction arrays, and run that bytecode in a tiny Borth VM. The current slice
+includes arithmetic, comparisons, stack operations, strings, arrays, variables,
+forward declarations, imports, `if/else/end`, printing, debug formatting, and
+panic:
 
 ```text
 import "lib/lexer.borth"
@@ -305,5 +344,11 @@ import "lib/parser.borth"
 import "lib/compiler.borth"
 import "lib/vm.borth"
 
-"0 if 2 else 3 end" lex-src parse-tokens compile-nodes run-bytecode show print
+"<inline>" "0 if 2 else 3 end" lex-src parse-tokens swap compile-nodes run-bytecode show print
 ```
+
+The Borth-written compiler now supports source-relative imports by compiling an
+imported file with a nested compiler state, then merging its bytecode, word
+declarations, and variable declarations back into the parent compiler state.
+Known remaining import work: duplicate import suppression and import cycle
+detection in the Borth-written compiler.

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { dirname, resolve } from "node:path";
 import test from "node:test";
 
 import { run } from "../dist/runner.js";
@@ -75,6 +76,36 @@ test("read-text-file reports missing files", () => {
         write: () => undefined,
       }),
     /ENOENT/,
+  );
+});
+
+test("cwd pushes the host current working directory", () => {
+  assert.deepEqual(outputOf("cwd print", [], { cwd: () => "/repo" }), ["/repo"]);
+});
+
+test("path-dirname pushes the containing directory", () => {
+  assert.deepEqual(
+    outputOf('"/repo/examples/main.borth" path-dirname print'),
+    [dirname("/repo/examples/main.borth")],
+  );
+});
+
+test("path-resolve resolves a path against a base directory", () => {
+  assert.deepEqual(
+    outputOf('"/repo/examples" "../lib/parser.borth" path-resolve print'),
+    [resolve("/repo/examples", "../lib/parser.borth")],
+  );
+});
+
+test("path helpers require strings", () => {
+  assert.throws(
+    () => run("123 path-dirname", { write: () => undefined }),
+    /PATH_DIRNAME requires strings on the stack/,
+  );
+
+  assert.throws(
+    () => run('"base" 123 path-resolve', { write: () => undefined }),
+    /PATH_RESOLVE requires strings on the stack/,
   );
 });
 

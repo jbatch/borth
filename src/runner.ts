@@ -47,6 +47,7 @@ function compileSource(source: string, sourcePath?: string) {
     compileProgram(state, program, {
       allowTopLevelCode,
       importModule: (importPath) => loadImportedModule(importPath, baseDir),
+      sourcePath: modulePath,
     });
   }
 

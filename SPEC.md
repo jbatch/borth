@@ -21,6 +21,33 @@ source
 
 Eventually, the compiler and potentially other tooling should be rewritten in the language itself, allowing the original TypeScript implementation to be discarded.
 
+## Current Milestone
+
+The TypeScript implementation is still the bootstrap implementation. In
+parallel, `lib/` contains a Borth-written compiler pipeline:
+
+```text
+lib/lexer.borth
+lib/parser.borth
+lib/compiler.borth
+lib/vm.borth
+```
+
+That inner compiler can compile small programs into bytecode for the Borth VM,
+including programs that import other Borth files. Imports are compiled by
+creating a nested compiler state for the imported module, compiling that module,
+and merging its bytecode, word declarations, and variable declarations back into
+the importing compiler.
+
+The Borth-written compiler now intentionally supports forward declarations via
+`deferred` / `defer`, because module import compilation introduced a real source
+ordering cycle between import handling and normal node dispatch.
+
+Known remaining import work in the Borth-written compiler:
+
+- suppress duplicate imports
+- detect import cycles
+
 ## Host Language
 
 Use TypeScript for the initial implementation.
@@ -28,6 +55,41 @@ Use TypeScript for the initial implementation.
 The TypeScript implementation is considered temporary bootstrap infrastructure. Do not design the project around permanently depending on TypeScript.
 
 Prefer simple, readable code over abstractions and frameworks.
+
+## Host Boundary
+
+Some operations are deliberately host-provided while the language is being
+bootstrapped. File IO and OS path resolution belong here for now because they
+depend on the environment running the VM.
+
+Current host path primitives:
+
+```text
+cwd          ( -- path )
+path-dirname ( path -- dir )
+path-resolve ( base path -- path )
+```
+
+Source code may use relative import paths, but the compiler should resolve them
+against the importing file and track loaded modules by full normalized paths.
+
+## Declarations
+
+Top-level declarations introduce names without performing ordinary runtime stack
+effects. Current declarations are:
+
+```text
+: name ... ;        # word definition
+variable name       # global storage cell
+deferred name       # word declared now and defined later
+defer name          # shorter spelling for deferred
+import "path"       # load declarations from another source file
+```
+
+`deferred`/`defer` exists to handle genuine source-order cycles during
+bootstrapping. Calls to a deferred word compile to placeholder call
+instructions, and the compiler patches those call sites when the word definition
+is later compiled. Compilation fails if a deferred word is never defined.
 
 ## Core Philosophy
 
