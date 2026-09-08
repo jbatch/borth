@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import type { Instruction } from "./bytecode.js";
@@ -15,6 +15,8 @@ export type VmState = {
 
 export type ExecuteOptions = {
   cwd?: () => string;
+  env?: (name: string) => string | undefined;
+  fileExists?: (path: string) => boolean;
   random?: () => number;
   read?: () => string;
   readTextFile?: (path: string) => string;
@@ -26,6 +28,8 @@ export function execute(
   options: ExecuteOptions = {},
 ): VmState {
   const cwd = options.cwd ?? process.cwd;
+  const env = options.env ?? ((name: string) => process.env[name]);
+  const fileExists = options.fileExists ?? existsSync;
   const random = options.random ?? Math.random;
   const read = options.read;
   const readTextFile =
@@ -257,6 +261,19 @@ export function execute(
       case "READ_TEXT_FILE": {
         const path = popString(state, "READ_TEXT_FILE");
         state.stack.push(readTextFile(path));
+        state.ip += 1;
+        break;
+      }
+      case "FILE_EXISTS": {
+        const path = popString(state, "FILE_EXISTS");
+        state.stack.push(bool(fileExists(path)));
+        state.ip += 1;
+        break;
+      }
+      case "ENV": {
+        const name = popString(state, "ENV");
+        const value = env(name);
+        state.stack.push(value ?? "", bool(value !== undefined));
         state.ip += 1;
         break;
       }

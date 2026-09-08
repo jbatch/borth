@@ -571,6 +571,9 @@ Prelude decision:
 - Initial prelude words are `not`, `and`, `or`, `nip`, and `tuck`.
 - `2dup` is a prelude word because `( A B -- A B A B )` can be expressed as
   `over over`.
+- The Borth-written compiler also loads `prelude.borth` before entry programs.
+  For now it resolves that file from `cwd`, and `SKIP_PRELUDE` can be set to
+  `1` before `compile-nodes` when inspecting small bytecode snippets.
 - `rot` is a VM primitive for now because the current language cannot express
   `( A B C -- B C A )` using only `drop`, `dup`, `swap`, and `over`.
 - `roll` and `-roll` are VM primitives because they move stack values at a
@@ -887,6 +890,32 @@ Text file input decision:
 - Missing or unreadable files throw host file-system errors for now.
 - This is intentionally narrower than syscalls or file handles. It exists to
   support tooling that wants to load source from files.
+
+## Milestone 17b: Host Environment Lookup
+
+Goal:
+
+```text
+"BORTH_PATH" env
+"prelude.borth" file-exist?
+```
+
+should let Borth code inspect small pieces of host configuration needed for
+library and prelude loading.
+
+Host environment decision:
+
+- `file-exist?` is a VM primitive because it crosses the host file-system
+  boundary.
+- Stack effect: `( path -- flag )`.
+- It returns `1` when the host says the path exists and `0` otherwise.
+- `env` is a VM primitive because it crosses the host environment boundary.
+- Stack effect: `( name -- value found? )`.
+- Missing variables push `"" 0`.
+- Present variables push their string value and `1`, even when the string value
+  is empty.
+- These primitives are intentionally narrow. They support prelude and library
+  lookup without introducing general process or file-system APIs yet.
 
 ## Milestone 18: First Borth Compiler Library Slice
 

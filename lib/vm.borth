@@ -565,6 +565,32 @@ import "./array.borth"
     vm-inc-ip
 ;
 
+
+# execute-file-exist ( vm -- vm )
+#
+# Execute FILE_EXISTS by replacing a path on the interpreted stack with a
+# numeric flag describing whether the host can see that file.
+: execute-file-exist
+    1 "FILE_EXISTS" assert-stack-length
+    dup vm-stack
+        array-pop file-exist? array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-env ( vm -- vm )
+#
+# Execute ENV by replacing a variable name with the host environment lookup
+# result: value followed by found flag.
+: execute-env
+    1 "ENV" assert-stack-length
+    dup vm-stack
+        # ( vm stack value found? )
+        array-pop env -rot array-push swap array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
 # execute-cwd ( vm -- vm )
 #
 # Execute CWD by appending the host current working directory to the interpreted
@@ -747,6 +773,10 @@ import "./array.borth"
         drop execute-read-int 0
     else dup "READ_TEXT_FILE" = if drop
         drop execute-read-text-file 0
+    else dup "FILE_EXISTS" = if drop
+        drop execute-file-exist 0
+    else dup "ENV" = if drop
+        drop execute-env 0
     else dup "CWD" = if drop
         drop execute-cwd 0
     else dup "PATH_DIRNAME" = if drop
@@ -794,7 +824,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

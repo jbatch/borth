@@ -6,7 +6,12 @@ import { run } from "../dist/runner.js";
 function outputOf(source) {
   const output = [];
 
-  run(source, {
+  // Most compiler snapshots assert only the snippet under test. Prelude loading
+  // has its own focused test below.
+  run(source.replace(
+    'import "lib/compiler.borth"',
+    'import "lib/compiler.borth"\n      1 SKIP_PRELUDE !',
+  ), {
     write: (value) => output.push(value),
   });
 
@@ -61,12 +66,32 @@ test("compiler library compiles stack, host, and random primitive words", () => 
       import "lib/parser.borth"
       import "lib/compiler.borth"
 
-      "roll -roll random read-line read-int read-text-file cwd path-dirname path-resolve" lex-src parse-tokens "<test>" compile-nodes show print
+      "roll -roll random read-line read-int read-text-file file-exist? env cwd path-dirname path-resolve" lex-src parse-tokens "<test>" compile-nodes show print
     `),
     [
-      '[["ROLL"] ["ROLL_REVERSE"] ["RANDOM"] ["READ_LINE"] ["READ_INT"] ["READ_TEXT_FILE"] ["CWD"] ["PATH_DIRNAME"] ["PATH_RESOLVE"] ["HALT"]]',
+      '[["ROLL"] ["ROLL_REVERSE"] ["RANDOM"] ["READ_LINE"] ["READ_INT"] ["READ_TEXT_FILE"] ["FILE_EXISTS"] ["ENV"] ["CWD"] ["PATH_DIRNAME"] ["PATH_RESOLVE"] ["HALT"]]',
     ],
   );
+});
+
+test("compiler library loads prelude words by default", () => {
+  const output = [];
+
+  run(
+    `
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "0 not" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+    `,
+    {
+      write: (value) => output.push(value),
+    },
+  );
+
+  assert.deepEqual(output, ["[1]"]);
 });
 
 test("compiler library compiles if end with a patched false jump", () => {

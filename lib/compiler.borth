@@ -26,6 +26,10 @@ import "./parser.borth"
 
 variable COMPILER_DEBUG
 
+# Global debug switch for compiling small snippets without automatically
+# prepending prelude definitions.
+variable SKIP_PRELUDE
+
 # compiler-new ( node-array file-path allow-top-level-code -- compiler )
 #
 # Create a new compiler state for one parser node array.
@@ -726,19 +730,13 @@ variable COMPILER_DEBUG
 # this breaks that loop
 deferred compile-next-node
 
-: compile-import
-    dup "module imports can only appear at the root level" assert-no-open-blocks
-
-    # ( state -- state file-path )
-    compiler-increment-node-index dup compiler-current-node 1 array-get
-
-    # read file
-    # ( state absolute-file-path absolute-file-path )
-    over compiler-file-path path-dirname swap path-resolve dup
-    # ( state absolute-file-path file-str )
-    read-text-file
+# import-source-file ( state absolute-file-path source -- state )
+#
+# Compile another source string as a module into the current compiler session.
+# The module gets its own node cursor and block stack, but shares instructions,
+# word declarations, and variable declarations with the parent compiler.
+: import-source-file
     # lex
-    # ( state absolute-file-path tokens )
     lex-src
     # parse
     # ( state absolute-file-path nodes )
@@ -766,6 +764,21 @@ deferred compile-next-node
     over compiler-words compiler-set-words
     over compiler-variables compiler-set-variables
     nip
+;
+
+: compile-import
+    dup "module imports can only appear at the root level" assert-no-open-blocks
+
+    # ( state -- state file-path )
+    compiler-increment-node-index dup compiler-current-node 1 array-get
+
+    # read file
+    # ( state absolute-file-path absolute-file-path )
+    over compiler-file-path path-dirname swap path-resolve dup
+    # ( state absolute-file-path file-str )
+    read-text-file
+    # ( state absolute-file-path tokens -- state )
+    import-source-file
 ;
 
 # create-push-instruction ( node -- instruction )
@@ -861,6 +874,10 @@ deferred compile-next-node
         "READ_INT" array-wrap emit-instruction
     else dup "read-text-file" = if drop
         "READ_TEXT_FILE" array-wrap emit-instruction
+    else dup "file-exist?" = if drop
+        "FILE_EXISTS" array-wrap emit-instruction
+    else dup "env" = if drop
+        "ENV" array-wrap emit-instruction
 
     # Host path operations.
     else dup "cwd" = if drop
@@ -929,7 +946,7 @@ deferred compile-next-node
         else
             "Unknown word: " swap show str-cat panic
         end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # compile-word-node ( state node -- state )
@@ -981,6 +998,15 @@ deferred compile-next-node
     compiler-increment-node-index
 ;
 
+# import-prelude ( state -- state )
+#
+# Load prelude.borth from the current working directory and compile its
+# declarations into the parent compiler before compiling the entry program.
+: import-prelude
+    cwd "./prelude.borth" path-resolve dup read-text-file
+    import-source-file
+;
+
 # compile-nodes-with-mode ( node-array file-path allow-top-level-code -- instruction-array )
 #
 # Compile every parser node into one flat instruction stream and append HALT.
@@ -992,6 +1018,11 @@ deferred compile-next-node
     # Initialize compiler state for this compilation.
     0 COMPILER_DEBUG !
     compiler-new
+
+    # implicitly import the prelude file
+    SKIP_PRELUDE @ not if
+        import-prelude
+    end
 
     loop
         dup compiler-finished? not

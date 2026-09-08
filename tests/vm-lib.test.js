@@ -157,6 +157,32 @@ test("Borth VM executes compiled file and path bytecode", () => {
   );
 });
 
+test("Borth VM executes compiled host lookup bytecode", () => {
+  assert.deepEqual(
+    outputOf(
+      `
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+        import "lib/vm.borth"
+
+        "\\"virtual.borth\\" file-exist? \\"BORTH_PATH\\" env \\"MISSING\\" env" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+      `,
+      {
+        env: (name) => {
+          if (name === "BORTH_PATH") {
+            return "/repo/lib";
+          }
+
+          return undefined;
+        },
+        fileExists: (path) => path === "virtual.borth",
+      },
+    ),
+    ['[1 "/repo/lib" 1 "" 0]'],
+  );
+});
+
 test("Borth VM executes compiled cwd and random bytecode", () => {
   const randomValues = [0, 0.999];
 
@@ -168,6 +194,7 @@ test("Borth VM executes compiled cwd and random bytecode", () => {
         import "lib/compiler.borth"
         import "lib/vm.borth"
 
+        1 SKIP_PRELUDE !
         "cwd 10 random 10 random" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
       `,
       {

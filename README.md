@@ -96,6 +96,8 @@ random ( max -- n )
 read-line ( -- string )
 read-int  ( -- number )
 read-text-file ( path -- string )
+file-exist? ( path -- flag )
+env ( name -- value found? )
 cwd ( -- path )
 path-dirname ( path -- dir )
 path-resolve ( base path -- path )
@@ -119,6 +121,8 @@ random-between ( min max -- n )
 ```
 
 The prelude is loaded before every program from `prelude.borth`.
+The Borth compiler library also loads it by default; set `SKIP_PRELUDE` to `1`
+before `compile-nodes` when inspecting tiny bytecode snippets.
 
 Values:
 

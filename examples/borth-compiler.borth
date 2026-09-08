@@ -3,4 +3,4 @@ import "../lib/parser.borth"
 import "../lib/compiler.borth"
 import "../lib/vm.borth"
 
-"100 random" lex-src parse-tokens "REPL" compile-nodes run-bytecode show "" print print
+"20 25 random-between" lex-src parse-tokens "REPL" compile-nodes run-bytecode show "" print print

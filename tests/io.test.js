@@ -79,6 +79,68 @@ test("read-text-file reports missing files", () => {
   );
 });
 
+test("file-exist? pushes 1 when a path exists and 0 when it does not", () => {
+  assert.deepEqual(
+    outputOf(`
+      "tests/fixtures/read-text-file.txt" file-exist? print
+      "tests/fixtures/missing.txt" file-exist? print
+    `),
+    [1, 0],
+  );
+});
+
+test("file-exist? can be provided by tests", () => {
+  assert.deepEqual(
+    outputOf('"virtual.borth" file-exist? print', [], {
+      fileExists: (path) => {
+        assert.equal(path, "virtual.borth");
+        return true;
+      },
+    }),
+    [1],
+  );
+});
+
+test("file-exist? requires a string path", () => {
+  assert.throws(
+    () => run("123 file-exist?", { write: () => undefined }),
+    /FILE_EXISTS requires strings on the stack/,
+  );
+});
+
+test("env pushes an environment value and found flag", () => {
+  assert.deepEqual(
+    outputOf(`
+      "BORTH_PATH" env .s
+      drop drop
+      "MISSING" env .s
+    `, [], {
+      env: (name) => {
+        if (name === "BORTH_PATH") {
+          return "/repo/lib";
+        }
+
+        return undefined;
+      },
+    }),
+    ['["/repo/lib" 1]', '["" 0]'],
+  );
+});
+
+test("env treats an empty value as found", () => {
+  assert.deepEqual(
+    outputOf('"EMPTY" env .s', [], { env: () => "" }),
+    ['["" 1]'],
+  );
+});
+
+test("env requires a string name", () => {
+  assert.throws(
+    () => run("123 env", { write: () => undefined }),
+    /ENV requires strings on the stack/,
+  );
+});
+
 test("cwd pushes the host current working directory", () => {
   assert.deepEqual(outputOf("cwd print", [], { cwd: () => "/repo" }), ["/repo"]);
 });
