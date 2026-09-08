@@ -44,6 +44,12 @@ The Borth-written compiler now intentionally supports forward declarations via
 `deferred`, because module import compilation introduced a real source ordering
 cycle between import handling and normal node dispatch.
 
+The next backend experiment is a native C target. The intended path is to keep
+the VM bytecode output, but add a more structured compiler output that groups
+bytecode by declared word plus entry-point code. That grouped form can still be
+flattened for the VM, while also giving a C backend enough structure to emit
+helper calls, labels, and eventually C functions per Borth word.
+
 Known remaining import work in the Borth-written compiler:
 
 - suppress duplicate imports
@@ -89,6 +95,18 @@ env            ( name -- value found? )
 
 Source code may use relative import paths, but the compiler should resolve them
 against the importing file and track loaded modules by full normalized paths.
+
+Future native-build tooling will likely need more host boundary words:
+
+```text
+args            ( -- array )
+write-text-file ( path contents -- )
+run-command     ( command args -- exit-code stdout stderr )
+```
+
+These should be added only when the Borth command-line tool actually needs
+them. They belong at the host boundary because command-line arguments, file
+writes, and process spawning depend on the operating system.
 
 ## Declarations
 
@@ -370,6 +388,47 @@ Eventually the compiler should be able to compile itself.
 The TypeScript implementation can then become merely the bootstrap mechanism used to get the first self-hosting version running.
 
 The VM and compiler do not need to be self-hosted simultaneously. Treat them as separate milestones.
+
+## Native Backend Direction
+
+A native executable path should initially target C source rather than raw
+assembly. C acts as a portable backend format while keeping the generated output
+inspectable.
+
+The intended pipeline is:
+
+```text
+source
+  -> lexer / parser
+  -> AST
+  -> grouped compiler output
+  -> flat bytecode -> VM
+  -> generated C -> cc -> executable
+```
+
+Grouped compiler output should preserve:
+
+- declared word names and their instruction bodies
+- entry-point instructions
+- variable declarations
+- enough call information to emit either label-based calls or later
+  function-per-word C
+
+The first C backend can be simple:
+
+- emit a shared C runtime
+- emit one C label per bytecode instruction
+- emit C helper calls for normal opcodes
+- emit `goto` for jumps
+- handle `CALL` by pushing a return label and jumping to the target
+- handle `RET` through a shared return dispatcher
+
+This is different from a C bytecode interpreter because the generated program
+does not fetch and decode Borth bytecode at runtime. The bytecode sequencing has
+already been lowered into C statements and labels.
+
+Longer term, the grouped output can let the backend emit C functions for Borth
+words instead of only flat labels.
 
 ## Design Constraints
 
