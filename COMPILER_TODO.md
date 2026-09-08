@@ -16,7 +16,9 @@ Status labels:
 1. Add unresolved deferred-word validation to the Borth compiler.
 2. Add import tracking and cycle detection.
 3. Centralize compiler namespace validation.
-4. Improve source-aware compiler errors.
+4. Add Borth string escape parsing parity.
+5. Improve source-aware compiler errors.
+6. Pick the first output artifact boundary after instruction arrays.
 
 ## Compiler Parity Gaps
 
@@ -29,11 +31,19 @@ the Borth-written compiler/VM path.
   TypeScript compiler fails with `deferred word never defined: name`; the Borth
   compiler records and patches deferred call sites, but does not yet do the
   final unresolved-deferred validation pass.
+- Replace stale top-level-code helper wording around
+  `assert-top-level-code-allowed` now that imports compile real module files.
+- Validate that `variable` has a following word node before reading it.
 
 ### Doable Now
 
 - Centralize name validation so words, variables, deferred words, built-in
   words, and reserved syntax all share one collision rule.
+- Add string escape handling to the Borth lexer/parser so it matches the
+  TypeScript lexer.
+- Add a small Borth-side runner/session word that represents "compile normal
+  source like `yarn borth`" instead of calling `compile-nodes` directly in every
+  example.
 
 ### Needs Extra State/Work
 
@@ -42,17 +52,17 @@ the Borth-written compiler/VM path.
   module set.
 - Detect import cycles. This probably wants a second `loadingModules` style set
   in compiler state so cycles can be reported before recursive import blows up.
-- Decide how prelude loading should work in the self-hosted path. The
-  TypeScript runner automatically loads `prelude.borth`; raw Borth
-  `compile-nodes` starts from an empty inner compiler dictionary plus hardcoded
-  primitive names.
 - Improve source-aware compiler errors. Borth compiler state has file path and
   node index, but most panics still report generic messages.
+- Decide standard library lookup policy. The Borth compiler currently loads
+  `prelude.borth` from `cwd`; a fuller version should probably check
+  `BORTH_PATH`, then `cwd`, then the current source file's directory.
+- Decide the first output artifact after instruction arrays. Options include
+  printing bytecode, generating a textual IR, or emitting assembly text as a
+  later backend experiment.
 
 ### Blocked / Wait
 
-- Full "compile normal source exactly like `yarn borth`" parity probably wants
-  a Borth-side runner/session abstraction, not just `compile-nodes`.
 - Carriage-return lexing is small, but awkward to do cleanly until string
   escape and character handling are a little more settled.
 
@@ -62,13 +72,8 @@ These are TODO comments that already exist in the codebase.
 
 ### Quick Win
 
-- Replace stale top-level-code helper wording around
-  `assert-top-level-code-allowed` now that imports compile real module files.
-- Validate that `variable` has a following word node before reading it.
 - Validate `panic`'s operand in `lib/vm.borth`, or remove the TODO if delegating
   to the outer `panic` primitive is considered enough for this VM slice.
-- Refresh the stale roadmap section at the end of `SPEC.md`; several
-  "proposed" milestones are now implemented.
 
 ### Doable Now
 
@@ -77,8 +82,6 @@ These are TODO comments that already exist in the codebase.
   `compile-deferred`.
 - Report more specific unclosed-block errors at end of source or module
   compilation by inspecting the top open block before panicking.
-- Add string escape handling to the Borth lexer/parser so it matches the
-  TypeScript lexer more closely.
 
 ### Needs Extra State/Work
 
@@ -99,6 +102,9 @@ These are TODO comments that already exist in the codebase.
 - "Compiler parity" and "end-to-end parity" are slightly different. The Borth
   compiler and Borth VM may gain support separately, so new instruction
   mappings should be tested both as compiler output and as VM behavior.
+- The current Borth compiler output is an inspectable instruction array. An
+  assembler, textual IR, or machine-code backend would be a new output backend,
+  not a replacement for the remaining parity checks above.
 - Imported module behavior is intentionally stricter than entry-program
   behavior: modules can declare imports, variables, and words, but cannot run
   loose top-level executable code.

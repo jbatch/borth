@@ -1011,7 +1011,7 @@ deferred compile-next-node
 #
 # Compile every parser node into one flat instruction stream and append HALT.
 #
-# This is the configurable entry point used by future import support. Passing 1
+# This is the configurable entry point used by import support. Passing 1
 # allows normal executable programs. Passing 0 rejects executable source at
 # module top level while still allowing declarations.
 : compile-nodes-with-mode

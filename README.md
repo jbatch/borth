@@ -5,7 +5,8 @@ Tiny experimental stack-based language.
 Current scope: tiny programs can run through lexer, parser, compiler, bytecode,
 and VM. The TypeScript implementation remains the bootstrap, but the Borth
 standard library now includes a Borth-written lexer, parser, compiler, and VM
-slice that can compile and run small imported programs.
+slice that can compile and run small imported programs. That inner compiler
+also loads `prelude.borth` before entry programs.
 
 ```sh
 yarn install
@@ -56,7 +57,7 @@ Expected output:
 30
 ```
 
-Current VM words:
+Current VM and prelude words available to ordinary programs:
 
 ```text
 drop  ( A -- )
@@ -87,8 +88,6 @@ array-new  ( -- array )
 array-push ( array A -- array )
 array-len  ( array -- number )
 array-get  ( array index -- A )
-array-slice ( array start length -- array )
-array-set   ( array index A -- array )
 
 random ( max -- n )
 @      ( addr -- A )
@@ -116,7 +115,9 @@ nip   ( A B -- B )
 tuck  ( A B -- B A B )
 2dup  ( A B -- A B A B )
 2over ( A B C -- A B C A )
+3over ( A B C D -- A B C D A )
 3dup  ( A B C -- A B C A B C )
+-rot  ( A B C -- C A B )
 random-between ( min max -- n )
 ```
 
@@ -164,10 +165,6 @@ array-new
 123 array-push
 show print
 ```
-
-`array-slice` uses half-open ranges: `start` is included and `start + length`
-is excluded. Empty slices are valid at array boundaries. `array-set` returns a
-new array with an existing item replaced; it does not append.
 
 User-defined words:
 
@@ -272,9 +269,11 @@ printf '21\n' | yarn borth -- examples/double-input.borth
 "examples/add.borth" read-text-file print
 ```
 
-Path primitives expose small pieces of the host OS path model:
+Host lookup and path primitives expose small pieces of the host OS environment:
 
 ```text
+"BORTH_PATH" env .s
+"prelude.borth" file-exist? print
 cwd print
 "/repo/examples/main.borth" path-dirname print
 "/repo/examples" "../lib/parser.borth" path-resolve print
@@ -330,10 +329,16 @@ The `lib/` directory contains reusable Borth modules:
 
 ```text
 import "lib/strings.borth"
+import "lib/array.borth"
 
 "-123" str-int? print
 "-123" str-to-int print
 ```
+
+`lib/array.borth` provides `array-slice` and `array-set`. `array-slice` uses
+half-open ranges: `start` is included and `start + length` is excluded. Empty
+slices are valid at array boundaries. `array-set` returns a new array with an
+existing item replaced; it does not append.
 
 The first Borth compiler and VM slice lives in `lib/lexer.borth`,
 `lib/parser.borth`, `lib/compiler.borth`, and `lib/vm.borth`. It can lex source,
@@ -355,5 +360,7 @@ import "lib/vm.borth"
 The Borth-written compiler now supports source-relative imports by compiling an
 imported file with a nested compiler state, then merging its bytecode, word
 declarations, and variable declarations back into the parent compiler state.
-Known remaining import work: duplicate import suppression and import cycle
-detection in the Borth-written compiler.
+It also loads `prelude.borth` from `cwd` before entry programs unless
+`SKIP_PRELUDE` is set. Known remaining compiler parity work: unresolved
+deferred validation, duplicate import suppression, import cycle detection,
+centralized namespace checks, and string escape handling in the Borth parser.

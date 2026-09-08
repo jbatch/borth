@@ -37,7 +37,8 @@ That inner compiler can compile small programs into bytecode for the Borth VM,
 including programs that import other Borth files. Imports are compiled by
 creating a nested compiler state for the imported module, compiling that module,
 and merging its bytecode, word declarations, and variable declarations back into
-the importing compiler.
+the importing compiler. Entry-program compilation also loads `prelude.borth`
+from the current working directory unless `SKIP_PRELUDE` is set.
 
 The Borth-written compiler now intentionally supports forward declarations via
 `deferred`, because module import compilation introduced a real source ordering
@@ -47,6 +48,14 @@ Known remaining import work in the Borth-written compiler:
 
 - suppress duplicate imports
 - detect import cycles
+
+Known remaining compiler/runtime parity work:
+
+- validate unresolved deferred words before returning bytecode
+- centralize namespace checks for words, variables, deferred words, reserved
+  syntax, and built-in words
+- handle string escapes in the Borth parser like the TypeScript parser
+- improve source-aware compiler errors
 
 ## Host Language
 
@@ -68,6 +77,14 @@ Current host path primitives:
 cwd          ( -- path )
 path-dirname ( path -- dir )
 path-resolve ( base path -- path )
+```
+
+Current host lookup primitives:
+
+```text
+read-text-file ( path -- source )
+file-exist?    ( path -- flag )
+env            ( name -- value found? )
 ```
 
 Source code may use relative import paths, but the compiler should resolve them
@@ -571,6 +588,8 @@ Prelude decision:
 - Initial prelude words are `not`, `and`, `or`, `nip`, and `tuck`.
 - `2dup` is a prelude word because `( A B -- A B A B )` can be expressed as
   `over over`.
+- Current prelude words also include `2over`, `3over`, `3dup`, `-rot`, and
+  `random-between`.
 - The Borth-written compiler also loads `prelude.borth` before entry programs.
   For now it resolves that file from `cwd`, and `SKIP_PRELUDE` can be set to
   `1` before `compile-nodes` when inspecting small bytecode snippets.
@@ -917,7 +936,7 @@ Host environment decision:
 - These primitives are intentionally narrow. They support prelude and library
   lookup without introducing general process or file-system APIs yet.
 
-## Milestone 18: First Borth Compiler Library Slice
+## Milestone 18: Borth Compiler Library Slice
 
 Goal:
 
@@ -1029,59 +1048,25 @@ Array helper decision:
 - Do not promote these helpers to TypeScript VM primitives until the
   inefficiency blocks the next small language milestone.
 
-## Near-Term Roadmap: Toward a Borth Compiler
+## Near-Term Roadmap: Compiler Parity, Then Backends
 
-The long-term goal is still a compiler written in Borth. The next milestones
-should be small programs that force only one or two new language features at a
-time.
+The Borth-written lexer, parser, compiler, and VM now cover the main current
+language surface: literals, words, variables, deferred declarations, imports,
+prelude loading, control flow, loops, strings, arrays, host IO/path lookup,
+randomness, printing, panic, and bytecode execution.
 
-### Example-Driven Feature Ladder
+The next compiler milestones are mostly parity and robustness work:
 
-This is a rough order for expanding the Borth-written compiler. Each step names
-the next useful language feature and the smallest existing example it should
-make possible through the Borth compiler/VM path.
-
-| Step | Feature pressure | Example unlocked | Notes |
-| --- | --- | --- | --- |
-| 1 | More straight-line primitives | `add.borth`, `stack-debug.borth` | Compile and execute `print`, `.s`, stack words, and basic arithmetic beyond `+`. |
-| 2 | String literals | `hello.borth` | Parse and compile string nodes, then support `PUSH` of strings in the Borth VM. |
-| 3 | User-defined words | `square.borth` | Add definitions, `CALL`, `RET`, and a Borth compiler dictionary. |
-| 4 | Imports of definition-only modules | `math-lib.borth`, `import-math.borth` | Decide how a Borth compiler session loads and shares module definitions. |
-| 5 | Basic conditionals | `if.borth` | Compile `if/end` using `JUMP_IF_FALSE` placeholders. |
-| 6 | Else branches | `else.borth` | Add `JUMP` and patch both false-branch and after-branch targets. |
-| 7 | Recursion | `fact.borth` | Register word names before compiling bodies so self-calls can resolve. |
-| 8 | Host input primitives | `double-input.borth`, `echo.borth` | Decide how the Borth VM crosses the host IO boundary. |
-| 9 | Loop control flow | `while-count.borth` | Compile `loop/while/repeat`; later add `loop/until`. |
-| 10 | Variable cells | `counter.borth` | Add address values, global memory cells, `@`, and `!`. |
-| 11 | String operations | `introduce.borth` | Compile and execute string concatenation plus stack reshaping. |
-| 12 | Larger recursive programs | `fib.borth`, `fizzbuzz.borth` | Exercise nested branches, multiple definitions, `mod`, and deeper stack effects. |
-| 13 | Entropy and interactive loops | `random-print.borth`, `guess.borth` | Add `random` once host effects and loop state are already understood. |
-| 14 | Compiler-oriented strings and arrays | `lexer.borth`, `parse-token.borth`, `str-to-int.borth` | Support the data manipulation needed for the compiler to grow itself. |
-| 15 | Full current self-hosting slice | `borth-compiler.borth` | Keep extending the Borth compiler/VM until this example covers more of the language. |
-
-The order is allowed to change when an earlier feature turns out to need a
-smaller supporting feature first.
-
-### Proposed Milestone: Broaden Primitive Compilation
-
-Extend `compile-word` beyond `"+"` to a small table of ordinary VM words:
-arithmetic, stack operations, `print`, and `.s`.
-
-Likely language work:
-
-- Use nested `if` briefly if the list stays tiny.
-- Add `case` / `match` compiler syntax once word dispatch becomes repetitive
-  enough that it hides the compiler logic.
-
-### Proposed Milestone: Control-Flow Compilation
-
-Add Borth compiler support for `if`, `else`, `end`, and later loops.
-
-Likely language work:
-
-- Introduce placeholders and patching for jump targets.
-- This may force array update/replace helpers, because existing arrays can only
-  append and read.
+1. Validate unresolved deferred words before `compile-nodes` returns.
+2. Track imported modules so duplicate imports are ignored and import cycles
+   fail deliberately.
+3. Centralize name validation across user words, variables, deferred words,
+   built-in words, and reserved syntax.
+4. Match TypeScript string escape parsing in the Borth lexer/parser.
+5. Improve compiler errors using the file path and node index already carried
+   in compiler state.
+6. Decide the first artifact boundary after instruction arrays: printed
+   bytecode, textual IR, assembly text, or another deliberately small backend.
 
 ### Roadmap Bias
 
@@ -1091,3 +1076,4 @@ Likely language work:
   the stack.
 - Add VM primitives only when Borth cannot inspect or construct the value
   directly.
+- Treat machine code as a backend milestone, not as part of compiler parity.
