@@ -16,6 +16,9 @@
       "include": "#variables"
     },
     {
+      "include": "#deferred"
+    },
+    {
       "include": "#imports"
     },
     {
@@ -115,6 +118,22 @@
         }
       ]
     },
+    "deferred": {
+      "patterns": [
+        {
+          "name": "meta.definition.deferred.borth",
+          "match": "(?<!\\S)(deferred)(\\s+)([^\\s]+)",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.deferred.borth"
+            },
+            "3": {
+              "name": "entity.name.function.borth"
+            }
+          }
+        }
+      ]
+    },
     "imports": {
       "patterns": [
         {
@@ -167,7 +186,11 @@
         },
         {
           "name": "support.function.io.borth",
-          "match": "(?<!\\S)(?:read-line|read-int|read-text-file|print|\\.s|panic)(?!\\S)"
+          "match": "(?<!\\S)(?:read-line|read-int|read-text-file|write-text-file|append-text-file|print|\\.s|panic)(?!\\S)"
+        },
+        {
+          "name": "support.function.host.borth",
+          "match": "(?<!\\S)(?:file-exist\\?|env|cwd|path-dirname|path-resolve)(?!\\S)"
         },
         {
           "name": "support.function.random.borth",
@@ -179,7 +202,7 @@
       "patterns": [
         {
           "name": "support.function.prelude.borth",
-          "match": "(?<!\\S)(?:not|and|or|nip|tuck|2dup|2over|3dup|-rot|random-between)(?!\\S)"
+          "match": "(?<!\\S)(?:not|and|or|nip|tuck|2dup|2over|3over|3dup|-rot|random-between)(?!\\S)"
         },
         {
           "name": "support.function.library.array.borth",
@@ -191,7 +214,11 @@
         },
         {
           "name": "support.function.library.map.borth",
-          "match": "(?<!\\S)(?:map-new|map-get|map-set|map-has\\?)(?!\\S)"
+          "match": "(?<!\\S)(?:map-new|map-get|map-set|map-has\\?|map-size)(?!\\S)"
+        },
+        {
+          "name": "support.function.library.c-emitter.borth",
+          "match": "(?<!\\S)write-c-program(?!\\S)"
         }
       ]
     }
