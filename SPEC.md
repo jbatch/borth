@@ -73,8 +73,8 @@ Current source-location direction:
 - TypeScript bytecode instructions may carry optional source metadata so runtime
   VM errors can point back to the source token that emitted the current
   instruction.
-- The Borth implementation should initially mirror this as parallel source-span
-  data rather than bloating every ordinary array-shaped token or node.
+- The Borth lexer mirrors this as parallel token and source-span arrays rather
+  than bloating every ordinary array-shaped token.
 
 ## Host Language
 

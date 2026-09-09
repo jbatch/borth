@@ -16,9 +16,11 @@ import "./array.borth"
 
 # Lexer State
 #
-# Lexer state is stored in this array:
+# Lexer state is stored in this array. `index`, `line`, and `col` are zero-based
+# cursor positions while lexing; emitted spans convert line and column numbers to
+# the public one-based form.
 #
-#   [ source index tokens ]
+#   [ source index line col tokens spans ]
 #
 # Accessor and predicate words consume the lexer state they inspect. State
 # update words return a new lexer state with one field changed. The main lexer
@@ -31,7 +33,10 @@ import "./array.borth"
   array-new
   swap array-push       # source
   0 array-push          # index
+  0 array-push          # line
+  0 array-push          # col
   array-new array-push  # tokens
+  array-new array-push  # spans
 ;
 
 # lexer-source ( lexer -- source )
@@ -44,9 +49,24 @@ import "./array.borth"
   1 array-get
 ;
 
+# lexer-line ( lexer -- line )
+: lexer-line
+  2 array-get
+;
+
+# lexer-col ( lexer -- col )
+: lexer-col
+  3 array-get
+;
+
 # lexer-tokens ( lexer -- tokens )
 : lexer-tokens
-  2 array-get
+  4 array-get
+;
+
+# lexer-spans ( lexer -- spans )
+: lexer-spans
+  5 array-get
 ;
 
 # lexer-set-source ( lexer source -- lexer )
@@ -63,17 +83,52 @@ import "./array.borth"
   1 swap array-set
 ;
 
+# lexer-set-line ( lexer line -- lexer )
+#
+# Return lexer with a replaced zero-based source line.
+: lexer-set-line
+  2 swap array-set
+;
+
+# lexer-set-col ( lexer col -- lexer )
+#
+# Return lexer with a replaced zero-based source column.
+: lexer-set-col
+  3 swap array-set
+;
+
 # lexer-set-tokens ( lexer tokens -- lexer )
 #
 # Return lexer with a replaced token array.
 : lexer-set-tokens
-  2 swap array-set
+  4 swap array-set
+;
+
+# lexer-set-spans ( lexer spans -- lexer )
+#
+# Return lexer with a replaced span array.
+: lexer-set-spans
+  5 swap array-set
+;
+
+# lexer-current-char ( lexer -- char )
+#
+# Return the one-character string at the current lexer index.
+# Caller must check bounds before calling this word.
+: lexer-current-char
+  dup lexer-source swap lexer-index 1 str-slice
 ;
 
 # lexer-inc-index ( lexer -- lexer )
 #
 # Return lexer advanced by one source character.
 : lexer-inc-index
+  dup lexer-current-char "\n" = if
+    dup lexer-line 1 + lexer-set-line
+    0 lexer-set-col
+  else
+    dup lexer-col 1 + lexer-set-col
+  end
   dup lexer-index 1 + lexer-set-index
 ;
 
@@ -86,15 +141,16 @@ import "./array.borth"
   lexer-set-tokens
 ;
 
-# Character Predicates
-
-# lexer-current-char ( lexer -- char )
+# lexer-append-span ( lexer span -- lexer )
 #
-# Return the one-character string at the current lexer index.
-# Caller must check bounds before calling this word.
-: lexer-current-char
-  dup lexer-source swap lexer-index 1 str-slice
+# Return lexer with span appended to its span array.
+: lexer-append-span
+  swap dup lexer-spans
+    rot array-push
+  lexer-set-spans
 ;
+
+# Character Predicates
 
 # lexer-at-end? ( lexer -- flag )
 #
@@ -203,25 +259,55 @@ import "./array.borth"
   until
 ;
 
-# Token Readers
+# Lexer Utils
 
-# lexer-token-from-start ( start lexer -- lexer token )
+# lexer-record-token-start ( lexer -- token-start-record )
 #
-# Return the source slice from start through the current lexer index. This
-# consumes the start index and preserves the lexer state.
-: lexer-token-from-start
-  # ( start lexer -- lexer source start length )
-  swap over lexer-source swap 2over lexer-index over -
-  # ( lexer source start length -- lexer token )
-  str-slice
+# Return a small record containing the current zero-based source index, line,
+# and column. The lexer state itself is consumed.
+: lexer-record-token-start
+  array-new
+  over lexer-index array-push # index-start
+  over lexer-line array-push  # line-start
+  over lexer-col array-push   # col-start
+  nip
 ;
 
-# lexer-read-word-token ( lexer -- lexer token )
+# Token Readers
+
+# lexer-token-from-start ( lexer token-start-record -- lexer token span )
 #
-# Return lexer advanced past the current non-string token, plus the token text.
-# The lexer index must point at the first character of the token.
+# Return the source slice from the recorded start through the current lexer
+# index, plus a one-based `[line-start col-start line-end col-end]` span. The
+# end column is exclusive.
+: lexer-token-from-start
+  # get token
+  # ( lexer token-start-record -- token-start-record lexer start )
+  dup 0 array-get swap -rot
+  # ( token-start-record lexer source start length )
+  over lexer-source swap 2over lexer-index over -
+  # ( token-start-record lexer token )
+  str-slice
+
+  # generate span
+  # span is in the form [ line-start col-start line-end col-end ]
+  # all numbers are 1 indexed
+  # ( lexer token span )
+  -rot array-new
+    2over 1 array-get 1 + array-push  # line-start
+    rot 2 array-get 1 + array-push    # col-start
+    over lexer-line 1 + array-push    # line-end
+    over lexer-col 1 + array-push     # col-end
+  rot swap
+;
+
+# lexer-read-word-token ( lexer -- lexer token span )
+#
+# Return lexer advanced past the current non-string token, plus the token text
+# and one-based span. The lexer index must point at the first character of the
+# token.
 : lexer-read-word-token
-  dup lexer-index swap
+  dup lexer-record-token-start swap
   # Skip the first character because index is already known to be inside a word.
   lexer-inc-index
   loop
@@ -229,16 +315,16 @@ import "./array.borth"
   while
     lexer-inc-index
   repeat
-  lexer-token-from-start
+  swap lexer-token-from-start
 ;
 
-# lexer-read-string-token ( lexer -- lexer token )
+# lexer-read-string-token ( lexer -- lexer token span )
 #
 # Return lexer advanced just after the closing quote, plus the full quoted token
-# text. The lexer index must point at the opening quote. Panics if the source
-# ends before a closing quote is found.
+# text and one-based span. The lexer index must point at the opening quote.
+# Panics if the source ends before a closing quote is found.
 : lexer-read-string-token
-  dup lexer-index swap
+  dup lexer-record-token-start swap
   # Skip the opening quote before scanning for the closing quote.
   lexer-inc-index
 
@@ -249,7 +335,7 @@ import "./array.borth"
     dup lexer-current-char lexer-quote? not
   while
     dup lexer-current-char "\\" = if
-      lexer-inc-index # skip escaped characters
+      lexer-inc-index # skip escape slash
       dup lexer-at-end? if
         "Unterminated string literal" panic
       end
@@ -259,13 +345,14 @@ import "./array.borth"
     lexer-inc-index
   repeat
   lexer-inc-index
-  lexer-token-from-start
+  swap lexer-token-from-start
 ;
 
-# lexer-read-token ( lexer -- lexer token )
+# lexer-read-token ( lexer -- lexer token span )
 #
-# Return lexer advanced past the current token, plus the token text. Quoted
-# string tokens may contain spaces; other tokens end at whitespace.
+# Return lexer advanced past the current token, plus the token text and
+# one-based span. Quoted string tokens may contain spaces; other tokens end at
+# whitespace.
 : lexer-read-token
   dup lexer-current-char lexer-quote? if
     lexer-read-string-token
@@ -276,11 +363,12 @@ import "./array.borth"
 
 # Public API
 
-# lexer-lex-src ( source -- tokens )
+# lexer-lex-src-with-spans ( source -- tokens spans )
 #
-# Split source into an array of token strings. A `#` at a token boundary starts
-# a comment that runs through the end of the line.
-: lexer-lex-src
+# Split source into parallel arrays of token strings and one-based token spans.
+# A `#` at a token boundary starts a comment that runs through the end of the
+# line.
+: lexer-lex-src-with-spans
   lexer-new
   loop
     dup lexer-at-end? not
@@ -291,13 +379,24 @@ import "./array.borth"
       dup lexer-start-of-comment? if
         lexer-skip-comment
       else
+        # ( lexer token span )
         lexer-read-token
-        lexer-append-token
+        -rot lexer-append-token
+        swap lexer-append-span
       end
       lexer-skip-whitespace
     end
   repeat
-  lexer-tokens
+  dup lexer-tokens swap lexer-spans
+;
+
+
+# lexer-lex-src ( source -- tokens )
+#
+# Split source into an array of token strings. A `#` at a token boundary starts
+# a comment that runs through the end of the line.
+: lexer-lex-src
+  lexer-lex-src-with-spans drop
 ;
 
 # lex-src ( source -- tokens )
