@@ -16,21 +16,24 @@ import "./array.borth"
 
 # Lexer State
 #
-# Lexer state is stored in this array. `index`, `line`, and `col` are zero-based
-# cursor positions while lexing; emitted spans convert line and column numbers to
-# the public one-based form.
+# Lexer state is stored in this array. `file-path` is carried only for lexer
+# error messages. `index`, `line`, and `col` are zero-based cursor positions
+# while lexing; emitted spans convert line and column numbers to the public
+# one-based form.
 #
-#   [ source index line col tokens spans ]
+#   [ file-path source index line col tokens spans ]
 #
 # Accessor and predicate words consume the lexer state they inspect. State
 # update words return a new lexer state with one field changed. The main lexer
 # loop threads that updated state explicitly.
 
-# lexer-new ( source -- lexer )
+# lexer-new ( file-path source -- lexer )
 #
-# Create a lexer at source index 0 with no tokens collected.
+# Create a lexer for a source string at index 0 with no tokens or spans
+# collected. The file path is used when reporting lexer errors.
 : lexer-new
   array-new
+  rot array-push        # file-path
   swap array-push       # source
   0 array-push          # index
   0 array-push          # line
@@ -39,76 +42,90 @@ import "./array.borth"
   array-new array-push  # spans
 ;
 
+# lexer-file-path ( lexer -- file-path )
+#
+# Return the source path used in lexer error messages.
+: lexer-file-path
+  0 array-get
+;
+
 # lexer-source ( lexer -- source )
 : lexer-source
-  0 array-get
+  1 array-get
 ;
 
 # lexer-index ( lexer -- index )
 : lexer-index
-  1 array-get
+  2 array-get
 ;
 
 # lexer-line ( lexer -- line )
 : lexer-line
-  2 array-get
+  3 array-get
 ;
 
 # lexer-col ( lexer -- col )
 : lexer-col
-  3 array-get
+  4 array-get
 ;
 
 # lexer-tokens ( lexer -- tokens )
 : lexer-tokens
-  4 array-get
+  5 array-get
 ;
 
 # lexer-spans ( lexer -- spans )
 : lexer-spans
-  5 array-get
+  6 array-get
+;
+
+# lexer-set-file-path ( lexer file-path -- lexer )
+#
+# Return lexer with a replaced error-reporting file path.
+: lexer-set-file-path
+  0 swap array-set
 ;
 
 # lexer-set-source ( lexer source -- lexer )
 #
 # Return lexer with a replaced source.
 : lexer-set-source
-  0 swap array-set
+  1 swap array-set
 ;
 
 # lexer-set-index ( lexer index -- lexer )
 #
 # Return lexer with a replaced source index.
 : lexer-set-index
-  1 swap array-set
+  2 swap array-set
 ;
 
 # lexer-set-line ( lexer line -- lexer )
 #
 # Return lexer with a replaced zero-based source line.
 : lexer-set-line
-  2 swap array-set
+  3 swap array-set
 ;
 
 # lexer-set-col ( lexer col -- lexer )
 #
 # Return lexer with a replaced zero-based source column.
 : lexer-set-col
-  3 swap array-set
+  4 swap array-set
 ;
 
 # lexer-set-tokens ( lexer tokens -- lexer )
 #
 # Return lexer with a replaced token array.
 : lexer-set-tokens
-  4 swap array-set
+  5 swap array-set
 ;
 
 # lexer-set-spans ( lexer spans -- lexer )
 #
 # Return lexer with a replaced span array.
 : lexer-set-spans
-  5 swap array-set
+  6 swap array-set
 ;
 
 # lexer-current-char ( lexer -- char )
@@ -148,6 +165,34 @@ import "./array.borth"
   swap dup lexer-spans
     rot array-push
   lexer-set-spans
+;
+
+# Lexer Utils
+
+# lexer-record-token-start ( lexer -- token-start-record )
+#
+# Return a small record containing the current zero-based source index, line,
+# and column. The lexer state itself is consumed.
+: lexer-record-token-start
+  array-new
+  over lexer-index array-push # index-start
+  over lexer-line array-push  # line-start
+  over lexer-col array-push   # col-start
+  nip
+;
+
+# lexer-panic ( lexer error-msg -- never )
+#
+# Prefix error-msg with the lexed file path and current one-based line/column,
+# then delegate to host panic to stop execution.
+: lexer-panic
+  swap dup lexer-file-path " error: " swap str-cat ":" str-cat
+  over lexer-line 1 + show str-cat
+  ":" str-cat
+  over lexer-col 1 + show str-cat
+  ": " str-cat
+  rot str-cat
+  panic
 ;
 
 # Character Predicates
@@ -259,20 +304,6 @@ import "./array.borth"
   until
 ;
 
-# Lexer Utils
-
-# lexer-record-token-start ( lexer -- token-start-record )
-#
-# Return a small record containing the current zero-based source index, line,
-# and column. The lexer state itself is consumed.
-: lexer-record-token-start
-  array-new
-  over lexer-index array-push # index-start
-  over lexer-line array-push  # line-start
-  over lexer-col array-push   # col-start
-  nip
-;
-
 # Token Readers
 
 # lexer-token-from-start ( lexer token-start-record -- lexer token span )
@@ -330,17 +361,17 @@ import "./array.borth"
 
   loop
     dup lexer-at-end? if
-      "Unterminated string literal" panic
+      "Unterminated string literal" lexer-panic
     end
     dup lexer-current-char lexer-quote? not
   while
     dup lexer-current-char "\\" = if
       lexer-inc-index # skip escape slash
       dup lexer-at-end? if
-        "Unterminated string literal" panic
+        "Unterminated string literal" lexer-panic
       end
     else dup lexer-current-char lexer-new-line? if
-      "String literal cannot span lines" panic
+      "String literal cannot span lines" lexer-panic
     end end
     lexer-inc-index
   repeat
@@ -363,12 +394,13 @@ import "./array.borth"
 
 # Public API
 
-# lexer-lex-src-with-spans ( source -- tokens spans )
+# lexer-lex-src-file-with-spans ( file-path source -- tokens spans )
 #
 # Split source into parallel arrays of token strings and one-based token spans.
-# A `#` at a token boundary starts a comment that runs through the end of the
-# line.
-: lexer-lex-src-with-spans
+# The file path is not stored in each span; it is kept in lexer state for error
+# messages. A `#` at a token boundary starts a comment that runs through the end
+# of the line.
+: lexer-lex-src-file-with-spans
   lexer-new
   loop
     dup lexer-at-end? not
@@ -391,17 +423,19 @@ import "./array.borth"
 ;
 
 
-# lexer-lex-src ( source -- tokens )
+# lexer-lex-src-file ( file-path source -- tokens )
 #
 # Split source into an array of token strings. A `#` at a token boundary starts
-# a comment that runs through the end of the line.
-: lexer-lex-src
-  lexer-lex-src-with-spans drop
+# a comment that runs through the end of the line. The file path is used only
+# for lexer error messages.
+: lexer-lex-src-file
+  lexer-lex-src-file-with-spans drop
 ;
 
 # lex-src ( source -- tokens )
 #
-# Backwards-compatible public lexer entry point.
+# Backwards-compatible public lexer entry point for callers that only have an
+# anonymous source string.
 : lex-src
-  lexer-lex-src
+  "unknown" swap lexer-lex-src-file
 ;
