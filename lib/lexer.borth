@@ -7,7 +7,10 @@
 # skips whitespace and comments, and keeps quoted string literals together even
 # when they contain spaces.
 #
-# String escape sequences are not handled yet.
+# The lexer does not decode string escape sequences. It only keeps string
+# literals together as one token and skips escaped characters while looking for
+# the closing quote. The parser turns supported escape sequences into string
+# values.
 
 # Use a global variable for source to make the word contracts much simpler to maintain.
 variable lex-source
@@ -107,22 +110,21 @@ variable lex-source
   # Skip the opening quote before scanning for the closing quote.
   1 +
 
-  # Check whether the opening quote was the final source character before
-  # attempting to read the first string character.
-  dup lex-at-end? if
-    "Unterminated string literal" panic
-  end
-
   loop
-    dup lex-char-at lex-quote? not
-  while
-    1 +
     dup lex-at-end? if
       "Unterminated string literal" panic
     end
-    dup lex-char-at lex-new-line? if
+    dup lex-char-at lex-quote? not
+  while
+    dup lex-char-at "\\" = if
+      1 + # skip escaped characters
+      dup lex-at-end? if
+        "Unterminated string literal" panic
+      end
+    else dup lex-char-at lex-new-line? if
       "String literal cannot span lines" panic
-    end
+    end end
+    1 +
   repeat
   1 +
 ;

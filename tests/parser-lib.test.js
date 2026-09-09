@@ -13,6 +13,10 @@ function outputOf(source) {
   return output;
 }
 
+function borthString(value) {
+  return JSON.stringify(value);
+}
+
 test("parser library parses token strings into node arrays", () => {
   assert.deepEqual(
     outputOf(`
@@ -31,6 +35,35 @@ test("parser library parses token strings into node arrays", () => {
       '["word" "+"]',
       '["word" "if"]',
     ],
+  );
+});
+
+test("parser library decodes supported string escapes", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/parser.borth"
+
+      ${borthString('"quote: \\""')} parse-token show print
+      ${borthString('"slash: \\\\"')} parse-token show print
+      ${borthString('"one\\ntwo"')} parse-token show print
+    `),
+    [
+      '["string" "quote: \\""]',
+      '["string" "slash: \\\\"]',
+      '["string" "one\\ntwo"]',
+    ],
+  );
+});
+
+test("parser library rejects unknown string escapes", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/parser.borth"
+
+        ${borthString('"hello\\t"')} parse-token show print
+      `),
+    /Unknown escape sequence: \\t/,
   );
 });
 

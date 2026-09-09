@@ -13,6 +13,10 @@ function outputOf(source) {
   return output;
 }
 
+function borthString(value) {
+  return JSON.stringify(value);
+}
+
 test("lexer library lexes a source string into token strings", () => {
   assert.deepEqual(
     outputOf(`
@@ -39,6 +43,19 @@ test("lexer library keeps quoted strings with spaces as one token", () => {
   );
 });
 
+test("lexer library keeps escaped string characters inside one token", () => {
+  const source = '"String \\"with\\"\\nnew line" print';
+
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+
+      ${borthString(source)} lex-src show print
+    `),
+    ['["\\"String \\\\\\"with\\\\\\"\\\\nnew line\\"" "print"]'],
+  );
+});
+
 test("lexer library rejects unterminated quoted strings", () => {
   assert.throws(
     () =>
@@ -46,6 +63,18 @@ test("lexer library rejects unterminated quoted strings", () => {
         import "lib/lexer.borth"
 
         "\\"hello" lex-src show print
+      `),
+    /Unterminated string literal/,
+  );
+});
+
+test("lexer library rejects strings ending after an escape slash", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+
+        ${borthString('"hello\\')} lex-src show print
       `),
     /Unterminated string literal/,
   );

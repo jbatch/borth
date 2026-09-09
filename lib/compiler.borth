@@ -874,6 +874,10 @@ deferred compile-next-node
         "READ_INT" array-wrap emit-instruction
     else dup "read-text-file" = if drop
         "READ_TEXT_FILE" array-wrap emit-instruction
+    else dup "write-text-file" = if drop
+        "WRITE_TEXT_FILE" array-wrap emit-instruction
+    else dup "append-text-file" = if drop
+        "APPEND_TEXT_FILE" array-wrap emit-instruction
     else dup "file-exist?" = if drop
         "FILE_EXISTS" array-wrap emit-instruction
     else dup "env" = if drop
@@ -946,7 +950,7 @@ deferred compile-next-node
         else
             "Unknown word: " swap show str-cat panic
         end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # compile-word-node ( state node -- state )

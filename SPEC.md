@@ -60,7 +60,6 @@ Known remaining compiler/runtime parity work:
 - validate unresolved deferred words before returning bytecode
 - centralize namespace checks for words, variables, deferred words, reserved
   syntax, and built-in words
-- handle string escapes in the Borth parser like the TypeScript parser
 - improve source-aware compiler errors
 
 ## Host Language
@@ -89,6 +88,8 @@ Current host lookup primitives:
 
 ```text
 read-text-file ( path -- source )
+write-text-file ( path contents -- )
+append-text-file ( path contents -- )
 file-exist?    ( path -- flag )
 env            ( name -- value found? )
 ```
@@ -100,7 +101,6 @@ Future native-build tooling will likely need more host boundary words:
 
 ```text
 args            ( -- array )
-write-text-file ( path contents -- )
 run-command     ( command args -- exit-code stdout stderr )
 ```
 
@@ -995,6 +995,32 @@ Host environment decision:
 - These primitives are intentionally narrow. They support prelude and library
   lookup without introducing general process or file-system APIs yet.
 
+## Milestone 17c: Text File Output
+
+Goal:
+
+```text
+"program.c" "" write-text-file
+"program.c" "int main(void) {\n" append-text-file
+```
+
+should let Borth tooling emit text artifacts such as early C backend output.
+
+Text file output decision:
+
+- `write-text-file` and `append-text-file` are VM primitives because they cross
+  the host file-system boundary.
+- Stack effects:
+
+```text
+write-text-file  ( path contents -- )
+append-text-file ( path contents -- )
+```
+
+- They operate on UTF-8 text and return no stack value.
+- This is intentionally narrower than general file handles. It exists so
+  compiler/backend tooling can create inspectable text files.
+
 ## Milestone 18: Borth Compiler Library Slice
 
 Goal:
@@ -1015,8 +1041,8 @@ Compiler library decision:
 - `lib/parser.borth` turns token strings into simple node arrays such as
   `["integer" 10]`, `["string" "hello"]`, and `["word" "+"]`.
 - `lib/compiler.borth` turns parser nodes into instruction arrays.
-- String literal parsing currently strips surrounding quotes but does not yet
-  process escape sequences.
+- String literal parsing matches the TypeScript bootstrap escape set: `\"`,
+  `\\`, and `\n`.
 - Compiler helpers emit instructions into `compiler-instructions` rather than
   returning instruction arrays for each node. This keeps the contract ready for
   future words that expand into zero, one, or many instructions.
@@ -1121,10 +1147,9 @@ The next compiler milestones are mostly parity and robustness work:
    fail deliberately.
 3. Centralize name validation across user words, variables, deferred words,
    built-in words, and reserved syntax.
-4. Match TypeScript string escape parsing in the Borth lexer/parser.
-5. Improve compiler errors using the file path and node index already carried
+4. Improve compiler errors using the file path and node index already carried
    in compiler state.
-6. Decide the first artifact boundary after instruction arrays: printed
+5. Decide the first artifact boundary after instruction arrays: printed
    bytecode, textual IR, assembly text, or another deliberately small backend.
 
 ### Roadmap Bias

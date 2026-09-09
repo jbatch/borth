@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { dirname, resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 
 import { run } from "../dist/runner.js";
@@ -76,6 +78,85 @@ test("read-text-file reports missing files", () => {
         write: () => undefined,
       }),
     /ENOENT/,
+  );
+});
+
+test("write-text-file writes UTF-8 text to a file", () => {
+  const root = mkdtempSync(join(tmpdir(), "borth-io-"));
+  const path = join(root, "out.txt");
+
+  try {
+    run(`${JSON.stringify(path)} "hello" write-text-file`, {
+      write: () => undefined,
+    });
+
+    assert.equal(readFileSync(path, "utf8"), "hello");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("write-text-file can be provided by tests", () => {
+  const writes = [];
+
+  run('"notes.txt" "hello" write-text-file', {
+    writeTextFile: (path, contents) => writes.push([path, contents]),
+    write: () => undefined,
+  });
+
+  assert.deepEqual(writes, [["notes.txt", "hello"]]);
+});
+
+test("append-text-file appends UTF-8 text to a file", () => {
+  const root = mkdtempSync(join(tmpdir(), "borth-io-"));
+  const path = join(root, "out.txt");
+
+  try {
+    run(`
+      ${JSON.stringify(path)} "hello" write-text-file
+      ${JSON.stringify(path)} " world" append-text-file
+    `, {
+      write: () => undefined,
+    });
+
+    assert.equal(readFileSync(path, "utf8"), "hello world");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("append-text-file can be provided by tests", () => {
+  const appends = [];
+
+  run('"notes.txt" "hello" append-text-file', {
+    appendTextFile: (path, contents) => appends.push([path, contents]),
+    write: () => undefined,
+  });
+
+  assert.deepEqual(appends, [["notes.txt", "hello"]]);
+});
+
+test("text file writes require a path and contents", () => {
+  assert.throws(
+    () => run('"text" write-text-file', { write: () => undefined }),
+    /WRITE_TEXT_FILE requires a value on the stack/,
+  );
+
+  assert.throws(
+    () => run('"path" append-text-file', { write: () => undefined }),
+    /APPEND_TEXT_FILE requires a value on the stack/,
+  );
+});
+
+test("text file writes require strings", () => {
+  assert.throws(
+    () => run('"path" 123 write-text-file', { write: () => undefined }),
+    /WRITE_TEXT_FILE requires strings on the stack/,
+  );
+
+  assert.throws(
+    () => run('"path" 123 append-text-file', { write: () => undefined }),
+    /APPEND_TEXT_FILE requires strings on the stack/,
   );
 });
 

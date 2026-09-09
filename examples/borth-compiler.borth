@@ -2,5 +2,12 @@ import "../lib/lexer.borth"
 import "../lib/parser.borth"
 import "../lib/compiler.borth"
 import "../lib/vm.borth"
+import "../lib/c-emitter.borth"
 
-"20 25 random-between" lex-src parse-tokens "REPL" compile-nodes run-bytecode show "" print print
+# run example file
+# "examples/string-escape.borth" dup read-text-file lex-src parse-tokens swap compile-nodes run-bytecode .s
+
+# run inline code
+#"10 20 +" lex-src parse-tokens "REPL" compile-nodes run-bytecode .s
+1 SKIP_PRELUDE !
+"10 20 +" lex-src parse-tokens "REPL" compile-nodes "program.c" dup "" write-text-file write-c-program

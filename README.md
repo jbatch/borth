@@ -95,6 +95,8 @@ random ( max -- n )
 read-line ( -- string )
 read-int  ( -- number )
 read-text-file ( path -- string )
+write-text-file ( path contents -- )
+append-text-file ( path contents -- )
 file-exist? ( path -- flag )
 env ( name -- value found? )
 cwd ( -- path )
@@ -269,6 +271,14 @@ printf '21\n' | yarn borth -- examples/double-input.borth
 "examples/add.borth" read-text-file print
 ```
 
+`write-text-file` replaces a UTF-8 text file, and `append-text-file` appends to
+one:
+
+```text
+"program.c" "" write-text-file
+"program.c" "int main(void) {\n" append-text-file
+```
+
 Host lookup and path primitives expose small pieces of the host OS environment:
 
 ```text
@@ -363,4 +373,4 @@ declarations, and variable declarations back into the parent compiler state.
 It also loads `prelude.borth` from `cwd` before entry programs unless
 `SKIP_PRELUDE` is set. Known remaining compiler parity work: unresolved
 deferred validation, duplicate import suppression, import cycle detection,
-centralized namespace checks, and string escape handling in the Borth parser.
+and centralized namespace checks.

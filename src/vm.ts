@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import type { Instruction } from "./bytecode.js";
@@ -20,6 +20,8 @@ export type ExecuteOptions = {
   random?: () => number;
   read?: () => string;
   readTextFile?: (path: string) => string;
+  writeTextFile?: (path: string, contents: string) => void;
+  appendTextFile?: (path: string, contents: string) => void;
   write?: (value: Value) => void;
 };
 
@@ -34,6 +36,12 @@ export function execute(
   const read = options.read;
   const readTextFile =
     options.readTextFile ?? ((path: string) => readFileSync(path, "utf8"));
+  const writeTextFile =
+    options.writeTextFile ??
+    ((path: string, contents: string) => writeFileSync(path, contents, "utf8"));
+  const appendTextFile =
+    options.appendTextFile ??
+    ((path: string, contents: string) => appendFileSync(path, contents, "utf8"));
   const write = options.write ?? console.log;
   const state: VmState = {
     ip: 0,
@@ -261,6 +269,20 @@ export function execute(
       case "READ_TEXT_FILE": {
         const path = popString(state, "READ_TEXT_FILE");
         state.stack.push(readTextFile(path));
+        state.ip += 1;
+        break;
+      }
+      case "WRITE_TEXT_FILE": {
+        const contents = popString(state, "WRITE_TEXT_FILE");
+        const path = popString(state, "WRITE_TEXT_FILE");
+        writeTextFile(path, contents);
+        state.ip += 1;
+        break;
+      }
+      case "APPEND_TEXT_FILE": {
+        const contents = popString(state, "APPEND_TEXT_FILE");
+        const path = popString(state, "APPEND_TEXT_FILE");
+        appendTextFile(path, contents);
         state.ip += 1;
         break;
       }

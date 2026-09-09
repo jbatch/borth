@@ -1,5 +1,6 @@
 node_modules/
 dist/
 vscode-borth/*.vsix
+program.c
 
 .DS_Store

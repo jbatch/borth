@@ -8,12 +8,45 @@ import "strings.borth"
   0 1 str-slice "\"" =
 ;
 
-# parser-strip-quotes ( string -- string )
+# parser-decode-string-token ( token -- value )
 #
-# Return the string literal contents without the surrounding quotes.
-# Assumes string starts and ends with double quotes.
-: parser-strip-quotes
-  dup str-len 2 - 1 swap str-slice
+# Return the decoded value for a string token.
+# The input still includes outer quote characters and escape sequences from the
+# source token. Supported escapes intentionally match the TypeScript bootstrap
+# lexer for now:
+#
+#   \" -> "
+#   \\ -> \
+#   \n -> newline
+: parser-decode-string-token
+  # Set up an accumulator and walk the token from index 1 to len - 1 so the
+  # outer quote characters are skipped.
+  "" swap 1
+  loop
+    2dup swap str-len 1 - <
+  while
+    # acc string index
+    2dup 1 str-slice
+    dup "\\" = if
+      # check next char to see what is being escaped
+      # ( acc string index char -- acc string index next-char )
+      drop 1 + 2dup 1 str-slice
+      dup "n" = if drop
+        rot "\n" str-cat -rot
+      else dup "\\" = if drop
+        rot "\\" str-cat -rot
+      else dup "\"" = if drop
+        rot "\"" str-cat -rot
+      else
+        "Unknown escape sequence: \\" swap str-cat panic
+      end end end
+    else
+      # ( acc string index char -- acc string index )
+      3 roll swap str-cat -rot
+    end
+    1 +
+  repeat
+  drop drop
 ;
 
 # parse-token ( tok -- [kind value] )
@@ -31,7 +64,7 @@ import "strings.borth"
   array-new over str-int? if
     "integer" array-push swap str-to-int array-push
   else over parser-is-string? if
-    "string" array-push swap parser-strip-quotes array-push
+    "string" array-push swap parser-decode-string-token array-push
   else
     "word" array-push swap array-push
   end end

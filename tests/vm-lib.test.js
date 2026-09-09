@@ -157,6 +157,31 @@ test("Borth VM executes compiled file and path bytecode", () => {
   );
 });
 
+test("Borth VM executes compiled text file write bytecode", () => {
+  const writes = [];
+  const appends = [];
+
+  assert.deepEqual(
+    outputOf(
+      `
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+        import "lib/vm.borth"
+
+        "\\"notes.txt\\" \\"hello\\" write-text-file \\"notes.txt\\" \\" world\\" append-text-file" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+      `,
+      {
+        writeTextFile: (path, contents) => writes.push([path, contents]),
+        appendTextFile: (path, contents) => appends.push([path, contents]),
+      },
+    ),
+    ["[]"],
+  );
+  assert.deepEqual(writes, [["notes.txt", "hello"]]);
+  assert.deepEqual(appends, [["notes.txt", " world"]]);
+});
+
 test("Borth VM executes compiled host lookup bytecode", () => {
   assert.deepEqual(
     outputOf(

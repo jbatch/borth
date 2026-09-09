@@ -1,0 +1,23 @@
+# First C-backend file emission scaffold.
+#
+# This does not emit C yet. It writes one debug-formatted bytecode instruction
+# per line so the backend path can exercise host file writing while the C output
+# shape is still being designed.
+
+# write-c-program ( instructions file-path -- )
+#
+# Replace/appending setup is owned by the caller for now. This word appends one
+# shown instruction per line to file-path.
+: write-c-program
+    swap
+    0
+    loop
+        2dup swap array-len <
+    while
+        # file-path instructions index instruction
+        2dup array-get show "\n" str-cat
+        3over swap append-text-file
+        1 +
+    repeat
+    drop drop drop
+;

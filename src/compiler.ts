@@ -666,6 +666,10 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "READ_INT" };
     case "read-text-file":
       return { op: "READ_TEXT_FILE" };
+    case "write-text-file":
+      return { op: "WRITE_TEXT_FILE" };
+    case "append-text-file":
+      return { op: "APPEND_TEXT_FILE" };
     case "file-exist?":
       return { op: "FILE_EXISTS" };
     case "env":
