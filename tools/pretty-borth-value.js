@@ -135,7 +135,17 @@ class Parser {
   }
 }
 
+const raw = process.argv.includes("--raw");
+
 function formatValue(value, indent = 0) {
+  if (!raw) {
+    const formattedKnownShape = formatKnownShape(value, indent);
+
+    if (formattedKnownShape !== undefined) {
+      return formattedKnownShape;
+    }
+  }
+
   if (!Array.isArray(value)) {
     return formatScalar(value);
   }
@@ -150,13 +160,242 @@ function formatValue(value, indent = 0) {
 
   const spaces = " ".repeat(indent);
   const childSpaces = " ".repeat(indent + 2);
-  const lines = value.map((item) => `${childSpaces}${formatValue(item, indent + 2)}`);
+  const lines = value.map(
+    (item) => `${childSpaces}${formatValue(item, indent + 2)}`,
+  );
 
   return ["[", ...lines, `${spaces}]`].join("\n");
 }
 
 function isSmallFlatArray(value) {
   return value.length <= 3 && value.every((item) => !Array.isArray(item));
+}
+
+function formatKnownShape(value, indent) {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  if (isNode(value)) {
+    return formatNode(value);
+  }
+
+  if (isSpan(value)) {
+    return formatSpan(value);
+  }
+
+  if (isInstruction(value)) {
+    return formatInstruction(value);
+  }
+
+  if (isCompilerState(value)) {
+    return formatCompilerState(value, indent);
+  }
+
+  if (isVmState(value)) {
+    return formatVmState(value, indent);
+  }
+
+  return undefined;
+}
+
+function isNode(value) {
+  return (
+    value.length === 2 &&
+    typeof value[0] === "string" &&
+    ["integer", "string", "word"].includes(value[0])
+  );
+}
+
+function formatNode(value) {
+  const [kind, payload] = value;
+
+  if (kind === "word") {
+    return `<word ${formatScalar(payload)}>`;
+  }
+
+  return `<${kind} ${formatScalar(payload)}>`;
+}
+
+function isSpan(value) {
+  return (
+    value.length === 6 &&
+    value[0] === "span" &&
+    typeof value[1] === "string" &&
+    value.slice(2).every((item) => typeof item === "number")
+  );
+}
+
+function formatSpan(value) {
+  const [, filePath, startLine, startColumn, endLine, endColumn] = value;
+
+  if (startLine === endLine) {
+    return `<span ${filePath}:${startLine}:${startColumn}-${endColumn}>`;
+  }
+
+  return `<span ${filePath}:${startLine}:${startColumn}-${endLine}:${endColumn}>`;
+}
+
+function isInstruction(value) {
+  return (
+    value.length >= 1 &&
+    typeof value[0] === "string" &&
+    [
+      "PUSH",
+      "ALLOC_VARIABLE",
+      "DROP",
+      "DUP",
+      "SWAP",
+      "OVER",
+      "ROT",
+      "ROLL",
+      "ROLL_REVERSE",
+      "ADD",
+      "SUB",
+      "MUL",
+      "DIV",
+      "MOD",
+      "EQ",
+      "LT",
+      "GT",
+      "STR_LEN",
+      "STR_CAT",
+      "STR_SLICE",
+      "STR_INDEX_OF",
+      "SHOW",
+      "ARRAY_NEW",
+      "ARRAY_PUSH",
+      "ARRAY_LEN",
+      "ARRAY_GET",
+      "FETCH",
+      "STORE",
+      "RANDOM",
+      "READ_LINE",
+      "READ_INT",
+      "READ_TEXT_FILE",
+      "WRITE_TEXT_FILE",
+      "APPEND_TEXT_FILE",
+      "FILE_EXISTS",
+      "ENV",
+      "CWD",
+      "PATH_DIRNAME",
+      "PATH_RESOLVE",
+      "PRINT",
+      "PRINT_STACK",
+      "PANIC",
+      "CALL",
+      "JUMP",
+      "JUMP_IF_FALSE",
+      "RET",
+      "HALT",
+    ].includes(value[0])
+  );
+}
+
+function formatInstruction(value) {
+  const [op, ...args] = value;
+
+  if (args.length === 0) {
+    return `<${op}>`;
+  }
+
+  return `<${op} ${args.map((item) => formatValue(item)).join(" ")}>`;
+}
+
+function isCompilerState(value) {
+  return (
+    value.length === 9 &&
+    typeof value[0] === "string" &&
+    Array.isArray(value[1]) &&
+    typeof value[2] === "number" &&
+    Array.isArray(value[3]) &&
+    typeof value[4] === "number" &&
+    Array.isArray(value[5]) &&
+    Array.isArray(value[6]) &&
+    Array.isArray(value[7]) &&
+    Array.isArray(value[8])
+  );
+}
+
+function formatCompilerState(value, indent) {
+  const [
+    filePath,
+    nodes,
+    nodeIndex,
+    instructions,
+    allowTopLevelCode,
+    blockStack,
+    words,
+    variables,
+    deferredCalls,
+  ] = value;
+
+  return formatObjectLike(
+    "compiler-state",
+    [
+      ["file", formatScalar(filePath)],
+      ["node-index", `${nodeIndex}/${nodes.length}`],
+      ["instructions", `<array ${instructions.length}>`],
+      ["allow-top-level-code", formatScalar(allowTopLevelCode)],
+      ["block-stack", formatValue(blockStack, indent + 2)],
+      ["words", formatMapSummary(words)],
+      ["variables", formatMapSummary(variables)],
+      ["deferred-calls", formatMapSummary(deferredCalls)],
+    ],
+    indent,
+  );
+}
+
+function isVmState(value) {
+  return (
+    value.length === 5 &&
+    Array.isArray(value[0]) &&
+    typeof value[1] === "number" &&
+    Array.isArray(value[2]) &&
+    Array.isArray(value[3]) &&
+    Array.isArray(value[4])
+  );
+}
+
+function formatVmState(value, indent) {
+  const [instructions, ip, stack, callStack, memory] = value;
+
+  return formatObjectLike(
+    "vm-state",
+    [
+      ["ip", `${ip}/${instructions.length}`],
+      ["stack", formatValue(stack, indent + 2)],
+      ["call-stack", formatValue(callStack, indent + 2)],
+      ["memory", formatValue(memory, indent + 2)],
+    ],
+    indent,
+  );
+}
+
+function formatObjectLike(name, fields, indent) {
+  const spaces = " ".repeat(indent);
+  const childSpaces = " ".repeat(indent + 2);
+  const lines = fields.map(
+    ([field, text]) => `${childSpaces}${field}: ${text}`,
+  );
+
+  return [`<${name}`, ...lines, `${spaces}>`].join("\n");
+}
+
+function formatMapSummary(value) {
+  if (!Array.isArray(value)) {
+    return formatValue(value);
+  }
+
+  const keys = value
+    .filter((entry) => Array.isArray(entry) && entry.length === 2)
+    .map((entry) => formatScalar(entry[0]));
+
+  if (keys.length === 0) {
+    return "<map 0>";
+  }
+
+  return `<map ${keys.length}: ${keys.join(" ")}>`;
 }
 
 function formatScalar(value) {
@@ -185,8 +424,10 @@ try {
 }
 
 async function readInput() {
-  if (process.argv.length > 2) {
-    return process.argv.slice(2).join(" ");
+  const valueArgs = process.argv.slice(2).filter((arg) => arg !== "--raw");
+
+  if (valueArgs.length > 0) {
+    return valueArgs.join(" ");
   }
 
   if (!process.stdin.isTTY) {

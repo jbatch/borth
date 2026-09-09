@@ -62,6 +62,20 @@ Known remaining compiler/runtime parity work:
   syntax, and built-in words
 - improve source-aware compiler errors
 
+Current source-location direction:
+
+- TypeScript lexer tokens carry source spans with offsets and 1-based
+  line/column positions.
+- TypeScript AST nodes copy the token span that produced them.
+- Source paths are threaded separately through the runner/compiler instead of
+  being duplicated into every token and node.
+- Compiler errors tied to a current node should report `file:line:column`.
+- TypeScript bytecode instructions may carry optional source metadata so runtime
+  VM errors can point back to the source token that emitted the current
+  instruction.
+- The Borth implementation should initially mirror this as parallel source-span
+  data rather than bloating every ordinary array-shaped token or node.
+
 ## Host Language
 
 Use TypeScript for the initial implementation.

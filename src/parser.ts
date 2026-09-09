@@ -15,6 +15,7 @@ function parseToken(token: Token): AstNode {
     return {
       kind: "string",
       value: token.value,
+      span: token.span,
     };
   }
 
@@ -22,11 +23,13 @@ function parseToken(token: Token): AstNode {
     return {
       kind: "integer",
       value: Number.parseInt(token.lexeme, 10),
+      span: token.span,
     };
   }
 
   return {
     kind: "word",
     name: token.lexeme,
+    span: token.span,
   };
 }

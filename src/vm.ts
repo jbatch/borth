@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs
 import { dirname, resolve } from "node:path";
 
 import type { Instruction } from "./bytecode.js";
+import { formatSourceLocation } from "./source-location.js";
 import type { Address, ArrayValue, Value } from "./value.js";
 
 const integerInputPattern = /^-?\d+$/;
@@ -53,285 +54,299 @@ export function execute(
   while (state.ip < instructions.length) {
     const instruction = instructions[state.ip];
 
-    switch (instruction.op) {
-      case "PUSH":
-        state.stack.push(instruction.value);
-        state.ip += 1;
-        break;
-      case "ALLOC_VARIABLE":
-        state.memory.push(0);
-        state.ip += 1;
-        break;
-      case "DROP":
-        pop(state, "DROP");
-        state.ip += 1;
-        break;
-      case "DUP": {
-        const value = peek(state, "DUP");
-        state.stack.push(value);
-        state.ip += 1;
-        break;
-      }
-      case "SWAP": {
-        requireStackDepth(state, "SWAP", 2);
-        const b = pop(state, "SWAP");
-        const a = pop(state, "SWAP");
-        state.stack.push(b, a);
-        state.ip += 1;
-        break;
-      }
-      case "OVER": {
-        requireStackDepth(state, "OVER", 2);
-        state.stack.push(state.stack[state.stack.length - 2]);
-        state.ip += 1;
-        break;
-      }
-      case "ROT": {
-        requireStackDepth(state, "ROT", 3);
-        const c = pop(state, "ROT");
-        const b = pop(state, "ROT");
-        const a = pop(state, "ROT");
-        state.stack.push(b, c, a);
-        state.ip += 1;
-        break;
-      }
-      case "ROLL": {
-        const depth = popNonNegativeInteger(state, "ROLL", "depth");
-        rollStack(state, "ROLL", depth);
-        state.ip += 1;
-        break;
-      }
-      case "ROLL_REVERSE": {
-        const depth = popNonNegativeInteger(state, "-ROLL", "depth");
-        reverseRollStack(state, "-ROLL", depth);
-        state.ip += 1;
-        break;
-      }
-      case "ADD": {
-        binaryNumberOp(state, "ADD", (a, b) => a + b);
-        state.ip += 1;
-        break;
-      }
-      case "SUB": {
-        binaryNumberOp(state, "SUB", (a, b) => a - b);
-        state.ip += 1;
-        break;
-      }
-      case "MUL": {
-        binaryNumberOp(state, "MUL", (a, b) => a * b);
-        state.ip += 1;
-        break;
-      }
-      case "DIV": {
-        binaryNumberOp(state, "DIV", (a, b) => {
-          if (b === 0) {
-            throw new Error("DIV cannot divide by zero");
-          }
-
-          return Math.trunc(a / b);
-        });
-        state.ip += 1;
-        break;
-      }
-      case "MOD": {
-        binaryNumberOp(state, "MOD", (a, b) => {
-          if (b === 0) {
-            throw new Error("MOD cannot divide by zero");
-          }
-
-          return a % b;
-        });
-        state.ip += 1;
-        break;
-      }
-      case "EQ": {
-        binaryEqualOp(state);
-        state.ip += 1;
-        break;
-      }
-      case "LT": {
-        binaryNumberOp(state, "LT", (a, b) => bool(a < b));
-        state.ip += 1;
-        break;
-      }
-      case "GT": {
-        binaryNumberOp(state, "GT", (a, b) => bool(a > b));
-        state.ip += 1;
-        break;
-      }
-      case "STR_LEN": {
-        const value = popString(state, "STR_LEN");
-        state.stack.push(value.length);
-        state.ip += 1;
-        break;
-      }
-      case "STR_CAT": {
-        binaryStringOp(state, "STR_CAT", (a, b) => a + b);
-        state.ip += 1;
-        break;
-      }
-      case "STR_SLICE": {
-        const length = popNonNegativeInteger(state, "STR_SLICE", "length");
-        const start = popNonNegativeInteger(state, "STR_SLICE", "start");
-        const value = popString(state, "STR_SLICE");
-        state.stack.push(sliceString(value, start, length));
-        state.ip += 1;
-        break;
-      }
-      case "STR_INDEX_OF": {
-        const start = popNonNegativeInteger(state, "STR_INDEX_OF", "start");
-        const needle = popString(state, "STR_INDEX_OF");
-        const value = popString(state, "STR_INDEX_OF");
-        state.stack.push(indexOfString(value, needle, start));
-        state.ip += 1;
-        break;
-      }
-      case "SHOW": {
-        state.stack.push(formatValueForStack(pop(state, "SHOW")));
-        state.ip += 1;
-        break;
-      }
-      case "ARRAY_NEW":
-        state.stack.push({ kind: "array", items: [] });
-        state.ip += 1;
-        break;
-      case "ARRAY_PUSH": {
-        const value = pop(state, "ARRAY_PUSH");
-        const array = popArray(state, "ARRAY_PUSH");
-        state.stack.push({ kind: "array", items: [...array.items, value] });
-        state.ip += 1;
-        break;
-      }
-      case "ARRAY_LEN": {
-        const array = popArray(state, "ARRAY_LEN");
-        state.stack.push(array.items.length);
-        state.ip += 1;
-        break;
-      }
-      case "ARRAY_GET": {
-        const index = popNonNegativeInteger(state, "ARRAY_GET", "index");
-        const array = popArray(state, "ARRAY_GET");
-        state.stack.push(getArrayValue(array, index));
-        state.ip += 1;
-        break;
-      }
-      case "FETCH": {
-        const address = popAddress(state, "FETCH");
-        state.stack.push(loadMemory(state, address, "FETCH"));
-        state.ip += 1;
-        break;
-      }
-      case "STORE": {
-        const address = popAddress(state, "STORE");
-        const value = pop(state, "STORE");
-        storeMemory(state, address, value, "STORE");
-        state.ip += 1;
-        break;
-      }
-      case "RANDOM": {
-        const max = popNumber(state, "RANDOM");
-        state.stack.push(randomInteger(max, random));
-        state.ip += 1;
-        break;
-      }
-      case "CALL":
-        state.callStack.push(state.ip + 1);
-        state.ip = instruction.target;
-        break;
-      case "JUMP":
-        state.ip = instruction.target;
-        break;
-      case "JUMP_IF_FALSE": {
-        const value = popNumber(state, "JUMP_IF_FALSE");
-        state.ip = value === 0 ? instruction.target : state.ip + 1;
-        break;
-      }
-      case "PRINT":
-        write(pop(state, "PRINT"));
-        state.ip += 1;
-        break;
-      case "PRINT_STACK":
-        write(formatStack(state.stack));
-        state.ip += 1;
-        break;
-      case "PANIC": {
-        const message = popString(state, "PANIC");
-        throw new Error(message);
-      }
-      case "READ_LINE":
-        state.stack.push(readInput(read, "READ_LINE"));
-        state.ip += 1;
-        break;
-      case "READ_INT":
-        state.stack.push(parseInputInteger(readInput(read, "READ_INT")));
-        state.ip += 1;
-        break;
-      case "READ_TEXT_FILE": {
-        const path = popString(state, "READ_TEXT_FILE");
-        state.stack.push(readTextFile(path));
-        state.ip += 1;
-        break;
-      }
-      case "WRITE_TEXT_FILE": {
-        const contents = popString(state, "WRITE_TEXT_FILE");
-        const path = popString(state, "WRITE_TEXT_FILE");
-        writeTextFile(path, contents);
-        state.ip += 1;
-        break;
-      }
-      case "APPEND_TEXT_FILE": {
-        const contents = popString(state, "APPEND_TEXT_FILE");
-        const path = popString(state, "APPEND_TEXT_FILE");
-        appendTextFile(path, contents);
-        state.ip += 1;
-        break;
-      }
-      case "FILE_EXISTS": {
-        const path = popString(state, "FILE_EXISTS");
-        state.stack.push(bool(fileExists(path)));
-        state.ip += 1;
-        break;
-      }
-      case "ENV": {
-        const name = popString(state, "ENV");
-        const value = env(name);
-        state.stack.push(value ?? "", bool(value !== undefined));
-        state.ip += 1;
-        break;
-      }
-      case "CWD":
-        state.stack.push(cwd());
-        state.ip += 1;
-        break;
-      case "PATH_DIRNAME": {
-        const path = popString(state, "PATH_DIRNAME");
-        state.stack.push(dirname(path));
-        state.ip += 1;
-        break;
-      }
-      case "PATH_RESOLVE": {
-        const path = popString(state, "PATH_RESOLVE");
-        const base = popString(state, "PATH_RESOLVE");
-        state.stack.push(resolve(base, path));
-        state.ip += 1;
-        break;
-      }
-      case "RET": {
-        const returnAddress = state.callStack.pop();
-
-        if (returnAddress === undefined) {
-          throw new Error("RET requires a return address");
+    try {
+      switch (instruction.op) {
+        case "PUSH":
+          state.stack.push(instruction.value);
+          state.ip += 1;
+          break;
+        case "ALLOC_VARIABLE":
+          state.memory.push(0);
+          state.ip += 1;
+          break;
+        case "DROP":
+          pop(state, "DROP");
+          state.ip += 1;
+          break;
+        case "DUP": {
+          const value = peek(state, "DUP");
+          state.stack.push(value);
+          state.ip += 1;
+          break;
         }
+        case "SWAP": {
+          requireStackDepth(state, "SWAP", 2);
+          const b = pop(state, "SWAP");
+          const a = pop(state, "SWAP");
+          state.stack.push(b, a);
+          state.ip += 1;
+          break;
+        }
+        case "OVER": {
+          requireStackDepth(state, "OVER", 2);
+          state.stack.push(state.stack[state.stack.length - 2]);
+          state.ip += 1;
+          break;
+        }
+        case "ROT": {
+          requireStackDepth(state, "ROT", 3);
+          const c = pop(state, "ROT");
+          const b = pop(state, "ROT");
+          const a = pop(state, "ROT");
+          state.stack.push(b, c, a);
+          state.ip += 1;
+          break;
+        }
+        case "ROLL": {
+          const depth = popNonNegativeInteger(state, "ROLL", "depth");
+          rollStack(state, "ROLL", depth);
+          state.ip += 1;
+          break;
+        }
+        case "ROLL_REVERSE": {
+          const depth = popNonNegativeInteger(state, "-ROLL", "depth");
+          reverseRollStack(state, "-ROLL", depth);
+          state.ip += 1;
+          break;
+        }
+        case "ADD": {
+          binaryNumberOp(state, "ADD", (a, b) => a + b);
+          state.ip += 1;
+          break;
+        }
+        case "SUB": {
+          binaryNumberOp(state, "SUB", (a, b) => a - b);
+          state.ip += 1;
+          break;
+        }
+        case "MUL": {
+          binaryNumberOp(state, "MUL", (a, b) => a * b);
+          state.ip += 1;
+          break;
+        }
+        case "DIV": {
+          binaryNumberOp(state, "DIV", (a, b) => {
+            if (b === 0) {
+              throw new Error("DIV cannot divide by zero");
+            }
 
-        state.ip = returnAddress;
-        break;
+            return Math.trunc(a / b);
+          });
+          state.ip += 1;
+          break;
+        }
+        case "MOD": {
+          binaryNumberOp(state, "MOD", (a, b) => {
+            if (b === 0) {
+              throw new Error("MOD cannot divide by zero");
+            }
+
+            return a % b;
+          });
+          state.ip += 1;
+          break;
+        }
+        case "EQ": {
+          binaryEqualOp(state);
+          state.ip += 1;
+          break;
+        }
+        case "LT": {
+          binaryNumberOp(state, "LT", (a, b) => bool(a < b));
+          state.ip += 1;
+          break;
+        }
+        case "GT": {
+          binaryNumberOp(state, "GT", (a, b) => bool(a > b));
+          state.ip += 1;
+          break;
+        }
+        case "STR_LEN": {
+          const value = popString(state, "STR_LEN");
+          state.stack.push(value.length);
+          state.ip += 1;
+          break;
+        }
+        case "STR_CAT": {
+          binaryStringOp(state, "STR_CAT", (a, b) => a + b);
+          state.ip += 1;
+          break;
+        }
+        case "STR_SLICE": {
+          const length = popNonNegativeInteger(state, "STR_SLICE", "length");
+          const start = popNonNegativeInteger(state, "STR_SLICE", "start");
+          const value = popString(state, "STR_SLICE");
+          state.stack.push(sliceString(value, start, length));
+          state.ip += 1;
+          break;
+        }
+        case "STR_INDEX_OF": {
+          const start = popNonNegativeInteger(state, "STR_INDEX_OF", "start");
+          const needle = popString(state, "STR_INDEX_OF");
+          const value = popString(state, "STR_INDEX_OF");
+          state.stack.push(indexOfString(value, needle, start));
+          state.ip += 1;
+          break;
+        }
+        case "SHOW": {
+          state.stack.push(formatValueForStack(pop(state, "SHOW")));
+          state.ip += 1;
+          break;
+        }
+        case "ARRAY_NEW":
+          state.stack.push({ kind: "array", items: [] });
+          state.ip += 1;
+          break;
+        case "ARRAY_PUSH": {
+          const value = pop(state, "ARRAY_PUSH");
+          const array = popArray(state, "ARRAY_PUSH");
+          state.stack.push({ kind: "array", items: [...array.items, value] });
+          state.ip += 1;
+          break;
+        }
+        case "ARRAY_LEN": {
+          const array = popArray(state, "ARRAY_LEN");
+          state.stack.push(array.items.length);
+          state.ip += 1;
+          break;
+        }
+        case "ARRAY_GET": {
+          const index = popNonNegativeInteger(state, "ARRAY_GET", "index");
+          const array = popArray(state, "ARRAY_GET");
+          state.stack.push(getArrayValue(array, index));
+          state.ip += 1;
+          break;
+        }
+        case "FETCH": {
+          const address = popAddress(state, "FETCH");
+          state.stack.push(loadMemory(state, address, "FETCH"));
+          state.ip += 1;
+          break;
+        }
+        case "STORE": {
+          const address = popAddress(state, "STORE");
+          const value = pop(state, "STORE");
+          storeMemory(state, address, value, "STORE");
+          state.ip += 1;
+          break;
+        }
+        case "RANDOM": {
+          const max = popNumber(state, "RANDOM");
+          state.stack.push(randomInteger(max, random));
+          state.ip += 1;
+          break;
+        }
+        case "CALL":
+          state.callStack.push(state.ip + 1);
+          state.ip = instruction.target;
+          break;
+        case "JUMP":
+          state.ip = instruction.target;
+          break;
+        case "JUMP_IF_FALSE": {
+          const value = popNumber(state, "JUMP_IF_FALSE");
+          state.ip = value === 0 ? instruction.target : state.ip + 1;
+          break;
+        }
+        case "PRINT":
+          write(pop(state, "PRINT"));
+          state.ip += 1;
+          break;
+        case "PRINT_STACK":
+          write(formatStack(state.stack));
+          state.ip += 1;
+          break;
+        case "PANIC": {
+          const message = popString(state, "PANIC");
+          throw new Error(message);
+        }
+        case "READ_LINE":
+          state.stack.push(readInput(read, "READ_LINE"));
+          state.ip += 1;
+          break;
+        case "READ_INT":
+          state.stack.push(parseInputInteger(readInput(read, "READ_INT")));
+          state.ip += 1;
+          break;
+        case "READ_TEXT_FILE": {
+          const path = popString(state, "READ_TEXT_FILE");
+          state.stack.push(readTextFile(path));
+          state.ip += 1;
+          break;
+        }
+        case "WRITE_TEXT_FILE": {
+          const contents = popString(state, "WRITE_TEXT_FILE");
+          const path = popString(state, "WRITE_TEXT_FILE");
+          writeTextFile(path, contents);
+          state.ip += 1;
+          break;
+        }
+        case "APPEND_TEXT_FILE": {
+          const contents = popString(state, "APPEND_TEXT_FILE");
+          const path = popString(state, "APPEND_TEXT_FILE");
+          appendTextFile(path, contents);
+          state.ip += 1;
+          break;
+        }
+        case "FILE_EXISTS": {
+          const path = popString(state, "FILE_EXISTS");
+          state.stack.push(bool(fileExists(path)));
+          state.ip += 1;
+          break;
+        }
+        case "ENV": {
+          const name = popString(state, "ENV");
+          const value = env(name);
+          state.stack.push(value ?? "", bool(value !== undefined));
+          state.ip += 1;
+          break;
+        }
+        case "CWD":
+          state.stack.push(cwd());
+          state.ip += 1;
+          break;
+        case "PATH_DIRNAME": {
+          const path = popString(state, "PATH_DIRNAME");
+          state.stack.push(dirname(path));
+          state.ip += 1;
+          break;
+        }
+        case "PATH_RESOLVE": {
+          const path = popString(state, "PATH_RESOLVE");
+          const base = popString(state, "PATH_RESOLVE");
+          state.stack.push(resolve(base, path));
+          state.ip += 1;
+          break;
+        }
+        case "RET": {
+          const returnAddress = state.callStack.pop();
+
+          if (returnAddress === undefined) {
+            throw new Error("RET requires a return address");
+          }
+
+          state.ip = returnAddress;
+          break;
+        }
+        case "HALT":
+          return state;
       }
-      case "HALT":
-        return state;
+    } catch (error) {
+      throw runtimeError(instruction, error);
     }
   }
 
   return state;
+}
+
+function runtimeError(instruction: Instruction, error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (instruction.source === undefined) {
+    return error instanceof Error ? error : new Error(message);
+  }
+
+  return new Error(`${formatSourceLocation(instruction.source)}: ${message}`);
 }
 
 function readInput(read: (() => string) | undefined, op: string): string {

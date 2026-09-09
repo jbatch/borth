@@ -1,5 +1,9 @@
 import type { AstNode, Program, Word } from "./ast.js";
 import type { Instruction } from "./bytecode.js";
+import {
+  formatSourceLocation as formatInstructionSourceLocation,
+  type InstructionSource,
+} from "./source-location.js";
 
 type IfFrame = {
   falseJumpIndex: number;
@@ -57,23 +61,23 @@ export function compileProgram(
     const node = program.body[index];
 
     if (isWord(node, ":")) {
-      index = compileDefinition(state, program.body, index);
+      index = compileDefinition(state, program.body, index, options);
     } else if (isWord(node, "variable")) {
-      index = compileVariable(state, program.body, index);
+      index = compileVariable(state, program.body, index, options);
     } else if (isDeferredDeclaration(node)) {
-      index = compileDeferred(state, program.body, index);
+      index = compileDeferred(state, program.body, index, options);
     } else if (isWord(node, "import")) {
-      index = compileImport(state, program.body, index, options.importModule);
+      index = compileImport(state, program.body, index, options);
     } else if (!options.allowTopLevelCode) {
-      throw new Error(
-        `imported module cannot contain top-level executable code: ${formatSourceLocation(
-          options.sourcePath,
-          index,
+      throw compileError(
+        options,
+        node,
+        `imported module cannot contain top-level executable code: ${formatNode(
           node,
         )}`,
       );
     } else {
-      compileNode(state, node);
+      compileNode(state, node, options);
     }
   }
 }
@@ -101,27 +105,33 @@ function compileImport(
   state: CompilerState,
   nodes: AstNode[],
   importIndex: number,
-  importModule: ((path: string) => void) | undefined,
+  options: CompileProgramOptions,
 ): number {
+  const importNode = nodes[importIndex];
+
   if (state.blockStack.length > 0) {
-    throw new Error("imports cannot appear inside control flow");
+    throw compileError(
+      options,
+      importNode,
+      "imports cannot appear inside control flow",
+    );
   }
 
   const pathNode = nodes[importIndex + 1];
 
   if (pathNode === undefined) {
-    throw new Error("import requires a path string");
+    throw compileError(options, importNode, "import requires a path string");
   }
 
   if (pathNode.kind !== "string") {
-    throw new Error("import path must be a string");
+    throw compileError(options, pathNode, "import path must be a string");
   }
 
-  if (importModule === undefined) {
-    throw new Error("import requires a module loader");
+  if (options.importModule === undefined) {
+    throw compileError(options, importNode, "import requires a module loader");
   }
 
-  importModule(pathNode.value);
+  options.importModule(pathNode.value);
 
   return importIndex + 1;
 }
@@ -130,39 +140,46 @@ function compileDefinition(
   state: CompilerState,
   nodes: AstNode[],
   colonIndex: number,
+  options: CompileProgramOptions,
 ): number {
+  const colonNode = nodes[colonIndex];
+
   if (state.blockStack.length > 0) {
-    throw new Error("definitions cannot appear inside control flow");
+    throw compileError(
+      options,
+      colonNode,
+      "definitions cannot appear inside control flow",
+    );
   }
 
   const nameNode = nodes[colonIndex + 1];
 
   if (nameNode === undefined) {
-    throw new Error(": requires a word name");
+    throw compileError(options, colonNode, ": requires a word name");
   }
 
   if (nameNode.kind !== "word") {
-    throw new Error("definition name must be a word");
+    throw compileError(options, nameNode, "definition name must be a word");
   }
 
   const name = nameNode.name;
 
   if (isReservedWord(name)) {
-    throw new Error(`cannot define reserved word: ${name}`);
+    throw compileError(options, nameNode, `cannot define reserved word: ${name}`);
   }
 
   if (state.variables.has(name)) {
-    throw new Error(`word already defined: ${name}`);
+    throw compileError(options, nameNode, `word already defined: ${name}`);
   }
 
   const previousDefinition = state.definitions.get(name);
 
   if (previousDefinition !== undefined && previousDefinition !== -1) {
-    throw new Error(`word already defined: ${name}`);
+    throw compileError(options, nameNode, `word already defined: ${name}`);
   }
 
   const skipDefinitionJumpIndex = state.instructions.length;
-  state.instructions.push({ op: "JUMP", target: -1 });
+  state.instructions.push(withSource({ op: "JUMP", target: -1 }, colonNode, options));
   const definitionStart = state.instructions.length;
   state.definitions.set(name, definitionStart);
   patchDeferredCalls(state, name, definitionStart);
@@ -172,73 +189,98 @@ function compileDefinition(
 
     if (isWord(node, ";")) {
       if (state.ifStack.length > 0) {
-        throw new Error(`definition ${name} has if without matching end`);
+        throw compileError(
+          options,
+          node,
+          `definition ${name} has if without matching end`,
+        );
       }
 
       if (state.loopStack.length > 0) {
-        throw new Error(
+        throw compileError(
+          options,
+          node,
           `definition ${name} has loop without matching until or repeat`,
         );
       }
 
-      state.instructions.push({ op: "RET" });
+      state.instructions.push(withSource({ op: "RET" }, node, options));
       patchJump(state, skipDefinitionJumpIndex, state.instructions.length);
       return index;
     }
 
     if (isWord(node, ":")) {
-      throw new Error("nested definitions are not supported");
+      throw compileError(options, node, "nested definitions are not supported");
     }
 
     if (isWord(node, "variable")) {
-      throw new Error("variable declarations are only supported at top level");
+      throw compileError(
+        options,
+        node,
+        "variable declarations are only supported at top level",
+      );
     }
 
     if (isDeferredDeclaration(node)) {
-      throw new Error("deferred declarations are only supported at top level");
+      throw compileError(
+        options,
+        node,
+        "deferred declarations are only supported at top level",
+      );
     }
 
     if (isWord(node, "import")) {
-      throw new Error("imports are only supported at top level");
+      throw compileError(
+        options,
+        node,
+        "imports are only supported at top level",
+      );
     }
 
-    compileNode(state, node);
+    compileNode(state, node, options);
   }
 
-  throw new Error(`definition ${name} without closing ;`);
+  throw compileError(options, colonNode, `definition ${name} without closing ;`);
 }
 
 function compileVariable(
   state: CompilerState,
   nodes: AstNode[],
   variableIndex: number,
+  options: CompileProgramOptions,
 ): number {
+  const variableNode = nodes[variableIndex];
+
   if (state.blockStack.length > 0) {
-    throw new Error("variable declarations cannot appear inside control flow");
+    throw compileError(
+      options,
+      variableNode,
+      "variable declarations cannot appear inside control flow",
+    );
   }
 
   const nameNode = nodes[variableIndex + 1];
 
   if (nameNode === undefined) {
-    throw new Error("variable requires a name");
+    throw compileError(options, variableNode, "variable requires a name");
   }
 
   if (nameNode.kind !== "word") {
-    throw new Error("variable name must be a word");
+    throw compileError(options, nameNode, "variable name must be a word");
   }
 
   const name = nameNode.name;
 
   if (isReservedWord(name)) {
-    throw new Error(`cannot define reserved word: ${name}`);
+    throw compileError(options, nameNode, `cannot define reserved word: ${name}`);
   }
 
   if (isUserWordNameTaken(state, name)) {
-    throw new Error(`word already defined: ${name}`);
+    throw compileError(options, nameNode, `word already defined: ${name}`);
   }
 
   state.variables.set(name, state.variables.size);
-  state.instructions.push({ op: "ALLOC_VARIABLE" });
+  state.instructions.push(withSource({ op: "ALLOC_VARIABLE" }, nameNode, options));
 
   return variableIndex + 1;
 }
@@ -247,29 +289,40 @@ function compileDeferred(
   state: CompilerState,
   nodes: AstNode[],
   deferredIndex: number,
+  options: CompileProgramOptions,
 ): number {
+  const deferredNode = nodes[deferredIndex];
+
   if (state.blockStack.length > 0) {
-    throw new Error("deferred declarations cannot appear inside control flow");
+    throw compileError(
+      options,
+      deferredNode,
+      "deferred declarations cannot appear inside control flow",
+    );
   }
 
   const nameNode = nodes[deferredIndex + 1];
 
   if (nameNode === undefined) {
-    throw new Error("deferred requires a word name");
+    throw compileError(options, deferredNode, "deferred requires a word name");
   }
 
   if (nameNode.kind !== "word") {
-    throw new Error("deferred name must be a word");
+    throw compileError(options, nameNode, "deferred name must be a word");
   }
 
   const name = nameNode.name;
 
   if (isReservedWord(name)) {
-    throw new Error(`cannot declare reserved word as deferred: ${name}`);
+    throw compileError(
+      options,
+      nameNode,
+      `cannot declare reserved word as deferred: ${name}`,
+    );
   }
 
   if (isUserWordNameTaken(state, name)) {
-    throw new Error(`word already defined: ${name}`);
+    throw compileError(options, nameNode, `word already defined: ${name}`);
   }
 
   state.definitions.set(name, -1);
@@ -278,96 +331,126 @@ function compileDeferred(
   return deferredIndex + 1;
 }
 
-function compileNode(state: CompilerState, node: AstNode): void {
+function compileNode(
+  state: CompilerState,
+  node: AstNode,
+  options: CompileProgramOptions,
+): void {
   switch (node.kind) {
     case "integer":
-      state.instructions.push({ op: "PUSH", value: node.value });
+      state.instructions.push(withSource({ op: "PUSH", value: node.value }, node, options));
       break;
     case "string":
-      state.instructions.push({ op: "PUSH", value: node.value });
+      state.instructions.push(withSource({ op: "PUSH", value: node.value }, node, options));
       break;
     case "word":
-      if (!compileControlWord(state, node.name)) {
-        state.instructions.push(compileWord(state, node.name));
+      if (!compileControlWord(state, node, options)) {
+        state.instructions.push(compileWord(state, node, options));
       }
       break;
   }
 }
 
-function compileControlWord(state: CompilerState, name: string): boolean {
-  switch (name) {
+function compileControlWord(
+  state: CompilerState,
+  node: Word,
+  options: CompileProgramOptions,
+): boolean {
+  switch (node.name) {
     case "if":
-      compileIf(state);
+      compileIf(state, node, options);
       return true;
     case "else":
-      compileElse(state);
+      compileElse(state, node, options);
       return true;
     case "end":
-      compileEnd(state);
+      compileEnd(state, node, options);
       return true;
     case "loop":
-      compileLoop(state);
+      compileLoop(state, node, options);
       return true;
     case "while":
-      compileWhile(state);
+      compileWhile(state, node, options);
       return true;
     case "until":
-      compileUntil(state);
+      compileUntil(state, node, options);
       return true;
     case "repeat":
-      compileRepeat(state);
+      compileRepeat(state, node, options);
       return true;
     case "import":
-      throw new Error("imports are only supported at top level");
+      throw compileError(options, node, "imports are only supported at top level");
     case "deferred":
-      throw new Error("deferred declarations are only supported at top level");
+      throw compileError(
+        options,
+        node,
+        "deferred declarations are only supported at top level",
+      );
     case ";":
-      throw new Error("; without matching :");
+      throw compileError(options, node, "; without matching :");
     default:
       return false;
   }
 }
 
-function compileIf(state: CompilerState): void {
+function compileIf(
+  state: CompilerState,
+  node: AstNode,
+  options: CompileProgramOptions,
+): void {
   state.blockStack.push("if");
   state.ifStack.push({
     falseJumpIndex: state.instructions.length,
     hasElse: false,
   });
-  state.instructions.push({ op: "JUMP_IF_FALSE", target: -1 });
+  state.instructions.push(
+    withSource({ op: "JUMP_IF_FALSE", target: -1 }, node, options),
+  );
 }
 
-function compileElse(state: CompilerState): void {
+function compileElse(
+  state: CompilerState,
+  node: AstNode,
+  options: CompileProgramOptions,
+): void {
   requireCurrentBlock(
     state,
     "if",
     "else without matching if",
     "else cannot appear before closing inner control flow",
+    node,
+    options,
   );
-  const frame = currentIfFrame(state, "else without matching if");
+  const frame = currentIfFrame(state, "else without matching if", node, options);
 
   if (frame.hasElse) {
-    throw new Error("else after else");
+    throw compileError(options, node, "else after else");
   }
 
   frame.afterJumpIndex = state.instructions.length;
   frame.hasElse = true;
 
-  state.instructions.push({ op: "JUMP", target: -1 });
+  state.instructions.push(withSource({ op: "JUMP", target: -1 }, node, options));
   patchJumpIfFalse(state, frame.falseJumpIndex, state.instructions.length);
 }
 
-function compileEnd(state: CompilerState): void {
+function compileEnd(
+  state: CompilerState,
+  node: AstNode,
+  options: CompileProgramOptions,
+): void {
   requireCurrentBlock(
     state,
     "if",
     "end without matching if",
     "end cannot close if before inner loop",
+    node,
+    options,
   );
   const frame = state.ifStack.pop();
 
   if (frame === undefined) {
-    throw new Error("end without matching if");
+    throw compileError(options, node, "end without matching if");
   }
 
   if (frame.hasElse) {
@@ -383,76 +466,114 @@ function compileEnd(state: CompilerState): void {
   state.blockStack.pop();
 }
 
-function compileLoop(state: CompilerState): void {
+function compileLoop(
+  state: CompilerState,
+  node: AstNode,
+  options: CompileProgramOptions,
+): void {
   state.blockStack.push("loop");
   state.loopStack.push({ startIndex: state.instructions.length });
 }
 
-function compileWhile(state: CompilerState): void {
+function compileWhile(
+  state: CompilerState,
+  node: AstNode,
+  options: CompileProgramOptions,
+): void {
   requireCurrentBlock(
     state,
     "loop",
     "while without matching loop",
     "while cannot appear before closing inner control flow",
+    node,
+    options,
   );
-  const frame = currentLoopFrame(state, "while without matching loop");
+  const frame = currentLoopFrame(
+    state,
+    "while without matching loop",
+    node,
+    options,
+  );
 
   if (frame.whileJumpIndex !== undefined) {
-    throw new Error("while after while");
+    throw compileError(options, node, "while after while");
   }
 
   frame.whileJumpIndex = state.instructions.length;
-  state.instructions.push({ op: "JUMP_IF_FALSE", target: -1 });
+  state.instructions.push(
+    withSource({ op: "JUMP_IF_FALSE", target: -1 }, node, options),
+  );
 }
 
-function compileUntil(state: CompilerState): void {
+function compileUntil(
+  state: CompilerState,
+  node: AstNode,
+  options: CompileProgramOptions,
+): void {
   requireCurrentBlock(
     state,
     "loop",
     "until without matching loop",
     "until cannot close loop before inner if",
+    node,
+    options,
   );
   const frame = state.loopStack.pop();
 
   if (frame === undefined) {
-    throw new Error("until without matching loop");
+    throw compileError(options, node, "until without matching loop");
   }
 
   if (frame.whileJumpIndex !== undefined) {
-    throw new Error("until cannot close loop after while");
+    throw compileError(options, node, "until cannot close loop after while");
   }
 
   state.blockStack.pop();
-  state.instructions.push({ op: "JUMP_IF_FALSE", target: frame.startIndex });
+  state.instructions.push(
+    withSource({ op: "JUMP_IF_FALSE", target: frame.startIndex }, node, options),
+  );
 }
 
-function compileRepeat(state: CompilerState): void {
+function compileRepeat(
+  state: CompilerState,
+  node: AstNode,
+  options: CompileProgramOptions,
+): void {
   requireCurrentBlock(
     state,
     "loop",
     "repeat without matching loop",
     "repeat cannot close loop before inner control flow",
+    node,
+    options,
   );
   const frame = state.loopStack.pop();
 
   if (frame === undefined) {
-    throw new Error("repeat without matching loop");
+    throw compileError(options, node, "repeat without matching loop");
   }
 
   if (frame.whileJumpIndex === undefined) {
-    throw new Error("repeat without matching while");
+    throw compileError(options, node, "repeat without matching while");
   }
 
   state.blockStack.pop();
-  state.instructions.push({ op: "JUMP", target: frame.startIndex });
+  state.instructions.push(
+    withSource({ op: "JUMP", target: frame.startIndex }, node, options),
+  );
   patchJumpIfFalse(state, frame.whileJumpIndex, state.instructions.length);
 }
 
-function currentIfFrame(state: CompilerState, errorMessage: string): IfFrame {
+function currentIfFrame(
+  state: CompilerState,
+  errorMessage: string,
+  node: AstNode,
+  options: CompileProgramOptions,
+): IfFrame {
   const frame = state.ifStack.at(-1);
 
   if (frame === undefined) {
-    throw new Error(errorMessage);
+    throw compileError(options, node, errorMessage);
   }
 
   return frame;
@@ -461,11 +582,13 @@ function currentIfFrame(state: CompilerState, errorMessage: string): IfFrame {
 function currentLoopFrame(
   state: CompilerState,
   errorMessage: string,
+  node: AstNode,
+  options: CompileProgramOptions,
 ): LoopFrame {
   const frame = state.loopStack.at(-1);
 
   if (frame === undefined) {
-    throw new Error(errorMessage);
+    throw compileError(options, node, errorMessage);
   }
 
   return frame;
@@ -476,15 +599,17 @@ function requireCurrentBlock(
   kind: BlockKind,
   missingBlockError: string,
   errorMessage: string,
+  node: AstNode,
+  options: CompileProgramOptions,
 ): void {
   const current = state.blockStack.at(-1);
 
   if (current === undefined) {
-    throw new Error(missingBlockError);
+    throw compileError(options, node, missingBlockError);
   }
 
   if (current !== kind) {
-    throw new Error(errorMessage);
+    throw compileError(options, node, errorMessage);
   }
 }
 
@@ -516,11 +641,16 @@ function patchJumpIfFalse(
   instruction.target = target;
 }
 
-function compileWord(state: CompilerState, name: string): Instruction {
+function compileWord(
+  state: CompilerState,
+  node: Word,
+  options: CompileProgramOptions,
+): Instruction {
+  const name = node.name;
   const builtIn = compileBuiltInWord(name);
 
   if (builtIn !== undefined) {
-    return builtIn;
+    return withSource(builtIn, node, options);
   }
 
   const target = state.definitions.get(name);
@@ -530,19 +660,23 @@ function compileWord(state: CompilerState, name: string): Instruction {
       recordDeferredCall(state, name, state.instructions.length);
     }
 
-    return { op: "CALL", target };
+    return withSource({ op: "CALL", target }, node, options);
   }
 
   const variableIndex = state.variables.get(name);
 
   if (variableIndex !== undefined) {
-    return {
-      op: "PUSH",
-      value: { kind: "address", index: variableIndex },
-    };
+    return withSource(
+      {
+        op: "PUSH",
+        value: { kind: "address", index: variableIndex },
+      },
+      node,
+      options,
+    );
   }
 
-  throw new Error(`Unknown word: ${name}`);
+  throw compileError(options, node, `Unknown word: ${name}`);
 }
 
 function recordDeferredCall(
@@ -583,14 +717,42 @@ function patchDeferredCalls(
   state.deferredCalls.delete(name);
 }
 
+function withSource(
+  instruction: Instruction,
+  node: AstNode,
+  options: CompileProgramOptions,
+): Instruction {
+  return {
+    ...instruction,
+    source: instructionSource(options, node),
+  };
+}
+
+function instructionSource(
+  options: CompileProgramOptions,
+  node: AstNode,
+): InstructionSource {
+  return {
+    sourcePath: options.sourcePath,
+    span: node.span,
+  };
+}
+
+function compileError(
+  options: CompileProgramOptions,
+  node: AstNode,
+  message: string,
+): Error {
+  return new Error(
+    `${formatSourceLocation(options.sourcePath, node)}: ${message}`,
+  );
+}
+
 function formatSourceLocation(
   sourcePath: string | undefined,
-  nodeIndex: number,
   node: AstNode,
 ): string {
-  const source = sourcePath ?? "<anonymous source>";
-
-  return `${source} node ${nodeIndex} ${formatNode(node)}`;
+  return formatInstructionSourceLocation({ sourcePath, span: node.span });
 }
 
 function formatNode(node: AstNode): string {

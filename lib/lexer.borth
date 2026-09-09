@@ -1,3 +1,5 @@
+import "./array.borth"
+
 # Lexer helper words.
 #
 # This module is importable library code: it defines words only and has no
@@ -12,56 +14,129 @@
 # the closing quote. The parser turns supported escape sequences into string
 # values.
 
-# Use a global variable for source to make the word contracts much simpler to maintain.
-variable lex-source
-
-# lex-char-at ( index -- char )
+# Lexer State
 #
-# Return the one-character string at index in lex-source.
+# Lexer state is stored in this array:
+#
+#   [ source index tokens ]
+#
+# Accessor and predicate words consume the lexer state they inspect. State
+# update words return a new lexer state with one field changed. The main lexer
+# loop threads that updated state explicitly.
+
+# lexer-new ( source -- lexer )
+#
+# Create a lexer at source index 0 with no tokens collected.
+: lexer-new
+  array-new
+  swap array-push       # source
+  0 array-push          # index
+  array-new array-push  # tokens
+;
+
+# lexer-source ( lexer -- source )
+: lexer-source
+  0 array-get
+;
+
+# lexer-index ( lexer -- index )
+: lexer-index
+  1 array-get
+;
+
+# lexer-tokens ( lexer -- tokens )
+: lexer-tokens
+  2 array-get
+;
+
+# lexer-set-source ( lexer source -- lexer )
+#
+# Return lexer with a replaced source.
+: lexer-set-source
+  0 swap array-set
+;
+
+# lexer-set-index ( lexer index -- lexer )
+#
+# Return lexer with a replaced source index.
+: lexer-set-index
+  1 swap array-set
+;
+
+# lexer-set-tokens ( lexer tokens -- lexer )
+#
+# Return lexer with a replaced token array.
+: lexer-set-tokens
+  2 swap array-set
+;
+
+# lexer-inc-index ( lexer -- lexer )
+#
+# Return lexer advanced by one source character.
+: lexer-inc-index
+  dup lexer-index 1 + lexer-set-index
+;
+
+# lexer-append-token ( lexer token -- lexer )
+#
+# Return lexer with token appended to its token array.
+: lexer-append-token
+  swap dup lexer-tokens
+    rot array-push
+  lexer-set-tokens
+;
+
+# Character Predicates
+
+# lexer-current-char ( lexer -- char )
+#
+# Return the one-character string at the current lexer index.
 # Caller must check bounds before calling this word.
-: lex-char-at
-  lex-source @ swap 1 str-slice
+: lexer-current-char
+  dup lexer-source swap lexer-index 1 str-slice
 ;
 
-# lex-at-end? ( index -- flag )
+# lexer-at-end? ( lexer -- flag )
 #
-# Return 1 when index is at or past the end of lex-source.
-: lex-at-end?
-  lex-source @ str-len < not
+# Return 1 when the lexer index is at or past the end of source.
+: lexer-at-end?
+  dup lexer-source str-len swap lexer-index swap < not
 ;
 
-# lex-new-line? ( char -- flag )
+# lexer-new-line? ( char -- flag )
 #
 # Return 1 when char is a newline.
 # TODO: Support carriage return too.
-: lex-new-line?
+: lexer-new-line?
   "\n" =
 ;
 
-# lex-whitespace? ( char -- flag )
+# lexer-whitespace? ( char -- flag )
 #
 # Return 1 when char is a lexer delimiter.
 # Only the plain space character and newline are treated as whitespace for now.
-: lex-whitespace?
-  dup " " = swap lex-new-line? or
+: lexer-whitespace?
+  dup " " = swap lexer-new-line? or
 ;
 
-# lex-quote? ( char -- flag )
+# lexer-quote? ( char -- flag )
 #
 # Return 1 when char is a double quote.
-: lex-quote?
+: lexer-quote?
   "\"" =
 ;
 
-# lex-end-of-word? ( index -- flag )
+# Cursor Predicates
+
+# lexer-at-word-end? ( lexer -- flag )
 #
-# Return 1 when index is at the end of a non-string token.
+# Return 1 when the lexer index is at the end of a non-string token.
 # This is a safe predicate: it checks end of source before reading a character.
-: lex-end-of-word?
-  dup lex-at-end? if
+: lexer-at-word-end?
+  dup lexer-at-end? if
     1
   else
-    dup lex-char-at lex-whitespace? if
+    dup lexer-current-char lexer-whitespace? if
       1
     else
       0
@@ -70,15 +145,16 @@ variable lex-source
   nip
 ;
 
-# lex-end-of-whitespace? ( index -- flag )
+# lexer-at-token-start? ( lexer -- flag )
 #
-# Return 1 when index points at the start of a token or the end of source.
-# This is a safe predicate: it checks end of source before reading a character.
-: lex-end-of-whitespace?
-  dup lex-at-end? if
+# Return 1 when the lexer index points at the start of a token or the end of
+# source. This is a safe predicate: it checks end of source before reading a
+# character.
+: lexer-at-token-start?
+  dup lexer-at-end? if
     1
   else
-    dup lex-char-at lex-whitespace? not if
+    dup lexer-current-char lexer-whitespace? not if
       1
     else
       0
@@ -87,134 +163,146 @@ variable lex-source
   nip
 ;
 
-# lex-word-end ( index -- end )
+# lexer-start-of-comment? ( lexer -- flag )
 #
-# Return the exclusive end index of a non-string token.
-# index must point at the first character of the token.
-: lex-word-end
-  # Skip the first character because index is already known to be inside a word.
-  1 +
+# Return 1 when the lexer index points at `#`. Callers should only use this
+# after whitespace has been skipped, so `#` is at a token boundary.
+: lexer-start-of-comment?
+  lexer-current-char "#" =
+;
+
+# Cursor Mutation
+
+# lexer-skip-whitespace ( lexer -- lexer )
+#
+# Return lexer advanced to the first non-whitespace character at or after the
+# current index. If only whitespace remains, advance to the end of source.
+: lexer-skip-whitespace
   loop
-    dup lex-end-of-word? not
+    dup lexer-at-token-start? not
   while
-    1 +
+    lexer-inc-index
   repeat
 ;
 
-# lex-string-end ( index -- end )
+# lexer-skip-comment ( lexer -- lexer )
 #
-# Return the exclusive end index after the closing quote.
-# index must point at the opening quote.
-# Panics if the source ends before a closing quote is found.
-: lex-string-end
-  # Skip the opening quote before scanning for the closing quote.
-  1 +
-
+# Return lexer advanced just after the next newline, or to the end of source if
+# the comment reaches EOF.
+: lexer-skip-comment
   loop
-    dup lex-at-end? if
-      "Unterminated string literal" panic
-    end
-    dup lex-char-at lex-quote? not
-  while
-    dup lex-char-at "\\" = if
-      1 + # skip escaped characters
-      dup lex-at-end? if
-        "Unterminated string literal" panic
-      end
-    else dup lex-char-at lex-new-line? if
-      "String literal cannot span lines" panic
-    end end
-    1 +
-  repeat
-  1 +
-;
-
-# lex-token-end ( index -- end )
-#
-# Return the exclusive end index of the token starting at index.
-# Quoted string tokens may contain spaces; other tokens end at the next space.
-: lex-token-end
-  dup lex-char-at lex-quote? if
-    lex-string-end
-  else
-    lex-word-end
-  end
-;
-
-# lex-token-slice ( start end -- token )
-#
-# Return the token text between start and end from lex-source.
-: lex-token-slice
-  over - lex-source @ -rot str-slice
-;
-
-# lex-skip-whitespace ( index -- start )
-#
-# Return the first non-whitespace index at or after index.
-# If only whitespace remains, return the end index.
-: lex-skip-whitespace
-  loop
-    dup lex-end-of-whitespace? not
-  while
-    1 +
-  repeat
-;
-
-# lex-start-of-comment? ( index -- flag )
-#
-# Return 1 when index points at `#`. Callers should only use this after
-# whitespace has been skipped, so `#` is at a token boundary.
-: lex-start-of-comment?
-  lex-char-at "#" =
-;
-
-# lex-skip-to-new-line ( index -- index )
-#
-# Return the index just after the next newline, or the source end if the comment
-# reaches EOF.
-: lex-skip-to-new-line
-  # Carry a stop flag so the loop can terminate at newline or EOF.
-  # ( index stop? )
-  loop
-    dup lex-at-end? if
+    dup lexer-at-end? if
       1
     else
-      dup lex-char-at "\n" = if
-        # increment index and stop skipping
-        1 + 1
+      dup lexer-current-char "\n" = if
+        lexer-inc-index 1
       else
-        1 + 0
+        lexer-inc-index 0
       end
     end
   until
 ;
 
-# lex-src ( src -- tok-array )
-#
-# Split the whole source string into an array of token strings. A `#` at a token
-# boundary starts a comment that runs through the end of the line.
-: lex-src
-  # Store src globally so helper words only need to thread the current index.
-  lex-source !
+# Token Readers
 
-  array-new 0
-  # ( tok-array index )
+# lexer-token-from-start ( start lexer -- lexer token )
+#
+# Return the source slice from start through the current lexer index. This
+# consumes the start index and preserves the lexer state.
+: lexer-token-from-start
+  # ( start lexer -- lexer source start length )
+  swap over lexer-source swap 2over lexer-index over -
+  # ( lexer source start length -- lexer token )
+  str-slice
+;
+
+# lexer-read-word-token ( lexer -- lexer token )
+#
+# Return lexer advanced past the current non-string token, plus the token text.
+# The lexer index must point at the first character of the token.
+: lexer-read-word-token
+  dup lexer-index swap
+  # Skip the first character because index is already known to be inside a word.
+  lexer-inc-index
   loop
-    dup lex-at-end? not
+    dup lexer-at-word-end? not
   while
-    lex-skip-whitespace
-    dup lex-at-end? not if
-      # Comments behave like whitespace once the cursor is between tokens.
-      dup lex-start-of-comment? if
-        lex-skip-to-new-line
-      else
-        # Read the next token, push it into tok-array, and keep the new index.
-        # ( tok-array index -- tok-array end )
-        dup lex-token-end dup -rot lex-token-slice rot swap
-        array-push swap
+    lexer-inc-index
+  repeat
+  lexer-token-from-start
+;
+
+# lexer-read-string-token ( lexer -- lexer token )
+#
+# Return lexer advanced just after the closing quote, plus the full quoted token
+# text. The lexer index must point at the opening quote. Panics if the source
+# ends before a closing quote is found.
+: lexer-read-string-token
+  dup lexer-index swap
+  # Skip the opening quote before scanning for the closing quote.
+  lexer-inc-index
+
+  loop
+    dup lexer-at-end? if
+      "Unterminated string literal" panic
+    end
+    dup lexer-current-char lexer-quote? not
+  while
+    dup lexer-current-char "\\" = if
+      lexer-inc-index # skip escaped characters
+      dup lexer-at-end? if
+        "Unterminated string literal" panic
       end
-      lex-skip-whitespace
+    else dup lexer-current-char lexer-new-line? if
+      "String literal cannot span lines" panic
+    end end
+    lexer-inc-index
+  repeat
+  lexer-inc-index
+  lexer-token-from-start
+;
+
+# lexer-read-token ( lexer -- lexer token )
+#
+# Return lexer advanced past the current token, plus the token text. Quoted
+# string tokens may contain spaces; other tokens end at whitespace.
+: lexer-read-token
+  dup lexer-current-char lexer-quote? if
+    lexer-read-string-token
+  else
+    lexer-read-word-token
+  end
+;
+
+# Public API
+
+# lexer-lex-src ( source -- tokens )
+#
+# Split source into an array of token strings. A `#` at a token boundary starts
+# a comment that runs through the end of the line.
+: lexer-lex-src
+  lexer-new
+  loop
+    dup lexer-at-end? not
+  while
+    lexer-skip-whitespace
+    dup lexer-at-end? not if
+      # Comments behave like whitespace once the cursor is between tokens.
+      dup lexer-start-of-comment? if
+        lexer-skip-comment
+      else
+        lexer-read-token
+        lexer-append-token
+      end
+      lexer-skip-whitespace
     end
   repeat
-  drop
+  lexer-tokens
+;
+
+# lex-src ( source -- tokens )
+#
+# Backwards-compatible public lexer entry point.
+: lex-src
+  lexer-lex-src
 ;

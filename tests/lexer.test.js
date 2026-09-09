@@ -21,3 +21,29 @@ test("# inside words and strings is not a comment", () => {
     '"# not a comment"',
   ]);
 });
+
+test("tokens include source spans", () => {
+  const tokens = lex("10\n  dup +");
+
+  assert.deepEqual(tokens.map((token) => token.span), [
+    {
+      start: { offset: 0, line: 1, column: 1 },
+      end: { offset: 2, line: 1, column: 3 },
+    },
+    {
+      start: { offset: 5, line: 2, column: 3 },
+      end: { offset: 8, line: 2, column: 6 },
+    },
+    {
+      start: { offset: 9, line: 2, column: 7 },
+      end: { offset: 10, line: 2, column: 8 },
+    },
+  ]);
+});
+
+test("lexer errors include source location", () => {
+  assert.throws(
+    () => lex("10\n\"unterminated", { sourcePath: "sample.borth" }),
+    /sample\.borth:2:14: Unterminated string literal/,
+  );
+});

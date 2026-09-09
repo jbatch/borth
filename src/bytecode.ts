@@ -1,6 +1,11 @@
+import type { InstructionSource } from "./source-location.js";
 import type { Value } from "./value.js";
 
-export type Instruction =
+export type Instruction = InstructionData & {
+  source?: InstructionSource;
+};
+
+type InstructionData =
   | { op: "PUSH"; value: Value }
   | { op: "ALLOC_VARIABLE" }
   | { op: "DROP" }

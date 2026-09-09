@@ -40,7 +40,7 @@ function compileSource(source: string, sourcePath?: string) {
     modulePath: string | undefined,
     allowTopLevelCode: boolean,
   ): void {
-    const tokens = lex(moduleSource);
+    const tokens = lex(moduleSource, { sourcePath: modulePath });
     const program = parse(tokens);
     const baseDir = modulePath === undefined ? process.cwd() : dirname(modulePath);
 
