@@ -108,21 +108,16 @@ write-text-file ( path contents -- )
 append-text-file ( path contents -- )
 file-exist?    ( path -- flag )
 env            ( name -- value found? )
+args           ( -- array )
+run-command    ( command args-array -- exit-code stdout stderr )
 ```
 
 Source code may use relative import paths, but the compiler should resolve them
 against the importing file and track loaded modules by full normalized paths.
 
-Future native-build tooling will likely need more host boundary words:
-
-```text
-args            ( -- array )
-run-command     ( command args -- exit-code stdout stderr )
-```
-
-These should be added only when the Borth command-line tool actually needs
-them. They belong at the host boundary because command-line arguments, file
-writes, and process spawning depend on the operating system.
+`run-command` deliberately takes a command string and an array of argument
+strings rather than a shell command line. Nonzero process exits return normally
+as an exit code. Host spawn failures are VM errors.
 
 ## Declarations
 

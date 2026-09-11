@@ -646,8 +646,31 @@ import "./array.borth"
     2 "PATH_RESOLVE" assert-stack-length
     dup vm-stack
         # ( vm stack A B)
-        array-pop swap array-pop rot
+        stack-pop-2
         path-resolve array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-args ( vm -- vm )
+: execute-args
+    dup vm-stack
+        args array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+#
+: execute-run-command
+    2 "RUN_COMMAND" assert-stack-length
+    dup vm-stack
+        # ( vm stack A B)
+        stack-pop-2
+        # ( vm stack exit-code stdout stderr )
+        run-command
+        3 roll 3 roll array-push
+        rot array-push
+        swap array-push
     vm-set-stack
     vm-inc-ip
 ;
@@ -811,6 +834,10 @@ import "./array.borth"
         drop execute-path-dirname 0
     else dup "PATH_RESOLVE" = if drop
         drop execute-path-resolve 0
+    else dup "ARGS" = if drop
+        drop execute-args 0
+    else dup "RUN_COMMAND" = if drop
+        drop execute-run-command 0
     else dup "ARRAY_NEW" = if drop
         drop execute-array-new 0
     else dup "ARRAY_LEN" = if drop
@@ -852,7 +879,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

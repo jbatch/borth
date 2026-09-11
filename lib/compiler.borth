@@ -970,6 +970,11 @@ deferred compile-next-node
         "PATH_DIRNAME" array-wrap emit-instruction
     else dup "path-resolve" = if drop
         "PATH_RESOLVE" array-wrap emit-instruction
+    else dup "args" = if drop
+        "ARGS" array-wrap emit-instruction
+    else dup "run-command" = if drop
+        "RUN_COMMAND" array-wrap emit-instruction
+
 
     # Array operations.
     else dup "array-new" = if drop
@@ -1030,7 +1035,7 @@ deferred compile-next-node
         else
             "Unknown word: " swap show str-cat compiler-panic
         end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # compile-word-node ( state node -- state )

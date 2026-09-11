@@ -12,11 +12,12 @@ const args = process.argv.slice(2);
 if (args.length === 0) {
   console.error('usage: yarn dev -- "10 20 + print"');
   console.error("   or: yarn dev -- examples/add.borth");
+  console.error("   or: yarn dev -- examples/tool.borth build input.borth");
   process.exitCode = 1;
 } else {
   try {
     if (isFileArgument(args)) {
-      runFile(args[0], { read: readLineFromStdin });
+      runFile(args[0], { args: args.slice(1), read: readLineFromStdin });
     } else {
       run(args.join(" "), { read: readLineFromStdin });
     }
@@ -64,8 +65,8 @@ function readLineFromStdin(): string {
   return Buffer.from(bytes).toString("utf8");
 }
 
-function isFileArgument(args: string[]): args is [string] {
-  if (args.length === 1 && existsSync(args[0]) && statSync(args[0]).isFile()) {
+function isFileArgument(args: string[]): args is [string, ...string[]] {
+  if (args.length >= 1 && existsSync(args[0]) && statSync(args[0]).isFile()) {
     return true;
   }
 

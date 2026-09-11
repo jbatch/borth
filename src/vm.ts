@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 
 import type { Instruction } from "./bytecode.js";
 import { formatSourceLocation } from "./source-location.js";
@@ -15,26 +16,36 @@ export type VmState = {
 };
 
 export type ExecuteOptions = {
+  args?: string[];
   cwd?: () => string;
   env?: (name: string) => string | undefined;
   fileExists?: (path: string) => boolean;
   random?: () => number;
   read?: () => string;
+  runCommand?: (command: string, args: string[]) => RunCommandResult;
   readTextFile?: (path: string) => string;
   writeTextFile?: (path: string, contents: string) => void;
   appendTextFile?: (path: string, contents: string) => void;
   write?: (value: Value) => void;
 };
 
+export type RunCommandResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
+
 export function execute(
   instructions: Instruction[],
   options: ExecuteOptions = {},
 ): VmState {
+  const args = options.args ?? [];
   const cwd = options.cwd ?? process.cwd;
   const env = options.env ?? ((name: string) => process.env[name]);
   const fileExists = options.fileExists ?? existsSync;
   const random = options.random ?? Math.random;
   const read = options.read;
+  const runCommand = options.runCommand ?? runHostCommand;
   const readTextFile =
     options.readTextFile ?? ((path: string) => readFileSync(path, "utf8"));
   const writeTextFile =
@@ -301,6 +312,18 @@ export function execute(
           state.ip += 1;
           break;
         }
+        case "ARGS":
+          state.stack.push({ kind: "array", items: [...args] });
+          state.ip += 1;
+          break;
+        case "RUN_COMMAND": {
+          const commandArgs = popStringArray(state, "RUN_COMMAND", "args");
+          const command = popString(state, "RUN_COMMAND");
+          const result = runCommand(command, commandArgs);
+          state.stack.push(result.exitCode, result.stdout, result.stderr);
+          state.ip += 1;
+          break;
+        }
         case "CWD":
           state.stack.push(cwd());
           state.ip += 1;
@@ -379,6 +402,20 @@ function randomInteger(max: number, random: () => number): number {
   }
 
   return Math.floor(value * max);
+}
+
+function runHostCommand(command: string, args: string[]): RunCommandResult {
+  const result = spawnSync(command, args, { encoding: "utf8" });
+
+  if (result.error !== undefined) {
+    throw result.error;
+  }
+
+  return {
+    exitCode: result.status ?? 1,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 function sliceString(value: string, start: number, length: number): string {
@@ -550,6 +587,21 @@ function popString(state: VmState, op: string): string {
   }
 
   return value;
+}
+
+function popStringArray(state: VmState, op: string, name: string): string[] {
+  const value = popArray(state, op);
+  const strings: string[] = [];
+
+  for (const item of value.items) {
+    if (typeof item !== "string") {
+      throw new Error(`${op} requires ${name} to contain only strings`);
+    }
+
+    strings.push(item);
+  }
+
+  return strings;
 }
 
 function popArray(state: VmState, op: string): ArrayValue {

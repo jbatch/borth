@@ -222,6 +222,56 @@ test("env requires a string name", () => {
   );
 });
 
+test("args pushes the configured command-line arguments", () => {
+  assert.deepEqual(
+    outputOf("args show print", [], { args: ["build", "input.borth"] }),
+    ['["build" "input.borth"]'],
+  );
+});
+
+test("run-command returns exit code, stdout, and stderr", () => {
+  assert.deepEqual(
+    outputOf(
+      `
+        "cc" array-new "program.c" array-push "-o" array-push "program" array-push run-command .s
+      `,
+      [],
+      {
+        runCommand: (command, args) => {
+          assert.equal(command, "cc");
+          assert.deepEqual(args, ["program.c", "-o", "program"]);
+          return {
+            exitCode: 7,
+            stdout: "compiled\n",
+            stderr: "warning\n",
+          };
+        },
+      },
+    ),
+    ['[7 "compiled\\n" "warning\\n"]'],
+  );
+});
+
+test("run-command requires a command string and string args array", () => {
+  assert.throws(
+    () => run("123 array-new run-command", { write: () => undefined }),
+    /RUN_COMMAND requires strings on the stack/,
+  );
+
+  assert.throws(
+    () => run('"cc" "not-array" run-command', { write: () => undefined }),
+    /RUN_COMMAND requires an array on the stack/,
+  );
+
+  assert.throws(
+    () =>
+      run('"cc" array-new 123 array-push run-command', {
+        write: () => undefined,
+      }),
+    /RUN_COMMAND requires args to contain only strings/,
+  );
+});
+
 test("cwd pushes the host current working directory", () => {
   assert.deepEqual(outputOf("cwd print", [], { cwd: () => "/repo" }), ["/repo"]);
 });

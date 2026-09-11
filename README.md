@@ -26,6 +26,8 @@ yarn borth -- examples/while-count.borth
 yarn pretty-borth-value
 ```
 
+Extra arguments after a source file are available inside Borth through `args`.
+
 `yarn pretty-borth-value` pretty-prints Borth debug values such as nested arrays.
 Pass a value as an argument, pipe one in, or run it interactively and paste at
 the `value>` prompt.
@@ -99,6 +101,8 @@ write-text-file ( path contents -- )
 append-text-file ( path contents -- )
 file-exist? ( path -- flag )
 env ( name -- value found? )
+args ( -- array )
+run-command ( command args-array -- exit-code stdout stderr )
 cwd ( -- path )
 path-dirname ( path -- dir )
 path-resolve ( base path -- path )
@@ -284,6 +288,8 @@ Host lookup and path primitives expose small pieces of the host OS environment:
 ```text
 "BORTH_PATH" env .s
 "prelude.borth" file-exist? print
+args .s
+"cc" array-new "program.c" array-push "-o" array-push "program" array-push run-command .s
 cwd print
 "/repo/examples/main.borth" path-dirname print
 "/repo/examples" "../lib/parser.borth" path-resolve print

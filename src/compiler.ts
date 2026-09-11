@@ -836,6 +836,10 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "FILE_EXISTS" };
     case "env":
       return { op: "ENV" };
+    case "args":
+      return { op: "ARGS" };
+    case "run-command":
+      return { op: "RUN_COMMAND" };
     case "cwd":
       return { op: "CWD" };
     case "path-dirname":

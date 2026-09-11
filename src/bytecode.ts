@@ -45,6 +45,8 @@ type InstructionData =
   | { op: "APPEND_TEXT_FILE" }
   | { op: "FILE_EXISTS" }
   | { op: "ENV" }
+  | { op: "ARGS" }
+  | { op: "RUN_COMMAND" }
   | { op: "CWD" }
   | { op: "PATH_DIRNAME" }
   | { op: "PATH_RESOLVE" }

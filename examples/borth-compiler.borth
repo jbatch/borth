@@ -6,16 +6,18 @@ import "../lib/c-emitter.borth"
 
 # run example file
 # "examples/string-escape.borth" dup read-text-file over swap lexer-lex-src-file-with-spans swap parse-tokens swap compile-nodes run-bytecode .s
-
 1 SKIP_PRELUDE !
 # ( file-path source )
-"examples/counter.borth" dup read-text-file
+"examples/add.borth" dup read-text-file
 # ( file-path tokens spans )
 over swap lexer-lex-src-file-with-spans
 # ( file-path tokens spans )
 swap parse-tokens
 # ( file-path spans nodes )
 swap compile-nodes .s
+"program.c" write-c-program
+"cc" array-new "program.c" array-push "runtime/borth_runtime.c" array-push "-Iruntime" array-push "-o" array-push "program" array-push run-command drop drop drop
+"./program" array-new run-command drop swap drop print
 
 # run inline code
 # "<inline>" "10 20 +" over swap lexer-lex-src-file-with-spans swap parse-tokens swap compile-nodes run-bytecode .s
