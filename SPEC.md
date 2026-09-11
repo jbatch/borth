@@ -1037,6 +1037,36 @@ append-text-file ( path contents -- )
 - This is intentionally narrower than general file handles. It exists so
   compiler/backend tooling can create inspectable text files.
 
+## Milestone 17d: First Native C Emission Slice
+
+Goal:
+
+```text
+10 20 + print
+```
+
+can compile to Borth instruction arrays, emit a small C source file, compile it
+with the C runtime, and run as a native executable that prints:
+
+```text
+30
+```
+
+Native C slice decision:
+
+- `runtime/borth_runtime.h` declares the runtime API used by generated C.
+- `runtime/borth_runtime.c` is a small reference runtime maintained as support
+  code rather than as the main learning surface.
+- The runtime currently supports integer values, a heap-allocated runtime
+  object, a growable value stack, panic, `PUSH` integer, `ADD`, and `PRINT`.
+- `lib/c-emitter.borth` emits `#include "borth_runtime.h"` and a straight-line
+  `main` function for supported instructions.
+- The first slice intentionally does not emit labels, gotos, an instruction
+  pointer, or an instruction array. C statement order is enough for straight-line
+  arithmetic.
+- Control flow, calls, variables, strings, and arrays remain later backend
+  milestones.
+
 ## Milestone 18: Borth Compiler Library Slice
 
 Goal:

@@ -58,19 +58,26 @@ Early versions can leak allocations and use fixed-size stacks. That is fine for
 the first slice. Memory ownership can become a deliberate milestone once strings
 and arrays are useful enough to stress it.
 
-The runtime should probably live as a standalone C source string at first, then
-move to a real file once editing it inside a Borth string becomes annoying.
+The runtime lives in `runtime/borth_runtime.c`, with public declarations in
+`runtime/borth_runtime.h`. It is intentionally allowed to be LLM-maintained
+reference code: small, readable, and boring, so the Borth-side emitter remains
+the interesting project surface.
 
 ### C Emitter
 
-The emitter starts from compiled bytecode. It writes:
+The emitter starts from compiled bytecode. The first landed slice writes:
 
-1. The C runtime source.
+1. `#include "borth_runtime.h"`.
 2. `int main(void)`.
 3. Runtime initialization.
-4. One C label per bytecode instruction.
-5. A small C fragment for each instruction.
-6. A shared return dispatcher for `RET`.
+4. One straight-line C helper call per supported instruction.
+5. Runtime cleanup and `return 0`.
+
+Later control-flow slices will add:
+
+- one C label per bytecode instruction
+- `goto` for jumps
+- a shared return dispatcher for `RET`
 
 The first Borth implementation can mirror the Borth VM dispatch structure:
 
@@ -123,7 +130,7 @@ Emitter support:
 - `ADD`
 - `PRINT`
 - `HALT`
-- fallthrough as `goto Lnext`
+- straight-line helper calls
 
 End-to-end target:
 
@@ -136,6 +143,9 @@ Expected output:
 ```text
 30
 ```
+
+Status: initial slice landed. The generated C does not use labels yet because
+straight-line arithmetic does not need them.
 
 ### 2. Basic Stack Operations
 
@@ -425,8 +435,6 @@ a later backend can preserve word boundaries and emit C functions instead.
 
 ## Open Design Questions
 
-- Should the runtime be embedded as one generated source file, or compiled as a
-  separate object file and linked with generated C?
 - When should strings and arrays stop leaking and get real ownership rules?
 - Should generated C use labels and `goto`, or eventually use functions per
   word?
@@ -435,5 +443,6 @@ a later backend can preserve word boundaries and emit C functions instead.
 - Should native build support require `cc`, or should it look for a configurable
   compiler command?
 
-The current answer can be conservative: generate one complete C file, require a
-system `cc`, and optimize for visible, debuggable output.
+The current answer is conservative: generate a small C source file, compile it
+with `runtime/borth_runtime.c`, require a system `cc`, and optimize for visible,
+debuggable output.

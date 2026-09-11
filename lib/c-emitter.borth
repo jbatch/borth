@@ -1,23 +1,85 @@
-# First C-backend file emission scaffold.
+# First C-backend file emission slice.
 #
-# This does not emit C yet. It writes one debug-formatted bytecode instruction
-# per line so the backend path can exercise host file writing while the C output
-# shape is still being designed.
+# This emits one C source file that includes runtime/borth_runtime.h and links
+# against runtime/borth_runtime.c. The supported instruction surface is
+# intentionally tiny: integer PUSH, ADD, PRINT, and HALT.
 
-# write-c-program ( instructions file-path -- )
+import "./strings.borth"
+
+# c-write ( file-path contents -- file-path )
 #
-# Replace/appending setup is owned by the caller for now. This word appends one
-# shown instruction per line to file-path.
-: write-c-program
-    swap
+# Append contents to file-path while keeping file-path on the stack for the next
+# emission step.
+: c-write
+    over swap append-text-file
+;
+
+# c-write-line ( file-path contents -- file-path )
+: c-write-line
+    "\n" str-cat c-write
+;
+
+# c-instruction-op ( instruction -- op )
+: c-instruction-op
+    0 array-get
+;
+
+# c-emit-instruction ( instruction -- c-source )
+#
+# Return the C statement for one supported instruction.
+: c-emit-instruction
+    dup c-instruction-op
+    dup "PUSH" = if
+        drop
+        1 array-get show
+        dup str-int? not if
+            "C emitter only supports integer PUSH for now" panic
+        end
+        "  borth_op_push_int(rt, " swap str-cat ");" str-cat
+    else dup "ADD" = if
+        drop drop "  borth_op_add(rt);"
+    else dup "PRINT" = if
+        drop drop "  borth_op_print(rt);"
+    else dup "HALT" = if
+        drop drop ""
+    else
+        "C emitter does not support instruction: " swap str-cat panic
+    end end end end
+;
+
+# write-c-instructions ( file-path instructions -- file-path )
+#
+# Emit each supported instruction as one C statement.
+: write-c-instructions
     0
     loop
         2dup swap array-len <
     while
-        # file-path instructions index instruction
-        2dup array-get show "\n" str-cat
-        3over swap append-text-file
+        2dup array-get c-emit-instruction
+        dup "" = if
+            drop
+        else
+            3over swap append-text-file
+            2over "\n" append-text-file
+        end
         1 +
     repeat
-    drop drop drop
+    drop drop
+;
+
+# write-c-program ( instructions file-path -- )
+#
+# Replace file-path with one generated C source file.
+: write-c-program
+    dup "" write-text-file
+    "#include \"borth_runtime.h\"" c-write-line
+    "" c-write-line
+    "int main(void) {" c-write-line
+    "  BorthRuntime *rt = borth_runtime_new();" c-write-line
+    swap
+    write-c-instructions
+    "  borth_runtime_free(rt);" c-write-line
+    "  return 0;" c-write-line
+    "}" c-write-line
+    drop
 ;
