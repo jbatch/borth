@@ -70,21 +70,21 @@ import "strings.borth"
   end end
 ;
 
-# parse-tokens ( token-array -- node-array )
+# parse-tokens ( tokens -- nodes )
 #
 # Parse an array of token strings into an array of AST node arrays.
 : parse-tokens
-  # ( token-array -- node-array token-array index )
+  # ( tokens -- nodes tokens index )
   array-new swap 0
   loop
     over array-len 2dup swap - 0 > nip
   while
     # Get token at index and parse it into a node.
-    # ( node-array token-array index -- node-array token-array index node )
+    # ( nodes tokens index -- nodes tokens index node )
     2dup array-get parse-token
 
-    # Push node into node-array and increment index.
-    # ( node-array token-array index node -- node-array token-array index )
+    # Push node into nodes and increment index.
+    # ( nodes tokens index node -- nodes tokens index )
     3 roll swap array-push 2 -roll 1 +
   repeat
   drop drop

@@ -36,7 +36,7 @@ function compileAndRunFile(path) {
     import "lib/compiler.borth"
     import "lib/vm.borth"
 
-    ${JSON.stringify(path)} dup read-text-file lex-src parse-tokens swap compile-nodes run-bytecode show print
+    ${JSON.stringify(path)} dup read-text-file over swap lexer-lex-src-file-with-spans swap parse-tokens swap compile-nodes run-bytecode show print
   `);
 }
 

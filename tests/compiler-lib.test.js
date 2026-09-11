@@ -7,11 +7,27 @@ function outputOf(source) {
   const output = [];
 
   // Most compiler snapshots assert only the snippet under test. Prelude loading
-  // has its own focused test below.
-  run(source.replace(
-    'import "lib/compiler.borth"',
-    'import "lib/compiler.borth"\n      1 SKIP_PRELUDE !',
-  ), {
+  // has its own focused test below. Test snippets still use the old token-only
+  // spelling and this wrapper rewrites them to feed fake file-path/span inputs
+  // through the current compiler API.
+  const sourceWithTestHelpers = source
+    .replace(
+      'import "lib/compiler.borth"',
+      `import "lib/compiler.borth"
+      1 SKIP_PRELUDE !
+
+      : test-compile-src
+        "<test>" swap over swap lexer-lex-src-file-with-spans
+        swap parse-tokens swap
+        compile-nodes
+      ;`,
+    )
+    .replaceAll(
+      'lex-src parse-tokens "<test>" compile-nodes',
+      "test-compile-src",
+    );
+
+  run(sourceWithTestHelpers, {
     write: (value) => output.push(value),
   });
 
@@ -84,7 +100,13 @@ test("compiler library loads prelude words by default", () => {
       import "lib/compiler.borth"
       import "lib/vm.borth"
 
-      "0 not" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+      : test-compile-src
+        "<test>" swap over swap lexer-lex-src-file-with-spans
+        swap parse-tokens swap
+        compile-nodes
+      ;
+
+      "0 not" test-compile-src run-bytecode show print
     `,
     {
       write: (value) => output.push(value),
@@ -274,6 +296,10 @@ test("compiler library panics for unknown node kinds", () => {
         array-new
           array-new "mystery" array-push 123 array-push array-push
         "<test>"
+        swap
+        array-new
+          array-new 0 array-push 0 array-push 0 array-push 0 array-push
+          array-push
         compile-nodes
       `),
     /Unknown node kind: "mystery"/,

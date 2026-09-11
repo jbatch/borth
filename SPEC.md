@@ -60,7 +60,7 @@ Known remaining compiler/runtime parity work:
 - validate unresolved deferred words before returning bytecode
 - centralize namespace checks for words, variables, deferred words, reserved
   syntax, and built-in words
-- improve source-aware compiler errors
+- carry source spans into Borth VM/runtime diagnostics
 
 Current source-location direction:
 
@@ -75,6 +75,8 @@ Current source-location direction:
   instruction.
 - The Borth lexer mirrors this as parallel token and source-span arrays rather
   than bloating every ordinary array-shaped token.
+- The Borth compiler accepts `file-path nodes spans` so compiler errors can
+  report `file:line:column` without storing path data on each node or span.
 
 ## Host Language
 
@@ -1040,7 +1042,10 @@ append-text-file ( path contents -- )
 Goal:
 
 ```text
-"10 20 +" lex-src parse-tokens compile-nodes .s
+"<test>" "10 20 +"
+  over swap lexer-lex-src-file-with-spans
+  swap parse-tokens swap
+  compile-nodes .s
 ```
 
 should leave an inspectable instruction array like:
@@ -1051,10 +1056,12 @@ should leave an inspectable instruction array like:
 
 Compiler library decision:
 
-- `lib/lexer.borth` turns a source string into an array of token strings.
+- `lib/lexer.borth` can turn a source string into parallel arrays of token
+  strings and source spans.
 - `lib/parser.borth` turns token strings into simple node arrays such as
   `["integer" 10]`, `["string" "hello"]`, and `["word" "+"]`.
-- `lib/compiler.borth` turns parser nodes into instruction arrays.
+- `lib/compiler.borth` turns parser nodes and their parallel spans into
+  instruction arrays.
 - String literal parsing matches the TypeScript bootstrap escape set: `\"`,
   `\\`, and `\n`.
 - Compiler helpers emit instructions into `compiler-instructions` rather than
@@ -1080,8 +1087,9 @@ Compiler library decision:
   `HALT`.
 - The current instruction format is intentionally inspectable data, not a final
   bytecode format. Use "instructions" for this Borth-level representation.
-- Compiler failures use `panic` for now so invalid input stops immediately
-  instead of continuing with a broken stack shape.
+- Compiler failures use `compiler-panic`, which adds the current source location
+  before delegating to `panic` so invalid input stops immediately instead of
+  continuing with a broken stack shape.
 - `array-append` lives in `lib/array.borth` because more than one Borth library
   now needs small array-manipulation helpers.
 
@@ -1090,13 +1098,16 @@ Compiler library decision:
 Goal:
 
 ```text
-"10 20 +" lex-src parse-tokens compile-nodes run-bytecode
+"<test>" "10 20 +"
+  over swap lexer-lex-src-file-with-spans
+  swap parse-tokens swap
+  compile-nodes run-bytecode
 ```
 
 should run through Borth library code for:
 
 ```text
-source string -> token strings -> node arrays -> instruction arrays -> VM stack
+source string -> token strings + spans -> node arrays + spans -> instruction arrays -> VM stack
 ```
 
 and produce:
@@ -1161,8 +1172,8 @@ The next compiler milestones are mostly parity and robustness work:
    fail deliberately.
 3. Centralize name validation across user words, variables, deferred words,
    built-in words, and reserved syntax.
-4. Improve compiler errors using the file path and node index already carried
-   in compiler state.
+4. Thread source spans into runtime bytecode diagnostics once compiler-side
+   location reporting has settled.
 5. Decide the first artifact boundary after instruction arrays: printed
    bytecode, textual IR, assembly text, or another deliberately small backend.
 

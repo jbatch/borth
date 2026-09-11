@@ -5,9 +5,18 @@ import "../lib/vm.borth"
 import "../lib/c-emitter.borth"
 
 # run example file
-# "examples/string-escape.borth" dup read-text-file lex-src parse-tokens swap compile-nodes run-bytecode .s
+# "examples/string-escape.borth" dup read-text-file over swap lexer-lex-src-file-with-spans swap parse-tokens swap compile-nodes run-bytecode .s
+
+1 SKIP_PRELUDE !
+# ( file-path source )
+"examples/counter.borth" dup read-text-file
+# ( file-path tokens spans )
+over swap lexer-lex-src-file-with-spans
+# ( file-path tokens spans )
+swap parse-tokens
+# ( file-path spans nodes )
+swap compile-nodes .s
 
 # run inline code
-#"10 20 +" lex-src parse-tokens "REPL" compile-nodes run-bytecode .s
-1 SKIP_PRELUDE !
-"10 20 +" lex-src parse-tokens "REPL" compile-nodes "program.c" dup "" write-text-file write-c-program
+# "<inline>" "10 20 +" over swap lexer-lex-src-file-with-spans swap parse-tokens swap compile-nodes run-bytecode .s
+# "<inline>" "10    20\n+" over swap lexer-lex-src-file-with-spans swap parse-tokens swap compile-nodes "program.c" dup "" write-text-file write-c-program

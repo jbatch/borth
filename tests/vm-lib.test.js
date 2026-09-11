@@ -6,7 +6,26 @@ import { run } from "../dist/runner.js";
 function outputOf(source, options = {}) {
   const output = [];
 
-  run(source, {
+  // VM tests focus on runtime behavior, so snippets keep the compact old
+  // compile spelling and this wrapper expands it to the current span-aware
+  // compiler API.
+  const sourceWithTestHelpers = source
+    .replace(
+      'import "lib/compiler.borth"',
+      `import "lib/compiler.borth"
+
+      : test-compile-src
+        "<test>" swap over swap lexer-lex-src-file-with-spans
+        swap parse-tokens swap
+        compile-nodes
+      ;`,
+    )
+    .replaceAll(
+      'lex-src parse-tokens "<test>" compile-nodes',
+      "test-compile-src",
+    );
+
+  run(sourceWithTestHelpers, {
     ...options,
     write: (value) => output.push(value),
   });

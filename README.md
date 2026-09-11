@@ -364,7 +364,10 @@ import "lib/parser.borth"
 import "lib/compiler.borth"
 import "lib/vm.borth"
 
-"<inline>" "0 if 2 else 3 end" lex-src parse-tokens swap compile-nodes run-bytecode show print
+"<inline>" "0 if 2 else 3 end"
+  over swap lexer-lex-src-file-with-spans
+  swap parse-tokens swap
+  compile-nodes run-bytecode show print
 ```
 
 The Borth-written compiler now supports source-relative imports by compiling an
