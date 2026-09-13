@@ -70,16 +70,17 @@ The emitter starts from compiled bytecode. The first landed slice writes:
 1. `#include "borth_runtime.h"`.
 2. `int main(void)`.
 3. Runtime initialization.
-4. One straight-line C helper call per supported instruction.
+4. One C label and helper call per supported instruction.
 5. Runtime cleanup and `return 0`.
 
-Later control-flow slices will add:
+The current C emitter also includes:
 
-- one C label per bytecode instruction
 - `goto` for jumps
 - a shared return dispatcher for `RET`
+- direct helper calls for arithmetic, comparisons, stack operations, variables,
+  strings, arrays, host IO/path/env operations, random, panic, and exit
 
-The first Borth implementation can mirror the Borth VM dispatch structure:
+The Borth implementation mirrors the Borth VM dispatch structure:
 
 ```text
 read opcode
@@ -93,26 +94,31 @@ The difference is that the emitter prints C instead of executing the operation.
 
 ### Build Wrapper
 
-Later, a `build` command can make the C step feel like native compilation:
+The `build` command makes the C step feel like native compilation:
 
 ```text
 borth build input.borth -o output
 ```
 
-Internally that can:
+Internally it:
 
 1. Compile Borth to bytecode.
 2. Emit temporary C.
 3. Run `cc`.
-4. Remove temporary files unless a debug flag asks to keep them.
+4. Removes temporary files unless a debug flag asks to keep them.
 
-The generated C should remain easy to inspect. A `--keep-c` or `emit-c` command
-is important while this backend is still being learned.
+The generated C should remain easy to inspect. `--keep-c` and `--emit-c` are
+important while this backend is still being learned.
 
 ## Suggested Runtime Milestones
 
 Each milestone should include a tiny standalone C runtime test and then one
 end-to-end generated Borth program.
+
+Current status: milestones 1 through 10 have landed as a deliberately simple
+bytecode-to-C backend. The open work is now mostly cleanup and parity hardening:
+memory ownership, more standard error presentation, and deciding whether a later
+backend should preserve word boundaries as C functions.
 
 ### 1. Numbers, Stack, Add, Print
 
@@ -380,7 +386,7 @@ Compiler/tooling support:
 Possible commands:
 
 ```sh
-borth emit-c input.borth output.c
+borth build input.borth --emit-c output.c
 borth build input.borth -o output
 borth build --keep-c input.borth -o output
 ```

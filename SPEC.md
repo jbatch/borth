@@ -1222,8 +1222,7 @@ randomness, printing, panic, and bytecode execution.
 The next compiler milestones are mostly parity and robustness work:
 
 1. Validate unresolved deferred words before `compile-nodes` returns.
-2. Track imported modules so duplicate imports are ignored and import cycles
-   fail deliberately.
+2. Track modules currently being imported so import cycles fail deliberately.
 3. Centralize name validation across user words, variables, deferred words,
    built-in words, and reserved syntax.
 4. Thread source spans into runtime bytecode diagnostics once compiler-side

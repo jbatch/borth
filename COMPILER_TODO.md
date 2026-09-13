@@ -14,7 +14,7 @@ Status labels:
 ## Suggested Next Order
 
 1. Add unresolved deferred-word validation to the Borth compiler.
-2. Add import tracking and cycle detection.
+2. Add import cycle detection.
 3. Centralize compiler namespace validation.
 4. Add Borth string escape parsing parity.
 5. Improve source-aware compiler errors.
@@ -47,11 +47,10 @@ the Borth-written compiler/VM path.
 
 ### Needs Extra State/Work
 
-- Suppress duplicate imports. The TypeScript runner tracks loaded modules by
-  normalized absolute path; the Borth compiler does not yet carry an imported
-  module set.
-- Detect import cycles. This probably wants a second `loadingModules` style set
-  in compiler state so cycles can be reported before recursive import blows up.
+- Detect import cycles. Duplicate imports are now suppressed with an imported
+  module map in compiler state; cycle detection probably wants a second
+  `loadingModules` style set so cycles can be reported before recursive import
+  blows up.
 - Improve source-aware compiler errors. Borth compiler state has file path and
   node index, but most panics still report generic messages.
 - Decide standard library lookup policy. The Borth compiler currently loads
@@ -85,8 +84,8 @@ These are TODO comments that already exist in the codebase.
 
 ### Needs Extra State/Work
 
-- Add imported/being-imported module maps to compiler state and thread them
-  through `module-compiler-new`.
+- Add a being-imported module map to compiler state and thread it through
+  `module-compiler-new` for deliberate import cycle detection.
 - Add map iteration or map-values helpers so deferred-finalization and import
   bookkeeping can inspect maps cleanly.
 

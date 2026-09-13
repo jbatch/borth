@@ -109,6 +109,7 @@ path-resolve ( base path -- path )
 print ( A -- )
 .s    ( -- )
 panic ( string -- never )
+exit  ( code -- never )
 ```
 
 Prelude words:
@@ -379,7 +380,8 @@ import "lib/vm.borth"
 The Borth-written compiler now supports source-relative imports by compiling an
 imported file with a nested compiler state, then merging its bytecode, word
 declarations, and variable declarations back into the parent compiler state.
-It also loads `prelude.borth` from `cwd` before entry programs unless
-`SKIP_PRELUDE` is set. Known remaining compiler parity work: unresolved
-deferred validation, duplicate import suppression, import cycle detection,
+Duplicate imports are ignored by normalized full path, including transitive
+imports through diamond-shaped module graphs. It also loads `prelude.borth`
+from `cwd` before entry programs unless `SKIP_PRELUDE` is set. Known remaining
+compiler parity work: unresolved deferred validation, import cycle detection,
 and centralized namespace checks.
