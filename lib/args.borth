@@ -1,0 +1,136 @@
+import "./strings.borth"
+
+# args-has-next-arg? ( argv index -- flag )
+#
+# Return 1 when index has another raw argv token after it.
+: _args-has-next-arg?
+    1 + swap array-len <
+;
+
+# _args-push-to-positionals ( parsed-args arg -- parsed-args )
+#
+# Return parsed-args with arg appended to its positionals array.
+: _args-push-to-positionals
+    over 0 array-get
+        swap array-push
+    0 swap array-set 
+;
+
+# _args-push-to-options ( parsed-args option value -- parsed-args )
+#
+# Return parsed-args with [option value] appended to its options array.
+: _args-push-to-options
+    # ( parsed-args [ option value ] )
+    array-new rot array-push swap array-push
+    # ( parsed-args [ option value ] options )
+    over 1 array-get
+        swap array-push
+    1 swap array-set
+;
+
+# _args-push-to-flags ( parsed-args arg -- parsed-args )
+#
+# Return parsed-args with arg appended to its flags array.
+: _args-push-to-flags
+    over 2 array-get
+        swap array-push
+    2 swap array-set
+;
+
+# arg-count       ( args -- n )
+#
+# Return the number of raw argv tokens.
+: arg-count
+    array-len
+;
+
+# arg-at          ( args index -- value found? )
+#
+# Return the raw argv token at index plus a found flag.
+: arg-at
+    # ( args index index args-len )
+    over array-len over swap < not if
+        drop drop 0 0
+    else
+        array-get 1
+    end
+;
+
+# parse-args ( argv -- parsed-args )
+#
+# Walk argv left-to-right and populate a structure like:
+#
+#   [ positionals options flags ]
+#
+# e.g.
+# positionals = ["build" "input.borth"]
+# options     = [["-o" "program"] ["--target" "native"]]
+# flags       = ["--keep-c" "--verbose"]
+#
+# Any token that does not start with "-" is positional. A "-" token followed by
+# another "-" token, or by the end of argv, is a flag. A "-" token followed by a
+# non-option token becomes an option/value pair and consumes both tokens.
+: parse-args
+    array-new 
+    array-new array-push # positionals
+    array-new array-push # options
+    array-new array-push # flags
+
+    # ( parsed-args argv index )
+    swap 0
+    loop 
+        2dup swap array-len <
+    while
+        # ( parsed-args argv index arg )
+        2dup array-get
+        dup "-" str-starts-with? not if
+            # push to positionals
+            # ( parsed-args argv index )
+            3 roll swap _args-push-to-positionals -rot
+        else
+            # check next args to tell if this is an option or a flag
+            -rot 2dup _args-has-next-arg? not if
+                # push to flags
+                # ( parsed-args argv index )
+                3 roll 3 roll _args-push-to-flags -rot
+            else
+                # ( parsed-args arg argv index next-arg )
+                2dup 1 + array-get
+                dup "-" str-starts-with? if
+                    # push arg to flags
+                    # ( parsed-args argv index )
+                    drop 3 roll 3 roll _args-push-to-flags -rot
+                else
+                    # push arg and next-arg to options
+                    # ( parsed-args argv index  )
+                    4 roll 4 roll rot _args-push-to-options -rot
+                    # increment index an extra time because we consumed two args
+                    1 +
+                end
+            end
+        end
+        1 +
+    repeat
+    drop drop
+;
+
+# parsed-positionals ( parsed-args -- positionals )
+#
+# Return the positionals array from [ positionals options flags ].
+: parsed-positionals
+    0 array-get
+;
+
+# parsed-options     ( parsed-args -- options )
+#
+# Return the options array from [ positionals options flags ].
+: parsed-options
+    1 array-get
+;
+
+# parsed-flags       ( parsed-args -- flags )
+#
+# Return the flags array from [ positionals options flags ].
+: parsed-flags
+    2 array-get
+;

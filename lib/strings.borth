@@ -142,3 +142,10 @@
     1 str-to-int-from-index -1 *
   end
 ;
+
+# str-starts-with? ( str char -- flag )
+#
+# Return 1 when the first character of str equals char.
+: str-starts-with?
+  swap 0 char-at =
+;

@@ -3,21 +3,206 @@ import "../lib/parser.borth"
 import "../lib/compiler.borth"
 import "../lib/vm.borth"
 import "../lib/c-emitter.borth"
+import "../lib/args.borth"
+
+variable COMPILER_ARGS
+
+# print-usage ( -- )
+#
+# Print the intended command-line surface for the native build tool.
+: print-usage
+    "usage:" print
+    "borth build <input.borth> [options]" print
+    "" print
+    "options:" print
+    "-o <path>          Write the native executable to path" print
+    "--emit-c <path>    Write generated C source to path" print
+    "--keep-c           Keep the generated C file after building" print
+    "--run              Run the executable after a successful build" print
+    "--cc <command>     C compiler command to use, default: cc" print
+    "--verbose          Print build steps as they run" print
+    "-h, --help         Show this help text" print
+    "" print
+    "examples:" print
+    "borth build examples/add.borth -o add" print
+    "borth build examples/add.borth --emit-c add.c" print
+    "borth build examples/add.borth -o add --keep-c" print
+    "borth build examples/add.borth -o add --run" print
+;
+
+# compiler-args-init ( -- )
+#
+# Reset the compiler build configuration to its defaults.
+: compiler-args-init
+    array-new
+    "" array-push           # command
+    "" array-push           # input-file-path
+    "program.c" array-push  # c-source-path
+    "program" array-push    # output-path
+    0 array-push            # should-run
+    0 array-push            # keep-c
+    "cc" array-push         # cc
+    0 array-push            # verbose
+    COMPILER_ARGS !
+;
+
+
+# compiler-args-command ( -- command )
+: compiler-args-command COMPILER_ARGS @ 0 array-get ;
+# compiler-args-set-command ( command -- )
+: compiler-args-set-command COMPILER_ARGS @ swap 0 swap array-set COMPILER_ARGS ! ;
+
+# compiler-args-input-file-path ( -- input-file-path )
+: compiler-args-input-file-path COMPILER_ARGS @ 1 array-get ;
+# compiler-args-set-input-file-path ( input-file-path -- )
+: compiler-args-set-input-file-path COMPILER_ARGS @ swap 1 swap array-set COMPILER_ARGS ! ;
+
+# compiler-args-c-source-path ( -- c-source-path )
+: compiler-args-c-source-path COMPILER_ARGS @ 2 array-get ;
+# compiler-args-set-c-source-path ( c-source-path -- )
+: compiler-args-set-c-source-path COMPILER_ARGS @ swap 2 swap array-set COMPILER_ARGS ! ;
+
+# compiler-args-output-path ( -- output-path )
+: compiler-args-output-path COMPILER_ARGS @ 3 array-get ;
+# compiler-args-set-output-path ( output-path -- )
+: compiler-args-set-output-path COMPILER_ARGS @ swap 3 swap array-set COMPILER_ARGS ! ;
+
+# compiler-args-should-run ( -- should-run )
+: compiler-args-should-run COMPILER_ARGS @ 4 array-get ;
+# compiler-args-set-should-run ( should-run -- )
+: compiler-args-set-should-run COMPILER_ARGS @ swap 4 swap array-set COMPILER_ARGS ! ;
+
+# compiler-args-keep-c ( -- keep-c )
+: compiler-args-keep-c COMPILER_ARGS @ 5 array-get ;
+# compiler-args-set-keep-c ( keep-c -- )
+: compiler-args-set-keep-c COMPILER_ARGS @ swap 5 swap array-set COMPILER_ARGS ! ;
+
+# compiler-args-cc ( -- cc )
+: compiler-args-cc COMPILER_ARGS @ 6 array-get ;
+# compiler-args-set-cc ( cc -- )
+: compiler-args-set-cc COMPILER_ARGS @ swap 6 swap array-set COMPILER_ARGS ! ;
+
+# compiler-args-verbose ( -- verbose )
+: compiler-args-verbose COMPILER_ARGS @ 7 array-get ;
+# compiler-args-set-verbose ( verbose -- )
+: compiler-args-set-verbose COMPILER_ARGS @ swap 7 swap array-set COMPILER_ARGS ! ;
+
+# parse-positionals ( parsed-args -- parsed-args )
+#
+# Extract the command name and input source path from parsed positionals, and
+# reset COMPILER_ARGS before applying those values.
+: parse-positionals
+    # ( parsed-args positionals )
+    parsed-positionals dup array-len 2 = not if
+        print-usage "" panic
+    end 
+    compiler-args-init
+    # extract command and input-file-path from positionals
+    # ( parsed-args )
+    dup 0 array-get compiler-args-set-command 1 array-get compiler-args-set-input-file-path
+;
+
+# parse-flags ( parsed-args -- parsed-args )
+#
+# Apply supported boolean flags to COMPILER_ARGS.
+: parse-flags
+    # ( parsed-args flags index)
+    parsed-flags 0
+    loop
+        # ( parsed-args flags index )
+        2dup swap array-len <
+    while
+        # ( parsed-args flags index flag )
+        2dup array-get
+        dup "--run" = if drop
+            # ( parsed-args compiler-args flags index  )
+            1 compiler-args-set-should-run # enable run
+        else dup "--keep-c" = if drop
+            # ( parsed-args compiler-args flags index  )
+            1 compiler-args-set-keep-c # enable keep-c
+        else
+            "unknown flag: " swap str-cat print "" print print-usage "" panic
+        end end
+        1 +
+    repeat
+    drop drop
+;
+
+# parse-options ( parsed-args -- parsed-args )
+#
+# Apply supported option/value pairs to COMPILER_ARGS.
+: parse-options
+    parsed-options 0
+    loop
+         # ( parsed-args options index )
+        2dup swap array-len <
+    while
+        # ( parsed-args options index optionName optionValue  )
+        2dup array-get dup 0 array-get swap 1 array-get
+        over "--emit-c" = if
+            compiler-args-set-c-source-path drop
+        else over "-o" = if
+            compiler-args-set-output-path drop
+        else
+            "unknown option: " rot str-cat print "" print print-usage "" panic
+        end end
+        1 +
+    repeat drop
+;
+
+# parse-compiler-args ( -- parsed-args )
+#
+# Read host argv, parse it, and populate COMPILER_ARGS.
+: parse-compiler-args
+    args parse-args
+    dup parse-positionals
+    dup parse-flags
+    dup parse-options
+    drop
+;
+
+# execute-build ( -- )
+#
+# Compile the configured Borth source file to C, invoke the host C compiler, and
+# optionally run the generated executable.
+: execute-build
+    1 SKIP_PRELUDE !
+    # ( file-path source )
+    COMPILER_ARGS @ compiler-args-input-file-path dup read-text-file
+    # ( file-path tokens spans )
+    over swap lexer-lex-src-file-with-spans
+    # ( file-path tokens spans )
+    swap parse-tokens
+    # ( file-path spans nodes )
+    swap compile-nodes
+    compiler-args-c-source-path write-c-program
+    # TODO inspect exit code of $CC
+    compiler-args-cc array-new compiler-args-c-source-path array-push "runtime/borth_runtime.c" array-push "-Iruntime" array-push "-o" array-push compiler-args-output-path array-push run-command drop drop drop
+
+    # cleanup generated c unless user opted out
+    compiler-args-keep-c not if
+        "rm" array-new compiler-args-c-source-path array-push run-command drop drop drop
+    end
+
+    # optionally run generate program
+    compiler-args-should-run if
+        "./" compiler-args-output-path path-resolve array-new run-command drop swap drop print
+    end
+;
+
+parse-compiler-args
+
+COMPILER_ARGS @ compiler-args-command dup "build" = if drop
+    execute-build
+else
+    "unknown command: " swap str-cat print "" print
+    print-usage "" panic
+end
+
 
 # run example file
 # "examples/string-escape.borth" dup read-text-file over swap lexer-lex-src-file-with-spans swap parse-tokens swap compile-nodes run-bytecode .s
-1 SKIP_PRELUDE !
-# ( file-path source )
-"examples/add.borth" dup read-text-file
-# ( file-path tokens spans )
-over swap lexer-lex-src-file-with-spans
-# ( file-path tokens spans )
-swap parse-tokens
-# ( file-path spans nodes )
-swap compile-nodes .s
-"program.c" write-c-program
-"cc" array-new "program.c" array-push "runtime/borth_runtime.c" array-push "-Iruntime" array-push "-o" array-push "program" array-push run-command drop drop drop
-"./program" array-new run-command drop swap drop print
+
 
 # run inline code
 # "<inline>" "10 20 +" over swap lexer-lex-src-file-with-spans swap parse-tokens swap compile-nodes run-bytecode .s
