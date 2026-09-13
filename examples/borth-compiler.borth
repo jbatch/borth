@@ -166,7 +166,9 @@ variable COMPILER_ARGS
 # Compile the configured Borth source file to C, invoke the host C compiler, and
 # optionally run the generated executable.
 : execute-build
-    1 SKIP_PRELUDE !
+    # Keep the implicit prelude enabled so compiled programs and their imports
+    # can use standard helper words.
+    0 SKIP_PRELUDE !
     # ( file-path source )
     COMPILER_ARGS @ compiler-args-input-file-path dup read-text-file
     # ( file-path tokens spans )

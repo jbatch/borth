@@ -15,14 +15,15 @@ import "./parser.borth"
 # Compilation threads one explicit state object through most compiler words.
 # The state object layout is:
 #
-#   [ file-path nodes spans node-index instructions allow-top-level-code block-stack words variables deferred-calls ]
+#   [ file-path nodes spans node-index instructions allow-top-level-code block-stack words variables deferred-calls imported-modules ]
 #
 # `nodes` is the parser output being compiled. `spans` is a parallel array with
 # one source span per node. `node-index` points at the node currently being
 # compiled. `allow-top-level-code` controls whether loose executable source is
 # legal outside a definition; imported modules use 0. The remaining fields are
 # evolving compiler-session data: emitted bytecode, open control-flow/definition
-# blocks, user-defined word addresses, and variable memory indexes.
+# blocks, user-defined word addresses, variable memory indexes, deferred calls,
+# and imported module paths.
 #
 # Accessor words consume the compiler state they inspect. Setter words return a
 # new compiler state with one field replaced, ready for explicit threading.
@@ -54,6 +55,7 @@ variable SKIP_PRELUDE
     map-new array-push      # words
     map-new array-push      # variables
     map-new array-push      # deferred-calls
+    map-new array-push      # imported-modules
 ;
 
 # compiler-file-path ( state -- file-path )
@@ -111,6 +113,11 @@ variable SKIP_PRELUDE
     9 array-get
 ;
 
+# compiler-imported-modules ( state -- imported-modules )
+: compiler-imported-modules
+    10 array-get
+;
+
 # compiler-set-file-path ( state file-path -- state )
 : compiler-set-file-path
     0 swap array-set
@@ -165,6 +172,11 @@ variable SKIP_PRELUDE
     9 swap array-set
 ;
 
+# compiler-set-imported-modules ( state imported-modules -- state )
+: compiler-set-imported-modules
+    10 swap array-set
+;
+
 # compiler-finished? ( state -- flag )
 #
 # Return 1 once node-index has reached or passed the number of nodes.
@@ -189,6 +201,18 @@ variable SKIP_PRELUDE
 : compiler-current-node
     dup compiler-nodes
     swap compiler-node-index array-get
+;
+
+# compiler-append-imported-module ( state absolute-file-path -- state )
+: compiler-append-imported-module
+    over compiler-imported-modules
+        swap 1 map-set
+    compiler-set-imported-modules
+;
+
+# compiler-module-already-imported? ( state absolute-file-path -- flag )
+: compiler-module-already-imported?
+    swap compiler-imported-modules swap map-has?
 ;
 
 # compiler-debug? ( -- flag )
@@ -232,19 +256,20 @@ variable SKIP_PRELUDE
 #
 # Build a child compiler state for an imported module. The child gets its own
 # file path, nodes, spans, node cursor, and block stack, while sharing the
-# parent's emitted instructions, words, and variables.
+# parent's emitted instructions, words, variables, and imported-module cache.
 : module-compiler-new
     array-new
-    3 roll array-push                       # file-path
-    rot array-push                          # nodes
-    swap array-push                         # spans
-    0 array-push                            # node-index
-    over compiler-instructions array-push   # instructions
-    0 array-push                            # allow-top-level-code
-    array-new array-push                    # block-stack
-    over compiler-words array-push          # words
-    over compiler-variables array-push      # variables
-    array-new array-push                    # deferred-calls
+    3 roll array-push                           # file-path
+    rot array-push                              # nodes
+    swap array-push                             # spans
+    0 array-push                                # node-index
+    over compiler-instructions array-push       # instructions
+    0 array-push                                # allow-top-level-code
+    array-new array-push                        # block-stack
+    over compiler-words array-push              # words
+    over compiler-variables array-push          # variables
+    map-new array-push                          # deferred-calls
+    over compiler-imported-modules array-push   # imported-modules
     nip
 ;
 
@@ -814,36 +839,46 @@ deferred compile-next-node
 #
 # Compile another source string as a module into the current compiler session.
 # The module gets its own node cursor and block stack, but shares instructions,
-# word declarations, and variable declarations with the parent compiler.
+# word declarations, variable declarations, and imported-module cache with the
+# parent compiler. Modules already present in the cache are skipped.
 : import-source-file
-    # Lex the child source with its own file path so module compiler errors point
-    # at the imported file.
-    # ( state file-path source -- state file-path tokens spans )
-    over swap lexer-lex-src-file-with-spans
-    # Parse the child tokens while carrying spans beside the nodes.
-    # ( state file-path tokens spans -- state file-path nodes spans )
-    swap parse-tokens swap
-    # Build the child/module compiler state from the lexed module source.
-    3over 3 -roll module-compiler-new
+    -rot 2dup compiler-module-already-imported? not if
+        rot
+        # Lex the child source with its own file path so module compiler errors point
+        # at the imported file.
+        # ( state file-path source -- state file-path tokens spans )
+        over swap lexer-lex-src-file-with-spans
+        # Parse the child tokens while carrying spans beside the nodes.
+        # ( state file-path tokens spans -- state file-path nodes spans )
+        swap parse-tokens swap
+        # Build the child/module compiler state from the lexed module source.
+        3over 3 -roll module-compiler-new
 
-    # TODO handle already imported modules and circular dependencies
+        # TODO: Detect circular dependencies.
 
-    # Compile module nodes without emitting HALT.
-    loop
-        dup compiler-finished? not
-    while
-        compile-next-node
-    repeat
-    # TODO: Inspect the top open block here so this can report the specific
-    # missing closer instead of a generic end-of-source block error.
-    dup "unclosed block words after end of module source" assert-no-open-blocks
+        # Compile module nodes without emitting HALT.
+        loop
+            dup compiler-finished? not
+        while
+            compile-next-node
+        repeat
+        # TODO: Inspect the top open block here so this can report the specific
+        # missing closer instead of a generic end-of-source block error.
+        dup "unclosed block words after end of module source" assert-no-open-blocks
 
-    # Copy updated instructions/words/variables back to the parent compiler.
-    swap
-    over compiler-instructions compiler-set-instructions
-    over compiler-words compiler-set-words
-    over compiler-variables compiler-set-variables
-    nip
+        # Copy updated session data back to the parent compiler, including
+        # transitive imports observed by the child compiler.
+        swap
+        over compiler-instructions compiler-set-instructions
+        over compiler-words compiler-set-words
+        over compiler-variables compiler-set-variables
+        over compiler-imported-modules compiler-set-imported-modules
+        over compiler-file-path compiler-append-imported-module
+        nip
+    else
+        # Module already compiled. Drop file-path and source.
+        drop nip
+    end
 ;
 
 : compile-import

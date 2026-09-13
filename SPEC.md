@@ -52,13 +52,17 @@ helper calls, labels, and eventually C functions per Borth word.
 
 Known remaining import work in the Borth-written compiler:
 
-- suppress duplicate imports
 - detect import cycles
-- The native backend can now lower variables, jumps, calls, and returns, but
-  compiling `examples/borth-compiler.borth` through the Borth-written compiler
-  still needs duplicate-import suppression because the compiler/library import
-  graph reaches shared modules such as `lib/array.borth` through more than one
-  path.
+
+Current import behavior in the Borth-written compiler:
+
+- duplicate imports are suppressed by tracking full normalized module paths in
+  compiler state
+- nested module compilers copy their transitive imported-module cache back to
+  the parent compiler, so diamond import graphs do not recompile shared modules
+- entry-program compilation loads `prelude.borth` unless `SKIP_PRELUDE` is set;
+  the native build tool leaves this enabled so imported libraries have the
+  standard helper words available
 
 Known remaining compiler/runtime parity work:
 

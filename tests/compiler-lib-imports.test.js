@@ -101,6 +101,80 @@ test("compiler library compiles transitive imports relative to each importing fi
   assert.deepEqual(compileAndRunFile(entryPath), [12, "[]"]);
 });
 
+test("compiler library ignores duplicate imports of the same module", () => {
+  const root = makeWorkspace();
+
+  writeModule(
+    root,
+    "math.borth",
+    `
+      : square
+        dup *
+      ;
+    `,
+  );
+  const entryPath = writeModule(
+    root,
+    "main.borth",
+    `
+      import "./math.borth"
+      import "./math.borth"
+
+      5 square print
+    `,
+  );
+
+  assert.deepEqual(compileAndRunFile(entryPath), [25, "[]"]);
+});
+
+test("compiler library carries transitive imported-module cache back to parents", () => {
+  const root = makeWorkspace();
+
+  writeModule(
+    root,
+    "lib/base.borth",
+    `
+      : inc
+        1 +
+      ;
+    `,
+  );
+  writeModule(
+    root,
+    "features/left.borth",
+    `
+      import "../lib/base.borth"
+
+      : left-inc
+        inc
+      ;
+    `,
+  );
+  writeModule(
+    root,
+    "features/right.borth",
+    `
+      import "../lib/base.borth"
+
+      : right-inc
+        inc
+      ;
+    `,
+  );
+  const entryPath = writeModule(
+    root,
+    "programs/main.borth",
+    `
+      import "../features/left.borth"
+      import "../features/right.borth"
+
+      10 left-inc right-inc print
+    `,
+  );
+
+  assert.deepEqual(compileAndRunFile(entryPath), [12, "[]"]);
+});
+
 test("compiler library shares variables from imported modules", () => {
   const root = makeWorkspace();
 
