@@ -46,6 +46,7 @@ void borth_op_run_command(BorthRuntime *runtime);
 void borth_op_cwd(BorthRuntime *runtime);
 void borth_op_path_dirname(BorthRuntime *runtime);
 void borth_op_path_resolve(BorthRuntime *runtime);
+int borth_op_pop_condition(BorthRuntime *runtime);
 void borth_op_panic(BorthRuntime *runtime);
 void borth_op_exit(BorthRuntime *runtime);
 void borth_op_print_stack(BorthRuntime *runtime);

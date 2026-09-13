@@ -37,6 +37,28 @@ import "./strings.borth"
     end end
 ;
 
+# c-label-name ( index -- c-label )
+: c-label-name
+    show "borth_ip_" swap str-cat
+;
+
+# c-emit-label ( index -- c-source )
+: c-emit-label
+    c-label-name ":" str-cat
+;
+
+# c-emit-jump-instruction ( instruction -- c-source )
+: c-emit-jump-instruction
+    1 array-get c-label-name
+    "  goto " swap str-cat ";" str-cat
+;
+
+# c-emit-jump-if-false-instruction ( instruction -- c-source )
+: c-emit-jump-if-false-instruction
+    1 array-get c-label-name
+    "  if (!borth_op_pop_condition(rt)) { goto " swap str-cat "; }" str-cat
+;
+
 # c-emit-instruction ( instruction -- c-source )
 #
 # Return the C statement for one supported instruction.
@@ -81,6 +103,8 @@ import "./strings.borth"
     else dup "CWD" = if drop drop "  borth_op_cwd(rt);"
     else dup "PATH_DIRNAME" = if drop drop "  borth_op_path_dirname(rt);"
     else dup "PATH_RESOLVE" = if drop drop "  borth_op_path_resolve(rt);"
+    else dup "JUMP" = if drop c-emit-jump-instruction
+    else dup "JUMP_IF_FALSE" = if drop c-emit-jump-if-false-instruction
     else dup "PANIC" = if drop drop "  borth_op_panic(rt);"
     else dup "EXIT" = if drop drop "  borth_op_exit(rt);"
     else dup "PRINT_STACK" = if drop drop "  borth_op_print_stack(rt);"
@@ -90,7 +114,7 @@ import "./strings.borth"
         drop drop ""
     else
         "C emitter does not support instruction: " swap str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # write-c-instructions ( file-path instructions -- file-path )
@@ -101,6 +125,9 @@ import "./strings.borth"
     loop
         2dup swap array-len <
     while
+        dup c-emit-label
+        3over swap append-text-file
+        2over "\n" append-text-file
         2dup array-get c-emit-instruction
         dup "" = if
             drop

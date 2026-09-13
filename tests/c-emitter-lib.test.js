@@ -83,6 +83,108 @@ test("C emitter writes and runs a tiny native integer program", (t) => {
   }
 });
 
+test("C emitter writes and runs native jumps", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "borth-c-emitter-"));
+  const sourcePath = join(root, "program.c");
+  const executablePath = join(root, "program");
+
+  try {
+    run(
+      `
+        import "lib/c-emitter.borth"
+
+        array-new
+          array-new "PUSH" array-push 0 array-push array-push
+          array-new "JUMP_IF_FALSE" array-push 5 array-push array-push
+          array-new "PUSH" array-push "bad" array-push array-push
+          array-new "PRINT" array-push array-push
+          array-new "JUMP" array-push 7 array-push array-push
+          array-new "PUSH" array-push "else" array-push array-push
+          array-new "PRINT" array-push array-push
+          array-new "PUSH" array-push 3 array-push array-push
+          array-new "DUP" array-push array-push
+          array-new "PUSH" array-push 0 array-push array-push
+          array-new "GT" array-push array-push
+          array-new "JUMP_IF_FALSE" array-push 17 array-push array-push
+          array-new "DUP" array-push array-push
+          array-new "PRINT" array-push array-push
+          array-new "PUSH" array-push 1 array-push array-push
+          array-new "SUB" array-push array-push
+          array-new "JUMP" array-push 8 array-push array-push
+          array-new "DROP" array-push array-push
+          array-new "HALT" array-push array-push
+        ${JSON.stringify(sourcePath)} write-c-program
+      `,
+      { write: () => undefined },
+    );
+
+    const generated = readFileSync(sourcePath, "utf8");
+    assert.match(generated, /borth_ip_0:/);
+    assert.match(generated, /goto borth_ip_7;/);
+    assert.match(
+      generated,
+      /if \(!borth_op_pop_condition\(rt\)\) \{ goto borth_ip_17; \}/,
+    );
+
+    if (!compileNativeProgram(t, sourcePath, executablePath)) {
+      return;
+    }
+
+    const runProgram = spawnSync(executablePath, [], { encoding: "utf8" });
+
+    assert.equal(runProgram.status, 0, runProgram.stderr);
+    assert.equal(runProgram.stdout, "else\n3\n2\n1\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("C emitter writes and runs compiler-generated native control flow", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "borth-c-emitter-"));
+  const sourcePath = join(root, "program.c");
+  const executablePath = join(root, "program");
+
+  try {
+    run(
+      `
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+        import "lib/c-emitter.borth"
+
+        1 SKIP_PRELUDE !
+
+        : test-compile-src
+          "<test>" swap over swap lexer-lex-src-file-with-spans
+          swap parse-tokens swap
+          compile-nodes
+        ;
+
+        "0 if \\"bad\\" print else \\"else\\" print end 3 loop dup 0 > while dup print 1 - repeat drop"
+          test-compile-src
+        ${JSON.stringify(sourcePath)} write-c-program
+      `,
+      { write: () => undefined },
+    );
+
+    const generated = readFileSync(sourcePath, "utf8");
+    assert.match(generated, /borth_ip_0:/);
+    assert.match(generated, /goto borth_ip_/);
+    assert.match(generated, /borth_op_pop_condition\(rt\)/);
+
+    if (!compileNativeProgram(t, sourcePath, executablePath)) {
+      return;
+    }
+
+    const runProgram = spawnSync(executablePath, [], { encoding: "utf8" });
+
+    assert.equal(runProgram.status, 0, runProgram.stderr);
+    assert.equal(runProgram.stdout, "else\n3\n2\n1\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("C emitter writes and runs native host operations", (t) => {
   const root = mkdtempSync(join(tmpdir(), "borth-c-emitter-"));
   const sourcePath = join(root, "program.c");

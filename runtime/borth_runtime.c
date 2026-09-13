@@ -1360,6 +1360,10 @@ void borth_op_path_resolve(BorthRuntime *runtime) {
       borth_value_string(borth_path_resolve(runtime, base, path)));
 }
 
+int borth_op_pop_condition(BorthRuntime *runtime) {
+  return borth_pop_int(runtime, "JUMP_IF_FALSE requires integers on the stack") != 0;
+}
+
 void borth_op_panic(BorthRuntime *runtime) {
   BorthString *message =
       borth_pop_string(runtime, "PANIC requires strings on the stack");
