@@ -54,6 +54,11 @@ Known remaining import work in the Borth-written compiler:
 
 - suppress duplicate imports
 - detect import cycles
+- The native backend can now lower variables, jumps, calls, and returns, but
+  compiling `examples/borth-compiler.borth` through the Borth-written compiler
+  still needs duplicate-import suppression because the compiler/library import
+  graph reaches shared modules such as `lib/array.borth` through more than one
+  path.
 
 Known remaining compiler/runtime parity work:
 
@@ -1072,9 +1077,15 @@ Native C slice decision:
   `main` function with one C label per instruction.
 - `JUMP` lowers to a direct `goto`. `JUMP_IF_FALSE` pops a numeric predicate
   through the runtime and lowers to a conditional `goto`.
-- Calls, variables, and address-based memory remain later backend milestones
-  because they need a call stack, return dispatch, or a native variable/address
-  representation.
+- `ALLOC_VARIABLE`, `FETCH`, and `STORE` use a growable runtime memory array.
+  Native variable addresses currently follow the Borth-written compiler and VM:
+  they are integer memory indexes.
+- `CALL` pushes the next instruction index onto a runtime return stack and jumps
+  to the call target. `RET` jumps to a generated return dispatcher that pops the
+  return index and switches back to the matching instruction label.
+- A more structured function-per-word C backend remains a later cleanup path.
+  The current native backend prioritizes bytecode parity and self-hosting over
+  pretty generated C.
 
 ## Milestone 18: Borth Compiler Library Slice
 

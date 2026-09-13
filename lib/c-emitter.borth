@@ -59,10 +59,19 @@ import "./strings.borth"
     "  if (!borth_op_pop_condition(rt)) { goto " swap str-cat "; }" str-cat
 ;
 
-# c-emit-instruction ( instruction -- c-source )
+# c-emit-call-instruction ( instruction index -- c-source )
+: c-emit-call-instruction
+    1 + show
+    "  borth_op_push_return(rt, " swap str-cat ");\n  goto " str-cat
+    swap 1 array-get c-label-name
+    str-cat ";" str-cat
+;
+
+# c-emit-simple-instruction ( instruction -- c-source )
 #
-# Return the C statement for one supported instruction.
-: c-emit-instruction
+# Return the C statement for one supported instruction that does not need the
+# current instruction index.
+: c-emit-simple-instruction
     dup c-instruction-op
     dup "PUSH" = if
         drop c-emit-push-instruction
@@ -90,6 +99,9 @@ import "./strings.borth"
     else dup "ARRAY_PUSH" = if drop drop "  borth_op_array_push(rt);"
     else dup "ARRAY_LEN" = if drop drop "  borth_op_array_len(rt);"
     else dup "ARRAY_GET" = if drop drop "  borth_op_array_get(rt);"
+    else dup "ALLOC_VARIABLE" = if drop drop "  borth_op_alloc_variable(rt);"
+    else dup "FETCH" = if drop drop "  borth_op_fetch(rt);"
+    else dup "STORE" = if drop drop "  borth_op_store(rt);"
     else dup "RANDOM" = if drop drop "  borth_op_random(rt);"
     else dup "READ_LINE" = if drop drop "  borth_op_read_line(rt);"
     else dup "READ_INT" = if drop drop "  borth_op_read_int(rt);"
@@ -114,7 +126,21 @@ import "./strings.borth"
         drop drop ""
     else
         "C emitter does not support instruction: " swap str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+;
+
+# c-emit-instruction ( instruction index -- c-source )
+#
+# Return the C statement for one supported instruction.
+: c-emit-instruction
+    over c-instruction-op
+    dup "CALL" = if
+        drop c-emit-call-instruction
+    else dup "RET" = if
+        drop drop drop "  goto borth_return_dispatch;"
+    else
+        drop drop c-emit-simple-instruction
+    end end
 ;
 
 # write-c-instructions ( file-path instructions -- file-path )
@@ -128,7 +154,7 @@ import "./strings.borth"
         dup c-emit-label
         3over swap append-text-file
         2over "\n" append-text-file
-        2dup array-get c-emit-instruction
+        2dup array-get over c-emit-instruction
         dup "" = if
             drop
         else
@@ -138,6 +164,39 @@ import "./strings.borth"
         1 +
     repeat
     drop drop
+;
+
+# c-write-line-with-instructions ( file-path instructions contents -- file-path instructions )
+: c-write-line-with-instructions
+    2over swap append-text-file
+    over "\n" append-text-file
+;
+
+# write-c-return-dispatch ( file-path instructions -- file-path )
+#
+# Emit the shared return dispatcher used by RET.
+: write-c-return-dispatch
+    "  if (argc < 0) { goto borth_return_dispatch; }" c-write-line-with-instructions
+    "  goto borth_program_end;" c-write-line-with-instructions
+    "borth_return_dispatch:" c-write-line-with-instructions
+    "  switch (borth_op_pop_return(rt)) {" c-write-line-with-instructions
+    0
+    loop
+        2dup swap array-len <
+    while
+        dup show
+        "    case " swap str-cat ": goto " str-cat
+        over c-label-name
+        str-cat ";" str-cat
+        3over swap append-text-file
+        2over "\n" append-text-file
+        1 +
+    repeat
+    drop
+    "    default: borth_op_invalid_return(rt);" c-write-line-with-instructions
+    "  }" c-write-line-with-instructions
+    "borth_program_end:" c-write-line-with-instructions
+    drop
 ;
 
 # write-c-program ( instructions file-path -- )
@@ -150,7 +209,8 @@ import "./strings.borth"
     "int main(int argc, char **argv) {" c-write-line
     "  BorthRuntime *rt = borth_runtime_new_with_args(argc - 1, argv + 1);" c-write-line
     swap
-    write-c-instructions
+    2dup write-c-instructions drop
+    write-c-return-dispatch
     "  borth_runtime_free(rt);" c-write-line
     "  return 0;" c-write-line
     "}" c-write-line

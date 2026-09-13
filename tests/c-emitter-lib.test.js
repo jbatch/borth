@@ -17,11 +17,20 @@ function compileNativeProgram(t, sourcePath, executablePath) {
 
   const compile = spawnSync(
     "cc",
-    [sourcePath, "runtime/borth_runtime.c", "-Iruntime", "-o", executablePath],
+    [
+      sourcePath,
+      "runtime/borth_runtime.c",
+      "-Wall",
+      "-Wextra",
+      "-Iruntime",
+      "-o",
+      executablePath,
+    ],
     { encoding: "utf8" },
   );
 
   assert.equal(compile.status, 0, compile.stderr);
+  assert.equal(compile.stderr, "");
   return true;
 }
 
@@ -180,6 +189,98 @@ test("C emitter writes and runs compiler-generated native control flow", (t) => 
 
     assert.equal(runProgram.status, 0, runProgram.stderr);
     assert.equal(runProgram.stdout, "else\n3\n2\n1\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("C emitter writes and runs compiler-generated native variables", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "borth-c-emitter-"));
+  const sourcePath = join(root, "program.c");
+  const executablePath = join(root, "program");
+
+  try {
+    run(
+      `
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+        import "lib/c-emitter.borth"
+
+        1 SKIP_PRELUDE !
+
+        : test-compile-src
+          "<test>" swap over swap lexer-lex-src-file-with-spans
+          swap parse-tokens swap
+          compile-nodes
+        ;
+
+        "variable x 42 x ! x @ print \\"hello\\" x ! x @ print"
+          test-compile-src
+        ${JSON.stringify(sourcePath)} write-c-program
+      `,
+      { write: () => undefined },
+    );
+
+    const generated = readFileSync(sourcePath, "utf8");
+    assert.match(generated, /borth_op_alloc_variable\(rt\);/);
+    assert.match(generated, /borth_op_store\(rt\);/);
+    assert.match(generated, /borth_op_fetch\(rt\);/);
+
+    if (!compileNativeProgram(t, sourcePath, executablePath)) {
+      return;
+    }
+
+    const runProgram = spawnSync(executablePath, [], { encoding: "utf8" });
+
+    assert.equal(runProgram.status, 0, runProgram.stderr);
+    assert.equal(runProgram.stdout, "42\nhello\n");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("C emitter writes and runs compiler-generated native calls", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "borth-c-emitter-"));
+  const sourcePath = join(root, "program.c");
+  const executablePath = join(root, "program");
+
+  try {
+    run(
+      `
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+        import "lib/c-emitter.borth"
+
+        1 SKIP_PRELUDE !
+
+        : test-compile-src
+          "<test>" swap over swap lexer-lex-src-file-with-spans
+          swap parse-tokens swap
+          compile-nodes
+        ;
+
+        ": square dup * ; : fact dup 2 < if drop 1 else dup 1 - fact * end ; 5 square print 5 fact print"
+          test-compile-src
+        ${JSON.stringify(sourcePath)} write-c-program
+      `,
+      { write: () => undefined },
+    );
+
+    const generated = readFileSync(sourcePath, "utf8");
+    assert.match(generated, /borth_op_push_return\(rt, \d+\);/);
+    assert.match(generated, /borth_return_dispatch:/);
+    assert.match(generated, /switch \(borth_op_pop_return\(rt\)\)/);
+
+    if (!compileNativeProgram(t, sourcePath, executablePath)) {
+      return;
+    }
+
+    const runProgram = spawnSync(executablePath, [], { encoding: "utf8" });
+
+    assert.equal(runProgram.status, 0, runProgram.stderr);
+    assert.equal(runProgram.stdout, "25\n120\n");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

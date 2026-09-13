@@ -46,6 +46,18 @@ typedef struct {
   size_t capacity;
 } BorthValueStack;
 
+typedef struct {
+  BorthValue *items;
+  size_t len;
+  size_t capacity;
+} BorthValueMemory;
+
+typedef struct {
+  long *items;
+  size_t len;
+  size_t capacity;
+} BorthReturnStack;
+
 typedef enum {
   BORTH_HEAP_STRING,
   BORTH_HEAP_ARRAY,
@@ -73,6 +85,8 @@ typedef struct {
 
 struct BorthRuntime {
   BorthValueStack stack;
+  BorthValueMemory memory;
+  BorthReturnStack return_stack;
   BorthHeap heap;
   int argc;
   char **argv;
@@ -215,6 +229,13 @@ BorthRuntime *borth_runtime_new_with_args(int argc, char **argv) {
   runtime->stack.len = 0;
   runtime->stack.capacity = 64;
   runtime->stack.items = malloc(runtime->stack.capacity * sizeof(BorthValue));
+  runtime->memory.len = 0;
+  runtime->memory.capacity = 64;
+  runtime->memory.items = malloc(runtime->memory.capacity * sizeof(BorthValue));
+  runtime->return_stack.len = 0;
+  runtime->return_stack.capacity = 64;
+  runtime->return_stack.items =
+      malloc(runtime->return_stack.capacity * sizeof(long));
   runtime->heap.len = 0;
   runtime->heap.capacity = 64;
   runtime->heap.items = malloc(runtime->heap.capacity * sizeof(BorthHeapObject));
@@ -227,9 +248,27 @@ BorthRuntime *borth_runtime_new_with_args(int argc, char **argv) {
   }
 
   if (runtime->heap.items == NULL) {
+    free(runtime->return_stack.items);
+    free(runtime->memory.items);
     free(runtime->stack.items);
     free(runtime);
     borth_panic("failed to allocate runtime heap");
+  }
+
+  if (runtime->memory.items == NULL) {
+    free(runtime->return_stack.items);
+    free(runtime->heap.items);
+    free(runtime->stack.items);
+    free(runtime);
+    borth_panic("failed to allocate runtime memory");
+  }
+
+  if (runtime->return_stack.items == NULL) {
+    free(runtime->heap.items);
+    free(runtime->memory.items);
+    free(runtime->stack.items);
+    free(runtime);
+    borth_panic("failed to allocate return stack");
   }
 
   return runtime;
@@ -264,6 +303,8 @@ void borth_runtime_free(BorthRuntime *runtime) {
   }
 
   free(runtime->heap.items);
+  free(runtime->return_stack.items);
+  free(runtime->memory.items);
   free(runtime->stack.items);
   free(runtime);
 }
@@ -288,6 +329,24 @@ static void borth_stack_push(BorthRuntime *runtime, BorthValue value) {
 
   runtime->stack.items[runtime->stack.len] = value;
   runtime->stack.len += 1;
+}
+
+static void borth_memory_grow(BorthRuntime *runtime) {
+  size_t next_capacity = runtime->memory.capacity * 2;
+  runtime->memory.items = borth_realloc(
+      runtime->memory.items,
+      next_capacity * sizeof(BorthValue),
+      "failed to grow runtime memory");
+  runtime->memory.capacity = next_capacity;
+}
+
+static void borth_return_stack_grow(BorthRuntime *runtime) {
+  size_t next_capacity = runtime->return_stack.capacity * 2;
+  runtime->return_stack.items = borth_realloc(
+      runtime->return_stack.items,
+      next_capacity * sizeof(long),
+      "failed to grow return stack");
+  runtime->return_stack.capacity = next_capacity;
 }
 
 static BorthValue borth_stack_pop(BorthRuntime *runtime, const char *op) {
@@ -1154,6 +1213,43 @@ void borth_op_array_get(BorthRuntime *runtime) {
   borth_stack_push(runtime, array->items[index]);
 }
 
+void borth_op_alloc_variable(BorthRuntime *runtime) {
+  if (runtime->memory.len == runtime->memory.capacity) {
+    borth_memory_grow(runtime);
+  }
+
+  runtime->memory.items[runtime->memory.len] = borth_value_int(0);
+  runtime->memory.len += 1;
+}
+
+void borth_op_fetch(BorthRuntime *runtime) {
+  size_t address = borth_pop_index(
+      runtime,
+      "FETCH requires integers on the stack",
+      "FETCH requires address to be a non-negative integer");
+
+  if (address >= runtime->memory.len) {
+    borth_panic("FETCH address is past end of memory");
+  }
+
+  borth_stack_push(runtime, runtime->memory.items[address]);
+}
+
+void borth_op_store(BorthRuntime *runtime) {
+  size_t address = borth_pop_index(
+      runtime,
+      "STORE requires integers on the stack",
+      "STORE requires address to be a non-negative integer");
+  BorthValue value =
+      borth_stack_pop(runtime, "STORE requires a value on the stack");
+
+  if (address >= runtime->memory.len) {
+    borth_panic("STORE address is past end of memory");
+  }
+
+  runtime->memory.items[address] = value;
+}
+
 void borth_op_random(BorthRuntime *runtime) {
   static bool seeded = false;
   long max = borth_pop_int(runtime, "RANDOM requires integers on the stack");
@@ -1362,6 +1458,29 @@ void borth_op_path_resolve(BorthRuntime *runtime) {
 
 int borth_op_pop_condition(BorthRuntime *runtime) {
   return borth_pop_int(runtime, "JUMP_IF_FALSE requires integers on the stack") != 0;
+}
+
+void borth_op_push_return(BorthRuntime *runtime, long return_address) {
+  if (runtime->return_stack.len == runtime->return_stack.capacity) {
+    borth_return_stack_grow(runtime);
+  }
+
+  runtime->return_stack.items[runtime->return_stack.len] = return_address;
+  runtime->return_stack.len += 1;
+}
+
+long borth_op_pop_return(BorthRuntime *runtime) {
+  if (runtime->return_stack.len == 0) {
+    borth_panic("RET requires a return address");
+  }
+
+  runtime->return_stack.len -= 1;
+  return runtime->return_stack.items[runtime->return_stack.len];
+}
+
+void borth_op_invalid_return(BorthRuntime *runtime) {
+  (void)runtime;
+  borth_panic("RET resolved an invalid return address");
 }
 
 void borth_op_panic(BorthRuntime *runtime) {
