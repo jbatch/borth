@@ -23,18 +23,34 @@ import "./strings.borth"
     0 array-get
 ;
 
+# c-emit-push-instruction ( instruction -- c-source )
+#
+# Emit a C helper call for an integer or string PUSH.
+: c-emit-push-instruction
+    1 array-get show
+    dup str-int? if
+        "  borth_op_push_int(rt, " swap str-cat ");" str-cat
+    else dup "\"" str-starts-with? if
+        "  borth_op_push_string(rt, " swap str-cat ");" str-cat
+    else
+        "C emitter only supports integer and string PUSH for now" panic
+    end end
+;
+
 # c-emit-instruction ( instruction -- c-source )
 #
 # Return the C statement for one supported instruction.
 : c-emit-instruction
     dup c-instruction-op
     dup "PUSH" = if
-        drop
-        1 array-get show
-        dup str-int? not if
-            "C emitter only supports integer PUSH for now" panic
-        end
-        "  borth_op_push_int(rt, " swap str-cat ");" str-cat
+        drop c-emit-push-instruction
+    else dup "DROP" = if drop drop "  borth_op_drop(rt);"
+    else dup "DUP" = if drop drop "  borth_op_dup(rt);"
+    else dup "SWAP" = if drop drop "  borth_op_swap(rt);"
+    else dup "OVER" = if drop drop "  borth_op_over(rt);"
+    else dup "ROT" = if drop drop "  borth_op_rot(rt);"
+    else dup "ROLL" = if drop drop "  borth_op_roll(rt);"
+    else dup "ROLL_REVERSE" = if drop drop "  borth_op_roll_reverse(rt);"
     else dup "ADD" = if drop drop "  borth_op_add(rt);"
     else dup "SUB" = if drop drop "  borth_op_sub(rt);"
     else dup "MUL" = if drop drop "  borth_op_mul(rt);"
@@ -43,13 +59,38 @@ import "./strings.borth"
     else dup "EQ" = if drop drop "  borth_op_eq(rt);"
     else dup "LT" = if drop drop "  borth_op_lt(rt);"
     else dup "GT" = if drop drop "  borth_op_gt(rt);"
+    else dup "STR_LEN" = if drop drop "  borth_op_str_len(rt);"
+    else dup "STR_CAT" = if drop drop "  borth_op_str_cat(rt);"
+    else dup "STR_SLICE" = if drop drop "  borth_op_str_slice(rt);"
+    else dup "STR_INDEX_OF" = if drop drop "  borth_op_str_index_of(rt);"
+    else dup "SHOW" = if drop drop "  borth_op_show(rt);"
+    else dup "ARRAY_NEW" = if drop drop "  borth_op_array_new(rt);"
+    else dup "ARRAY_PUSH" = if drop drop "  borth_op_array_push(rt);"
+    else dup "ARRAY_LEN" = if drop drop "  borth_op_array_len(rt);"
+    else dup "ARRAY_GET" = if drop drop "  borth_op_array_get(rt);"
+    else dup "RANDOM" = if drop drop "  borth_op_random(rt);"
+    else dup "READ_LINE" = if drop drop "  borth_op_read_line(rt);"
+    else dup "READ_INT" = if drop drop "  borth_op_read_int(rt);"
+    else dup "READ_TEXT_FILE" = if drop drop "  borth_op_read_text_file(rt);"
+    else dup "WRITE_TEXT_FILE" = if drop drop "  borth_op_write_text_file(rt);"
+    else dup "APPEND_TEXT_FILE" = if drop drop "  borth_op_append_text_file(rt);"
+    else dup "FILE_EXISTS" = if drop drop "  borth_op_file_exists(rt);"
+    else dup "ENV" = if drop drop "  borth_op_env(rt);"
+    else dup "ARGS" = if drop drop "  borth_op_args(rt);"
+    else dup "RUN_COMMAND" = if drop drop "  borth_op_run_command(rt);"
+    else dup "CWD" = if drop drop "  borth_op_cwd(rt);"
+    else dup "PATH_DIRNAME" = if drop drop "  borth_op_path_dirname(rt);"
+    else dup "PATH_RESOLVE" = if drop drop "  borth_op_path_resolve(rt);"
+    else dup "PANIC" = if drop drop "  borth_op_panic(rt);"
+    else dup "EXIT" = if drop drop "  borth_op_exit(rt);"
+    else dup "PRINT_STACK" = if drop drop "  borth_op_print_stack(rt);"
     else dup "PRINT" = if
         drop drop "  borth_op_print(rt);"
     else dup "HALT" = if
         drop drop ""
     else
         "C emitter does not support instruction: " swap str-cat panic
-    end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # write-c-instructions ( file-path instructions -- file-path )
@@ -79,8 +120,8 @@ import "./strings.borth"
     dup "" write-text-file
     "#include \"borth_runtime.h\"" c-write-line
     "" c-write-line
-    "int main(void) {" c-write-line
-    "  BorthRuntime *rt = borth_runtime_new();" c-write-line
+    "int main(int argc, char **argv) {" c-write-line
+    "  BorthRuntime *rt = borth_runtime_new_with_args(argc - 1, argv + 1);" c-write-line
     swap
     write-c-instructions
     "  borth_runtime_free(rt);" c-write-line

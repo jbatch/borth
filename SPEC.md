@@ -1063,15 +1063,19 @@ Native C slice decision:
 - `runtime/borth_runtime.h` declares the runtime API used by generated C.
 - `runtime/borth_runtime.c` is a small reference runtime maintained as support
   code rather than as the main learning surface.
-- The runtime currently supports integer values, a heap-allocated runtime
-  object, a growable value stack, panic, `PUSH` integer, `ADD`, and `PRINT`.
+- The runtime currently supports integer, string, and array values; a
+  heap-allocated runtime object; a growable value stack; stack operations;
+  arithmetic and comparisons; string and array primitives; host IO/path/env
+  primitives; `RUN_COMMAND`; `RANDOM`; `PANIC`; `EXIT`; `PRINT_STACK`; and
+  `PRINT` for integers and strings.
 - `lib/c-emitter.borth` emits `#include "borth_runtime.h"` and a straight-line
   `main` function for supported instructions.
 - The first slice intentionally does not emit labels, gotos, an instruction
   pointer, or an instruction array. C statement order is enough for straight-line
   arithmetic.
-- Control flow, calls, variables, strings, and arrays remain later backend
-  milestones.
+- Control flow, calls, variables, and address-based memory remain later backend
+  milestones because they need jumps, a call stack, labels, or a native
+  variable/address representation.
 
 ## Milestone 18: Borth Compiler Library Slice
 
