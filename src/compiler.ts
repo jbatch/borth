@@ -852,6 +852,8 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "PRINT_STACK" };
     case "panic":
       return { op: "PANIC" };
+    case "exit":
+      return { op: "EXIT" };
     default:
       return undefined;
   }

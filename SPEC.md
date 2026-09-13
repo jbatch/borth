@@ -112,6 +112,17 @@ args           ( -- array )
 run-command    ( command args-array -- exit-code stdout stderr )
 ```
 
+Current process-control primitive:
+
+```text
+exit           ( code -- )
+```
+
+`exit` consumes an integer process exit code and stops VM execution. The VM
+records the code in its final state; the command-line runner maps that code to
+the host process exit code. Library callers can inspect the returned VM state
+instead of having the VM terminate the host process directly.
+
 Source code may use relative import paths, but the compiler should resolve them
 against the importing file and track loaded modules by full normalized paths.
 

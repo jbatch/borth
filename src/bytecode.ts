@@ -53,5 +53,6 @@ type InstructionData =
   | { op: "PRINT" }
   | { op: "PRINT_STACK" }
   | { op: "PANIC" }
+  | { op: "EXIT" }
   | { op: "RET" }
   | { op: "HALT" };

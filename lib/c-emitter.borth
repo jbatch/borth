@@ -1,8 +1,7 @@
 # First C-backend file emission slice.
 #
 # This emits one C source file that includes runtime/borth_runtime.h and links
-# against runtime/borth_runtime.c. The supported instruction surface is
-# intentionally tiny: integer PUSH, ADD, PRINT, and HALT.
+# against runtime/borth_runtime.c.
 
 import "./strings.borth"
 
@@ -36,15 +35,21 @@ import "./strings.borth"
             "C emitter only supports integer PUSH for now" panic
         end
         "  borth_op_push_int(rt, " swap str-cat ");" str-cat
-    else dup "ADD" = if
-        drop drop "  borth_op_add(rt);"
+    else dup "ADD" = if drop drop "  borth_op_add(rt);"
+    else dup "SUB" = if drop drop "  borth_op_sub(rt);"
+    else dup "MUL" = if drop drop "  borth_op_mul(rt);"
+    else dup "DIV" = if drop drop "  borth_op_div(rt);"
+    else dup "MOD" = if drop drop "  borth_op_mod(rt);"
+    else dup "EQ" = if drop drop "  borth_op_eq(rt);"
+    else dup "LT" = if drop drop "  borth_op_lt(rt);"
+    else dup "GT" = if drop drop "  borth_op_gt(rt);"
     else dup "PRINT" = if
         drop drop "  borth_op_print(rt);"
     else dup "HALT" = if
         drop drop ""
     else
         "C emitter does not support instruction: " swap str-cat panic
-    end end end end
+    end end end end end end end end end end end
 ;
 
 # write-c-instructions ( file-path instructions -- file-path )

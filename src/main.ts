@@ -16,10 +16,12 @@ if (args.length === 0) {
   process.exitCode = 1;
 } else {
   try {
-    if (isFileArgument(args)) {
-      runFile(args[0], { args: args.slice(1), read: readLineFromStdin });
-    } else {
-      run(args.join(" "), { read: readLineFromStdin });
+    const state = isFileArgument(args)
+      ? runFile(args[0], { args: args.slice(1), read: readLineFromStdin })
+      : run(args.join(" "), { read: readLineFromStdin });
+
+    if (state.exitCode !== undefined) {
+      process.exitCode = state.exitCode;
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

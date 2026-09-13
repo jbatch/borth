@@ -94,7 +94,7 @@ variable COMPILER_ARGS
 : parse-positionals
     # ( parsed-args positionals )
     parsed-positionals dup array-len 2 = not if
-        print-usage "" panic
+        print-usage 1 exit
     end 
     compiler-args-init
     # extract command and input-file-path from positionals
@@ -121,7 +121,7 @@ variable COMPILER_ARGS
             # ( parsed-args compiler-args flags index  )
             1 compiler-args-set-keep-c # enable keep-c
         else
-            "unknown flag: " swap str-cat print "" print print-usage "" panic
+            "unknown flag: " swap str-cat print "" print print-usage 1 exit
         end end
         1 +
     repeat
@@ -144,7 +144,7 @@ variable COMPILER_ARGS
         else over "-o" = if
             compiler-args-set-output-path drop
         else
-            "unknown option: " rot str-cat print "" print print-usage "" panic
+            "unknown option: " rot str-cat print "" print print-usage 1 exit
         end end
         1 +
     repeat drop
@@ -176,8 +176,17 @@ variable COMPILER_ARGS
     # ( file-path spans nodes )
     swap compile-nodes
     compiler-args-c-source-path write-c-program
-    # TODO inspect exit code of $CC
-    compiler-args-cc array-new compiler-args-c-source-path array-push "runtime/borth_runtime.c" array-push "-Iruntime" array-push "-o" array-push compiler-args-output-path array-push run-command drop drop drop
+    compiler-args-cc array-new compiler-args-c-source-path array-push "-Wall" array-push "-Wextra" array-push  "runtime/borth_runtime.c" array-push "-Iruntime" array-push "-o" array-push compiler-args-output-path array-push run-command
+    # check return code of $CC and print stderr if non-zero
+    rot 0 = not if
+        "\nCompilation failed: " swap str-cat panic
+    else
+        dup str-len 0 = not if
+            "Compilation succeeded with warnings" print print 1 exit
+        end
+        "Compilation successful" print drop print
+    end
+    drop drop
 
     # cleanup generated c unless user opted out
     compiler-args-keep-c not if
@@ -186,7 +195,12 @@ variable COMPILER_ARGS
 
     # optionally run generate program
     compiler-args-should-run if
-        "./" compiler-args-output-path path-resolve array-new run-command drop swap drop print
+        "./" compiler-args-output-path path-resolve array-new run-command
+        rot 0 = not if
+            "\n    " swap str-cat panic
+        else
+            drop print
+        end
     end
 ;
 
@@ -196,7 +210,7 @@ COMPILER_ARGS @ compiler-args-command dup "build" = if drop
     execute-build
 else
     "unknown command: " swap str-cat print "" print
-    print-usage "" panic
+    print-usage 1 exit
 end
 
 

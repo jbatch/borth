@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 typedef enum {
   BORTH_VALUE_INT,
@@ -25,14 +26,27 @@ struct BorthRuntime {
 };
 
 static void borth_panic(const char *message) {
-  fprintf(stderr, "borth panic: %s\n", message);
+  fprintf(stderr, "runtime error: %s\n", message);
   exit(EXIT_FAILURE);
+}
+
+static void borth_assert(bool predicate, const char *message) {
+  if (!predicate) {
+    borth_panic(message);
+  }
 }
 
 static BorthValue borth_value_int(long value) {
   BorthValue result;
   result.kind = BORTH_VALUE_INT;
   result.as.integer = value;
+  return result;
+}
+
+static BorthValue borth_value_bool (bool value) {
+  BorthValue result;
+  result.kind = BORTH_VALUE_INT;
+  result.as.integer = value ? 1 : 0;
   return result;
 }
 
@@ -105,6 +119,8 @@ static long borth_pop_int(BorthRuntime *runtime, const char *op) {
   return value.as.integer;
 }
 
+// Borth Ops
+
 void borth_op_push_int(BorthRuntime *runtime, long value) {
   borth_stack_push(runtime, borth_value_int(value));
 }
@@ -114,6 +130,58 @@ void borth_op_add(BorthRuntime *runtime) {
   long left = borth_pop_int(runtime, "ADD requires integers on the stack");
 
   borth_stack_push(runtime, borth_value_int(left + right));
+}
+
+void borth_op_sub(BorthRuntime *runtime) {
+  long right = borth_pop_int(runtime, "SUB requires integers on the stack");
+  long left = borth_pop_int(runtime, "SUB requires integers on the stack");
+
+  borth_stack_push(runtime, borth_value_int(left - right));
+}
+
+void borth_op_mul(BorthRuntime *runtime) {
+  long right = borth_pop_int(runtime, "MUL requires integers on the stack");
+  long left = borth_pop_int(runtime, "MUL requires integers on the stack");
+
+  borth_stack_push(runtime, borth_value_int(left * right));
+}
+
+void borth_op_div(BorthRuntime *runtime) {
+  long right = borth_pop_int(runtime, "DIV requires integers on the stack");
+  long left = borth_pop_int(runtime, "DIV requires integers on the stack");
+  borth_assert(right != 0, "DIV cannot divide by zero");
+
+  borth_stack_push(runtime, borth_value_int(left / right));
+}
+
+void borth_op_mod(BorthRuntime *runtime) {
+  long right = borth_pop_int(runtime, "MOD requires integers on the stack");
+  long left = borth_pop_int(runtime, "MOD requires integers on the stack");
+  borth_assert(right != 0, "MOD cannot divide by zero");
+
+  borth_stack_push(runtime, borth_value_int(left % right));
+}
+
+void borth_op_eq(BorthRuntime *runtime) {
+  // TODO support EQ for strings
+  long right = borth_pop_int(runtime, "EQ requires integers on the stack");
+  long left = borth_pop_int(runtime, "EQ requires integers on the stack");
+
+  borth_stack_push(runtime, borth_value_bool(left == right));
+}
+
+void borth_op_lt(BorthRuntime *runtime) {
+  long right = borth_pop_int(runtime, "LT requires integers on the stack");
+  long left = borth_pop_int(runtime, "LT requires integers on the stack");
+
+  borth_stack_push(runtime, borth_value_bool(left < right));
+}
+
+void borth_op_gt(BorthRuntime *runtime) {
+  long right = borth_pop_int(runtime, "GT requires integers on the stack");
+  long left = borth_pop_int(runtime, "GT requires integers on the stack");
+
+  borth_stack_push(runtime, borth_value_bool(left > right));
 }
 
 void borth_op_print(BorthRuntime *runtime) {

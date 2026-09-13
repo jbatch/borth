@@ -13,6 +13,7 @@ export type VmState = {
   stack: Value[];
   callStack: number[];
   memory: Value[];
+  exitCode?: number;
 };
 
 export type ExecuteOptions = {
@@ -271,6 +272,10 @@ export function execute(
           const message = popString(state, "PANIC");
           throw new Error(message);
         }
+        case "EXIT": {
+          state.exitCode = popExitCode(state);
+          return state;
+        }
         case "READ_LINE":
           state.stack.push(readInput(read, "READ_LINE"));
           state.ip += 1;
@@ -402,6 +407,16 @@ function randomInteger(max: number, random: () => number): number {
   }
 
   return Math.floor(value * max);
+}
+
+function popExitCode(state: VmState): number {
+  const exitCode = popNumber(state, "EXIT");
+
+  if (!Number.isInteger(exitCode)) {
+    throw new Error("EXIT requires an integer exit code");
+  }
+
+  return exitCode;
 }
 
 function runHostCommand(command: string, args: string[]): RunCommandResult {

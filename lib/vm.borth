@@ -675,6 +675,11 @@ import "./array.borth"
     vm-inc-ip
 ;
 
+: execute-run-exit
+    1 "EXIT" assert-stack-length
+    dup vm-stack array-pop exit
+;
+
 
 # execute-array-new ( vm -- vm )
 #
@@ -838,6 +843,8 @@ import "./array.borth"
         drop execute-args 0
     else dup "RUN_COMMAND" = if drop
         drop execute-run-command 0
+    else dup "EXIT" = if drop
+        drop execute-run-exit 1
     else dup "ARRAY_NEW" = if drop
         drop execute-array-new 0
     else dup "ARRAY_LEN" = if drop
@@ -879,7 +886,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

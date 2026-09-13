@@ -974,6 +974,8 @@ deferred compile-next-node
         "ARGS" array-wrap emit-instruction
     else dup "run-command" = if drop
         "RUN_COMMAND" array-wrap emit-instruction
+    else dup "exit" = if drop
+        "EXIT" array-wrap emit-instruction
 
 
     # Array operations.
@@ -1035,7 +1037,7 @@ deferred compile-next-node
         else
             "Unknown word: " swap show str-cat compiler-panic
         end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # compile-word-node ( state node -- state )
