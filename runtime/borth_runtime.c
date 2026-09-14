@@ -18,6 +18,7 @@ typedef struct BorthArrayBuilder BorthArrayBuilder;
 typedef struct BorthStringBuilder BorthStringBuilder;
 typedef struct BorthMap BorthMap;
 typedef struct BorthMapEntry BorthMapEntry;
+typedef struct BorthRecord BorthRecord;
 
 typedef enum {
   BORTH_VALUE_INT,
@@ -26,6 +27,7 @@ typedef enum {
   BORTH_VALUE_ARRAY_BUILDER,
   BORTH_VALUE_STRING_BUILDER,
   BORTH_VALUE_MAP,
+  BORTH_VALUE_RECORD,
 } BorthValueKind;
 
 typedef struct {
@@ -37,6 +39,7 @@ typedef struct {
     BorthArrayBuilder *array_builder;
     BorthStringBuilder *string_builder;
     BorthMap *map;
+    BorthRecord *record;
   } as;
 } BorthValue;
 
@@ -77,6 +80,12 @@ struct BorthMap {
   size_t len;
 };
 
+struct BorthRecord {
+  BorthString *shape;
+  BorthValue *fields;
+  size_t len;
+};
+
 typedef struct {
   BorthValue *items;
   size_t len;
@@ -101,6 +110,7 @@ typedef enum {
   BORTH_HEAP_ARRAY_BUILDER,
   BORTH_HEAP_STRING_BUILDER,
   BORTH_HEAP_MAP,
+  BORTH_HEAP_RECORD,
 } BorthHeapObjectKind;
 
 typedef struct {
@@ -121,6 +131,7 @@ typedef struct {
   size_t heap_array_builders;
   size_t heap_string_builders;
   size_t heap_maps;
+  size_t heap_records;
   size_t array_new;
   size_t array_push;
   size_t array_push_copied_items;
@@ -144,6 +155,10 @@ typedef struct {
   size_t map_has;
   size_t map_set;
   size_t map_size;
+  size_t record_new;
+  size_t record_copy;
+  size_t record_get;
+  size_t record_set;
   size_t read_text_file;
   size_t read_text_file_bytes;
   size_t write_text_file;
@@ -246,6 +261,13 @@ static BorthValue borth_value_map(BorthMap *value) {
   return result;
 }
 
+static BorthValue borth_value_record(BorthRecord *value) {
+  BorthValue result;
+  result.kind = BORTH_VALUE_RECORD;
+  result.as.record = value;
+  return result;
+}
+
 static void borth_heap_grow(BorthRuntime *runtime) {
   size_t next_capacity = runtime->heap.capacity * 2;
   runtime->heap.items = borth_realloc(
@@ -285,6 +307,7 @@ static void borth_profile_print(BorthRuntime *runtime) {
       "heap-string-builders: %zu\n",
       runtime->profile.heap_string_builders);
   fprintf(stderr, "heap-maps: %zu\n", runtime->profile.heap_maps);
+  fprintf(stderr, "heap-records: %zu\n", runtime->profile.heap_records);
   fprintf(stderr, "array-new: %zu\n", runtime->profile.array_new);
   fprintf(
       stderr,
@@ -344,6 +367,10 @@ static void borth_profile_print(BorthRuntime *runtime) {
   fprintf(stderr, "map-has: %zu\n", runtime->profile.map_has);
   fprintf(stderr, "map-set: %zu\n", runtime->profile.map_set);
   fprintf(stderr, "map-size: %zu\n", runtime->profile.map_size);
+  fprintf(stderr, "record-new: %zu\n", runtime->profile.record_new);
+  fprintf(stderr, "record-copy: %zu\n", runtime->profile.record_copy);
+  fprintf(stderr, "record-get: %zu\n", runtime->profile.record_get);
+  fprintf(stderr, "record-set: %zu\n", runtime->profile.record_set);
   fprintf(
       stderr,
       "read-text-file: %zu bytes=%zu\n",
@@ -504,6 +531,32 @@ static BorthMap *borth_map_new(BorthRuntime *runtime) {
   borth_heap_register(runtime, BORTH_HEAP_MAP, result);
   if (runtime->profile.enabled) {
     runtime->profile.heap_maps += 1;
+  }
+  return result;
+}
+
+static BorthRecord *borth_record_new(
+    BorthRuntime *runtime,
+    BorthString *shape,
+    BorthValue *fields,
+    size_t len) {
+  BorthRecord *result =
+      borth_malloc(sizeof(BorthRecord), "failed to allocate record");
+  result->shape = shape;
+  result->len = len;
+
+  if (len == 0) {
+    result->fields = NULL;
+  } else {
+    result->fields = borth_malloc(
+        len * sizeof(BorthValue),
+        "failed to allocate record fields");
+    memcpy(result->fields, fields, len * sizeof(BorthValue));
+  }
+
+  borth_heap_register(runtime, BORTH_HEAP_RECORD, result);
+  if (runtime->profile.enabled) {
+    runtime->profile.heap_records += 1;
   }
   return result;
 }
@@ -757,6 +810,12 @@ void borth_runtime_free(BorthRuntime *runtime) {
         free(map);
         break;
       }
+      case BORTH_HEAP_RECORD: {
+        BorthRecord *record = object.value;
+        free(record->fields);
+        free(record);
+        break;
+      }
     }
   }
 
@@ -892,6 +951,28 @@ static BorthMap *borth_pop_map(BorthRuntime *runtime, const char *op) {
   }
 
   return value.as.map;
+}
+
+static bool borth_strings_equal(BorthString *left, BorthString *right) {
+  return left->len == right->len &&
+      memcmp(left->chars, right->chars, left->len) == 0;
+}
+
+static BorthRecord *borth_pop_record(
+    BorthRuntime *runtime,
+    BorthString *expected_shape,
+    const char *op) {
+  BorthValue value = borth_stack_pop(runtime, op);
+
+  if (value.kind != BORTH_VALUE_RECORD) {
+    borth_panic(op);
+  }
+
+  if (!borth_strings_equal(value.as.record->shape, expected_shape)) {
+    borth_panic(op);
+  }
+
+  return value.as.record;
 }
 
 static size_t borth_pop_index(
@@ -1048,6 +1129,14 @@ static void borth_builder_append_value(
     case BORTH_VALUE_MAP:
       borth_builder_append_cstr(builder, "<map:");
       borth_builder_append_int(builder, (long)value.as.map->len);
+      borth_builder_append_char(builder, '>');
+      break;
+    case BORTH_VALUE_RECORD:
+      borth_builder_append_cstr(builder, "<record:");
+      borth_builder_append_chars(
+          builder,
+          value.as.record->shape->chars,
+          value.as.record->shape->len);
       borth_builder_append_char(builder, '>');
       break;
   }
@@ -1995,6 +2084,91 @@ void borth_op_map_size(BorthRuntime *runtime) {
     runtime->profile.map_size += 1;
   }
   borth_stack_push(runtime, borth_value_int((long)map->len));
+}
+
+void borth_op_record_new(BorthRuntime *runtime) {
+  BorthArray *defaults =
+      borth_pop_array(runtime, "RECORD_NEW requires defaults array on the stack");
+  BorthString *shape =
+      borth_pop_string(runtime, "RECORD_NEW requires shape string on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.record_new += 1;
+  }
+
+  borth_stack_push(
+      runtime,
+      borth_value_record(
+          borth_record_new(runtime, shape, defaults->items, defaults->len)));
+}
+
+void borth_op_record_copy(BorthRuntime *runtime) {
+  BorthString *shape =
+      borth_pop_string(runtime, "RECORD_COPY requires shape string on the stack");
+  BorthRecord *record =
+      borth_pop_record(runtime, shape, "RECORD_COPY requires matching record");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.record_copy += 1;
+  }
+
+  borth_stack_push(
+      runtime,
+      borth_value_record(
+          borth_record_new(runtime, record->shape, record->fields, record->len)));
+}
+
+void borth_op_record_get(BorthRuntime *runtime) {
+  size_t index = borth_pop_index(
+      runtime,
+      "RECORD_GET requires integer index on the stack",
+      "RECORD_GET requires index to be a non-negative integer");
+  BorthString *field =
+      borth_pop_string(runtime, "RECORD_GET requires field string on the stack");
+  BorthString *shape =
+      borth_pop_string(runtime, "RECORD_GET requires shape string on the stack");
+  BorthRecord *record =
+      borth_pop_record(runtime, shape, "RECORD_GET requires matching record");
+
+  if (index >= record->len) {
+    borth_panic("RECORD_GET field is missing from record");
+  }
+
+  (void)field;
+
+  if (runtime->profile.enabled) {
+    runtime->profile.record_get += 1;
+  }
+
+  borth_stack_push(runtime, record->fields[index]);
+}
+
+void borth_op_record_set(BorthRuntime *runtime) {
+  size_t index = borth_pop_index(
+      runtime,
+      "RECORD_SET requires integer index on the stack",
+      "RECORD_SET requires index to be a non-negative integer");
+  BorthString *field =
+      borth_pop_string(runtime, "RECORD_SET requires field string on the stack");
+  BorthString *shape =
+      borth_pop_string(runtime, "RECORD_SET requires shape string on the stack");
+  BorthValue value =
+      borth_stack_pop(runtime, "RECORD_SET requires a value on the stack");
+  BorthRecord *record =
+      borth_pop_record(runtime, shape, "RECORD_SET requires matching record");
+
+  if (index >= record->len) {
+    borth_panic("RECORD_SET field is missing from record");
+  }
+
+  (void)field;
+
+  if (runtime->profile.enabled) {
+    runtime->profile.record_set += 1;
+  }
+
+  record->fields[index] = value;
+  borth_stack_push(runtime, borth_value_record(record));
 }
 
 void borth_op_alloc_variable(BorthRuntime *runtime) {

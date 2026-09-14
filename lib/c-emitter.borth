@@ -114,6 +114,10 @@ import "./strings.borth"
     else dup "MAP_HAS" = if drop drop "  borth_op_map_has(rt);"
     else dup "MAP_SET" = if drop drop "  borth_op_map_set(rt);"
     else dup "MAP_SIZE" = if drop drop "  borth_op_map_size(rt);"
+    else dup "RECORD_NEW" = if drop drop "  borth_op_record_new(rt);"
+    else dup "RECORD_COPY" = if drop drop "  borth_op_record_copy(rt);"
+    else dup "RECORD_GET" = if drop drop "  borth_op_record_get(rt);"
+    else dup "RECORD_SET" = if drop drop "  borth_op_record_set(rt);"
     else dup "ALLOC_VARIABLE" = if drop drop "  borth_op_alloc_variable(rt);"
     else dup "FETCH" = if drop drop "  borth_op_fetch(rt);"
     else dup "STORE" = if drop drop "  borth_op_store(rt);"
@@ -142,7 +146,7 @@ import "./strings.borth"
         drop drop ""
     else
         "C emitter does not support instruction: " swap str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # c-emit-instruction ( instruction index -- c-source )

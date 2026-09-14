@@ -101,6 +101,11 @@ map-has?  ( map key -- flag )
 map-set   ( map key value -- map )
 map-size  ( map -- number )
 
+record-new  ( shape defaults-array -- record )
+record-copy ( record shape -- record )
+record-get  ( record shape field index -- value )
+record-set  ( record value shape field index -- record )
+
 random ( max -- n )
 clock-ms ( -- ms )
 @      ( addr -- A )
@@ -202,6 +207,27 @@ map-new
 "answer" 42 map-set
 "answer" map-get .s
 ```
+
+Records are heap-backed reference values declared at the top level. A record
+declaration generates a constructor, a copy word, and field getter/setter words:
+
+```text
+record point
+  field x 0
+  field label "origin"
+end
+
+point-new
+10 point-set-x
+"moved" point-set-label
+dup point-x print
+point-label print
+```
+
+`dup` copies the record reference, so setters are visible through aliases.
+Setters mutate the record and return it. Use the generated `<record>-copy` word
+when you want a fresh record object with copied field slots. Field defaults are
+currently integer or string literals.
 
 User-defined words:
 

@@ -195,6 +195,20 @@ import "./array.borth"
     array-pop swap stack-pop-2 3 roll
 ;
 
+# stack-pop-4 ( stack -- stack A B C D )
+#
+# Pop the top four values from a VM value stack, preserving their original order.
+: stack-pop-4
+    array-pop swap stack-pop-3 4 roll
+;
+
+# stack-pop-5 ( stack -- stack A B C D E )
+#
+# Pop the top five values from a VM value stack, preserving their original order.
+: stack-pop-5
+    array-pop swap stack-pop-4 5 roll
+;
+
 # prepare-binary-operation ( vm op -- vm a b )
 # 
 # Validate the VM value stack, pop b and a, then write the shortened stack back
@@ -826,6 +840,42 @@ import "./array.borth"
     vm-inc-ip
 ;
 
+# execute-record-new ( vm -- vm )
+: execute-record-new
+    2 "RECORD_NEW" assert-stack-length
+    dup vm-stack
+        stack-pop-2 record-new array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-record-copy ( vm -- vm )
+: execute-record-copy
+    2 "RECORD_COPY" assert-stack-length
+    dup vm-stack
+        stack-pop-2 record-copy array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-record-get ( vm -- vm )
+: execute-record-get
+    4 "RECORD_GET" assert-stack-length
+    dup vm-stack
+        stack-pop-4 record-get array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-record-set ( vm -- vm )
+: execute-record-set
+    5 "RECORD_SET" assert-stack-length
+    dup vm-stack
+        stack-pop-5 record-set array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
 # execute-jump ( vm jumpAddr -- vm )
 #
 # Unconditionally set the instruction pointer to jumpAddr. Jumps do not advance
@@ -972,6 +1022,14 @@ import "./array.borth"
         drop execute-map-set 0
     else dup "MAP_SIZE" = if drop
         drop execute-map-size 0
+    else dup "RECORD_NEW" = if drop
+        drop execute-record-new 0
+    else dup "RECORD_COPY" = if drop
+        drop execute-record-copy 0
+    else dup "RECORD_GET" = if drop
+        drop execute-record-get 0
+    else dup "RECORD_SET" = if drop
+        drop execute-record-set 0
     else dup "ADD" = if nip
         prepare-binary-operation + vm-stack-push vm-inc-ip 0
     else dup "SUB" = if nip
@@ -1005,7 +1063,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

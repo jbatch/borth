@@ -36,6 +36,10 @@ type InstructionData =
   | { op: "MAP_HAS" }
   | { op: "MAP_SET" }
   | { op: "MAP_SIZE" }
+  | { op: "RECORD_NEW" }
+  | { op: "RECORD_COPY" }
+  | { op: "RECORD_GET" }
+  | { op: "RECORD_SET" }
   | { op: "SHOW" }
   | { op: "ARRAY_NEW" }
   | { op: "ARRAY_PUSH" }

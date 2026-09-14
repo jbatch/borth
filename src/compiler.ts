@@ -28,6 +28,12 @@ export type CompilerState = {
   deferredCalls: Map<string, number[]>;
 };
 
+type RecordField = {
+  name: string;
+  defaultValue: number | string;
+  node: AstNode;
+};
+
 export type CompileProgramOptions = {
   allowTopLevelCode: boolean;
   importModule?: (path: string) => void;
@@ -66,6 +72,8 @@ export function compileProgram(
       index = compileVariable(state, program.body, index, options);
     } else if (isDeferredDeclaration(node)) {
       index = compileDeferred(state, program.body, index, options);
+    } else if (isWord(node, "record")) {
+      index = compileRecord(state, program.body, index, options);
     } else if (isWord(node, "import")) {
       index = compileImport(state, program.body, index, options);
     } else if (!options.allowTopLevelCode) {
@@ -229,6 +237,14 @@ function compileDefinition(
       );
     }
 
+    if (isWord(node, "record")) {
+      throw compileError(
+        options,
+        node,
+        "record declarations are only supported at top level",
+      );
+    }
+
     if (isWord(node, "import")) {
       throw compileError(
         options,
@@ -283,6 +299,239 @@ function compileVariable(
   state.instructions.push(withSource({ op: "ALLOC_VARIABLE" }, nameNode, options));
 
   return variableIndex + 1;
+}
+
+function compileRecord(
+  state: CompilerState,
+  nodes: AstNode[],
+  recordIndex: number,
+  options: CompileProgramOptions,
+): number {
+  const recordNode = nodes[recordIndex];
+
+  if (state.blockStack.length > 0) {
+    throw compileError(
+      options,
+      recordNode,
+      "record declarations cannot appear inside control flow",
+    );
+  }
+
+  const nameNode = nodes[recordIndex + 1];
+
+  if (nameNode === undefined) {
+    throw compileError(options, recordNode, "record requires a name");
+  }
+
+  if (nameNode.kind !== "word") {
+    throw compileError(options, nameNode, "record name must be a word");
+  }
+
+  const recordName = nameNode.name;
+
+  if (isReservedWord(recordName)) {
+    throw compileError(
+      options,
+      nameNode,
+      `cannot define reserved word as record: ${recordName}`,
+    );
+  }
+
+  const fields: RecordField[] = [];
+  const fieldNames = new Set<string>();
+  let index = recordIndex + 2;
+
+  for (; index < nodes.length; index += 1) {
+    const node = nodes[index];
+
+    if (isWord(node, "end")) {
+      emitRecordDefinitions(state, recordName, nameNode, fields, options);
+      return index;
+    }
+
+    if (!isWord(node, "field")) {
+      throw compileError(options, node, "record body expects field or end");
+    }
+
+    const fieldNameNode = nodes[index + 1];
+    const defaultNode = nodes[index + 2];
+
+    if (fieldNameNode === undefined) {
+      throw compileError(options, node, "field requires a name");
+    }
+
+    if (fieldNameNode.kind !== "word") {
+      throw compileError(options, fieldNameNode, "field name must be a word");
+    }
+
+    if (isReservedWord(fieldNameNode.name)) {
+      throw compileError(
+        options,
+        fieldNameNode,
+        `cannot define reserved word as field: ${fieldNameNode.name}`,
+      );
+    }
+
+    if (fieldNames.has(fieldNameNode.name)) {
+      throw compileError(
+        options,
+        fieldNameNode,
+        `duplicate field in record ${recordName}: ${fieldNameNode.name}`,
+      );
+    }
+
+    if (defaultNode === undefined) {
+      throw compileError(options, fieldNameNode, "field requires a default value");
+    }
+
+    if (defaultNode.kind !== "integer" && defaultNode.kind !== "string") {
+      throw compileError(
+        options,
+        defaultNode,
+        "field default must be an integer or string literal",
+      );
+    }
+
+    fieldNames.add(fieldNameNode.name);
+    fields.push({
+      name: fieldNameNode.name,
+      defaultValue: defaultNode.value,
+      node: fieldNameNode,
+    });
+    index += 2;
+  }
+
+  throw compileError(options, recordNode, `record ${recordName} without closing end`);
+}
+
+function emitRecordDefinitions(
+  state: CompilerState,
+  recordName: string,
+  nameNode: AstNode,
+  fields: RecordField[],
+  options: CompileProgramOptions,
+): void {
+  const generatedNames = new Set<string>();
+  ensureGeneratedWordAvailable(
+    state,
+    `${recordName}-new`,
+    nameNode,
+    options,
+    generatedNames,
+  );
+  ensureGeneratedWordAvailable(
+    state,
+    `${recordName}-copy`,
+    nameNode,
+    options,
+    generatedNames,
+  );
+
+  for (const field of fields) {
+    ensureGeneratedWordAvailable(
+      state,
+      `${recordName}-${field.name}`,
+      field.node,
+      options,
+      generatedNames,
+    );
+    ensureGeneratedWordAvailable(
+      state,
+      `${recordName}-set-${field.name}`,
+      field.node,
+      options,
+      generatedNames,
+    );
+  }
+
+  emitGeneratedDefinition(
+    state,
+    `${recordName}-new`,
+    nameNode,
+    [
+      { op: "PUSH", value: recordName },
+      { op: "ARRAY_NEW" },
+      ...fields.flatMap((field): Instruction[] => [
+        { op: "PUSH", value: field.defaultValue },
+        { op: "ARRAY_PUSH" },
+      ]),
+      { op: "RECORD_NEW" },
+    ],
+    options,
+  );
+  emitGeneratedDefinition(
+    state,
+    `${recordName}-copy`,
+    nameNode,
+    [{ op: "PUSH", value: recordName }, { op: "RECORD_COPY" }],
+    options,
+  );
+
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index];
+    emitGeneratedDefinition(
+      state,
+      `${recordName}-${field.name}`,
+      field.node,
+      [
+        { op: "PUSH", value: recordName },
+        { op: "PUSH", value: field.name },
+        { op: "PUSH", value: index },
+        { op: "RECORD_GET" },
+      ],
+      options,
+    );
+    emitGeneratedDefinition(
+      state,
+      `${recordName}-set-${field.name}`,
+      field.node,
+      [
+        { op: "PUSH", value: recordName },
+        { op: "PUSH", value: field.name },
+        { op: "PUSH", value: index },
+        { op: "RECORD_SET" },
+      ],
+      options,
+    );
+  }
+}
+
+function emitGeneratedDefinition(
+  state: CompilerState,
+  name: string,
+  node: AstNode,
+  instructions: Instruction[],
+  options: CompileProgramOptions,
+): void {
+  const skipDefinitionJumpIndex = state.instructions.length;
+  state.instructions.push(withSource({ op: "JUMP", target: -1 }, node, options));
+  const definitionStart = state.instructions.length;
+  state.definitions.set(name, definitionStart);
+
+  for (const instruction of instructions) {
+    state.instructions.push(withSource(instruction, node, options));
+  }
+
+  state.instructions.push(withSource({ op: "RET" }, node, options));
+  patchJump(state, skipDefinitionJumpIndex, state.instructions.length);
+}
+
+function ensureGeneratedWordAvailable(
+  state: CompilerState,
+  name: string,
+  node: AstNode,
+  options: CompileProgramOptions,
+  generatedNames: Set<string>,
+): void {
+  if (
+    generatedNames.has(name) ||
+    isReservedWord(name) ||
+    isUserWordNameTaken(state, name)
+  ) {
+    throw compileError(options, node, `word already defined: ${name}`);
+  }
+
+  generatedNames.add(name);
 }
 
 function compileDeferred(
@@ -385,6 +634,18 @@ function compileControlWord(
         options,
         node,
         "deferred declarations are only supported at top level",
+      );
+    case "record":
+      throw compileError(
+        options,
+        node,
+        "record declarations are only supported at top level",
+      );
+    case "field":
+      throw compileError(
+        options,
+        node,
+        "field declarations are only supported inside records",
       );
     case ";":
       throw compileError(options, node, "; without matching :");
@@ -824,6 +1085,14 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "MAP_SET" };
     case "map-size":
       return { op: "MAP_SIZE" };
+    case "record-new":
+      return { op: "RECORD_NEW" };
+    case "record-copy":
+      return { op: "RECORD_COPY" };
+    case "record-get":
+      return { op: "RECORD_GET" };
+    case "record-set":
+      return { op: "RECORD_SET" };
     case "show":
       return { op: "SHOW" };
     case "array-new":
@@ -913,6 +1182,8 @@ function isReservedWord(name: string): boolean {
     name === "import" ||
     name === "variable" ||
     name === "deferred" ||
+    name === "record" ||
+    name === "field" ||
     compileBuiltInWord(name) !== undefined
   );
 }

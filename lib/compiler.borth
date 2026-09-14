@@ -34,6 +34,21 @@ variable COMPILER_DEBUG
 # prelude definitions.
 variable SKIP_PRELUDE
 
+variable _RECORD_COMPILE_NAME
+variable _RECORD_COMPILE_FIELDS
+variable _RECORD_COMPILE_DONE
+variable _RECORD_FIELD_NAME
+variable _RECORD_FIELD_DEFAULT
+variable _RECORD_GENERATED_NAMES
+variable _RECORD_INDEX
+variable _RECORD_FIND_FIELDS
+variable _RECORD_FIND_NAME
+variable _RECORD_FIND_FOUND
+variable _GEN_WORD_NAME
+variable _GEN_WORD_INSTRUCTIONS
+variable _GEN_WORD_SKIP_INDEX
+variable _GEN_WORD_INDEX
+
 # compiler-new ( file-path nodes spans allow-top-level-code -- compiler )
 #
 # Create a new compiler state for one parser node array and its parallel source
@@ -250,6 +265,17 @@ variable SKIP_PRELUDE
     # ( "error: $file-path:$line:$col: $error-msg" )
     swap str-cat
     panic
+;
+
+# assert-has-next-node ( state errorMsg -- state )
+#
+# Panic with errorMsg if advancing node-index would move past the parser node
+# array. Declaration parsers use this before consuming required operands.
+: assert-has-next-node
+    swap dup compiler-node-index 1 + over compiler-nodes array-len < not if
+        swap compiler-panic
+    end
+    swap drop
 ;
 
 # module-compiler-new ( state file-path nodes spans -- module-compiler )
@@ -907,6 +933,271 @@ deferred compile-next-node
     swap array-push
 ;
 
+# create-push-value-instruction ( value -- instruction )
+#
+# Build ["PUSH", value] when generated compiler code already has a raw value
+# instead of a parser node.
+: create-push-value-instruction
+    "PUSH" array-wrap swap array-push
+;
+
+# emit-generated-word ( state name instructions -- state )
+#
+# Emit a hidden word definition with a skip jump, body instructions, and RET.
+# This is used by declarations that expand into ordinary callable words.
+: emit-generated-word
+    _GEN_WORD_INSTRUCTIONS !
+    _GEN_WORD_NAME !
+
+    dup compiler-next-instruction-index _GEN_WORD_SKIP_INDEX !
+    "JUMP" array-wrap -1 array-push emit-instruction
+
+    _GEN_WORD_NAME @ record-word-name
+
+    0 _GEN_WORD_INDEX !
+    loop
+        _GEN_WORD_INDEX @ _GEN_WORD_INSTRUCTIONS @ array-len <
+    while
+        _GEN_WORD_INSTRUCTIONS @ _GEN_WORD_INDEX @ array-get emit-instruction
+        _GEN_WORD_INDEX @ 1 + _GEN_WORD_INDEX !
+    repeat
+
+    "RET" array-wrap emit-instruction
+    _GEN_WORD_SKIP_INDEX @
+        "JUMP" array-wrap 2over compiler-next-instruction-index array-push
+        patch-instruction
+;
+
+# record-field-name ( field -- name )
+: record-field-name
+    0 array-get
+;
+
+# record-field-default ( field -- default )
+: record-field-default
+    1 array-get
+;
+
+# record-field-name-exists? ( fields name -- flag )
+: record-field-name-exists?
+    _RECORD_FIND_NAME !
+    _RECORD_FIND_FIELDS !
+    0 _RECORD_INDEX !
+    0 _RECORD_FIND_FOUND !
+
+    loop
+        _RECORD_INDEX @ _RECORD_FIND_FIELDS @ array-len <
+        _RECORD_FIND_FOUND @ not
+        and
+    while
+        _RECORD_FIND_FIELDS @ _RECORD_INDEX @ array-get record-field-name
+        _RECORD_FIND_NAME @ = if
+            1 _RECORD_FIND_FOUND !
+        end
+        _RECORD_INDEX @ 1 + _RECORD_INDEX !
+    repeat
+
+    _RECORD_FIND_FOUND @
+;
+
+# assert-record-generated-word-available ( state name -- state )
+: assert-record-generated-word-available
+    dup _RECORD_GENERATED_NAMES @ swap map-has? if
+        "word already defined: " swap str-cat compiler-panic
+    end
+
+    dup 2over swap user-defined-word? if
+        "word already defined: " swap str-cat compiler-panic
+    end
+
+    dup 2over swap user-defined-variable? if
+        "word already defined: " swap str-cat compiler-panic
+    end
+
+    _RECORD_GENERATED_NAMES @ swap 1 map-set _RECORD_GENERATED_NAMES !
+;
+
+# assert-record-generated-word-names ( state -- state )
+: assert-record-generated-word-names
+    map-new _RECORD_GENERATED_NAMES !
+
+    _RECORD_COMPILE_NAME @ "-new" str-cat
+    assert-record-generated-word-available
+    _RECORD_COMPILE_NAME @ "-copy" str-cat
+    assert-record-generated-word-available
+
+    0 _RECORD_INDEX !
+    loop
+        _RECORD_INDEX @ _RECORD_COMPILE_FIELDS @ array-len <
+    while
+        _RECORD_COMPILE_FIELDS @ _RECORD_INDEX @ array-get record-field-name
+        _RECORD_FIELD_NAME !
+
+        _RECORD_COMPILE_NAME @ "-" str-cat _RECORD_FIELD_NAME @ str-cat
+        assert-record-generated-word-available
+        _RECORD_COMPILE_NAME @ "-set-" str-cat _RECORD_FIELD_NAME @ str-cat
+        assert-record-generated-word-available
+
+        _RECORD_INDEX @ 1 + _RECORD_INDEX !
+    repeat
+;
+
+# record-new-instructions ( -- instructions )
+: record-new-instructions
+    array-new _GEN_WORD_INSTRUCTIONS !
+    _GEN_WORD_INSTRUCTIONS @
+        _RECORD_COMPILE_NAME @ create-push-value-instruction array-push
+    _GEN_WORD_INSTRUCTIONS !
+    _GEN_WORD_INSTRUCTIONS @ "ARRAY_NEW" array-wrap array-push
+    _GEN_WORD_INSTRUCTIONS !
+
+    0 _RECORD_INDEX !
+    loop
+        _RECORD_INDEX @ _RECORD_COMPILE_FIELDS @ array-len <
+    while
+        _GEN_WORD_INSTRUCTIONS @
+            _RECORD_COMPILE_FIELDS @ _RECORD_INDEX @ array-get
+            record-field-default create-push-value-instruction array-push
+        _GEN_WORD_INSTRUCTIONS !
+        _GEN_WORD_INSTRUCTIONS @ "ARRAY_PUSH" array-wrap array-push
+        _GEN_WORD_INSTRUCTIONS !
+        _RECORD_INDEX @ 1 + _RECORD_INDEX !
+    repeat
+
+    _GEN_WORD_INSTRUCTIONS @ "RECORD_NEW" array-wrap array-push
+;
+
+# record-copy-instructions ( -- instructions )
+: record-copy-instructions
+    array-new
+        _RECORD_COMPILE_NAME @ create-push-value-instruction array-push
+        "RECORD_COPY" array-wrap array-push
+;
+
+# record-getter-instructions ( field-name index -- instructions )
+: record-getter-instructions
+    _RECORD_INDEX !
+    _RECORD_FIELD_NAME !
+    array-new
+        _RECORD_COMPILE_NAME @ create-push-value-instruction array-push
+        _RECORD_FIELD_NAME @ create-push-value-instruction array-push
+        _RECORD_INDEX @ create-push-value-instruction array-push
+        "RECORD_GET" array-wrap array-push
+;
+
+# record-setter-instructions ( field-name index -- instructions )
+: record-setter-instructions
+    _RECORD_INDEX !
+    _RECORD_FIELD_NAME !
+    array-new
+        _RECORD_COMPILE_NAME @ create-push-value-instruction array-push
+        _RECORD_FIELD_NAME @ create-push-value-instruction array-push
+        _RECORD_INDEX @ create-push-value-instruction array-push
+        "RECORD_SET" array-wrap array-push
+;
+
+# emit-record-field-definitions ( state -- state )
+: emit-record-field-definitions
+    0 _RECORD_INDEX !
+    loop
+        _RECORD_INDEX @ _RECORD_COMPILE_FIELDS @ array-len <
+    while
+        _RECORD_COMPILE_FIELDS @ _RECORD_INDEX @ array-get record-field-name
+        _RECORD_FIELD_NAME !
+
+        _RECORD_FIELD_NAME @ _RECORD_INDEX @ record-getter-instructions
+        _RECORD_COMPILE_NAME @ "-" str-cat _RECORD_FIELD_NAME @ str-cat
+        swap emit-generated-word
+
+        _RECORD_FIELD_NAME @ _RECORD_INDEX @ record-setter-instructions
+        _RECORD_COMPILE_NAME @ "-set-" str-cat _RECORD_FIELD_NAME @ str-cat
+        swap emit-generated-word
+
+        _RECORD_INDEX @ 1 + _RECORD_INDEX !
+    repeat
+;
+
+# emit-record-definitions ( state -- state )
+: emit-record-definitions
+    assert-record-generated-word-names
+
+    record-new-instructions
+    _RECORD_COMPILE_NAME @ "-new" str-cat
+    swap emit-generated-word
+
+    record-copy-instructions
+    _RECORD_COMPILE_NAME @ "-copy" str-cat
+    swap emit-generated-word
+
+    emit-record-field-definitions
+;
+
+# append-current-record-field ( state -- state )
+: append-current-record-field
+    "field requires a name" assert-has-next-node
+    compiler-increment-node-index dup compiler-current-node
+    dup node-kind "word" = not if
+        drop "field name must be a word" compiler-panic
+    end
+    dup node-value _RECORD_FIELD_NAME !
+
+    _RECORD_COMPILE_FIELDS @ _RECORD_FIELD_NAME @
+    record-field-name-exists? if
+        drop "duplicate field in record " _RECORD_COMPILE_NAME @ str-cat
+        ": " str-cat _RECORD_FIELD_NAME @ str-cat compiler-panic
+    end
+    drop
+
+    "field requires a default value" assert-has-next-node
+    compiler-increment-node-index dup compiler-current-node
+    dup node-kind "integer" = over node-kind "string" = or not if
+        drop "field default must be an integer or string literal" compiler-panic
+    end
+    node-value _RECORD_FIELD_DEFAULT !
+
+    array-new
+        _RECORD_FIELD_NAME @ array-push
+        _RECORD_FIELD_DEFAULT @ array-push
+    _RECORD_COMPILE_FIELDS @ swap array-push _RECORD_COMPILE_FIELDS !
+;
+
+# compile-record ( state -- state )
+#
+# Compile a top-level record declaration into ordinary generated helper words:
+#   <name>-new, <name>-copy, <name>-<field>, and <name>-set-<field>.
+: compile-record
+    dup "record declarations can only appear at the root level" assert-no-open-blocks
+
+    compiler-increment-node-index dup compiler-current-node
+    dup node-kind "word" = not if
+        drop "record name must be a word" compiler-panic
+    end
+    node-value _RECORD_COMPILE_NAME !
+
+    array-new _RECORD_COMPILE_FIELDS !
+    0 _RECORD_COMPILE_DONE !
+
+    loop
+        _RECORD_COMPILE_DONE @ not
+    while
+        "record without closing end" assert-has-next-node
+        compiler-increment-node-index dup compiler-current-node
+        dup node-kind "word" = not if
+            drop "record body expects field or end" compiler-panic
+        end
+
+        dup node-value "end" = if
+            drop
+            emit-record-definitions
+            1 _RECORD_COMPILE_DONE !
+        else dup node-value "field" = if
+            drop append-current-record-field
+        else
+            drop "record body expects field or end" compiler-panic
+        end end
+    repeat
+;
+
 # compile-literal-node ( state node -- state )
 #
 # Compile an integer or string node to a PUSH instruction.
@@ -1055,6 +1346,16 @@ deferred compile-next-node
     else dup "map-size" = if drop
         "MAP_SIZE" array-wrap emit-instruction
 
+    # Record operations.
+    else dup "record-new" = if drop
+        "RECORD_NEW" array-wrap emit-instruction
+    else dup "record-copy" = if drop
+        "RECORD_COPY" array-wrap emit-instruction
+    else dup "record-get" = if drop
+        "RECORD_GET" array-wrap emit-instruction
+    else dup "record-set" = if drop
+        "RECORD_SET" array-wrap emit-instruction
+
     # Control-flow operations.
     else dup "if" = if drop
         compile-if
@@ -1072,6 +1373,10 @@ deferred compile-next-node
         compile-repeat
     else dup ";" = if drop
         compile-end-definition
+    else dup "record" = if drop
+        "record declarations are only supported at top level" compiler-panic
+    else dup "field" = if drop
+        "field declarations are only supported inside records" compiler-panic
 
     # Utility operations.
     else dup "print" = if drop
@@ -1106,7 +1411,7 @@ deferred compile-next-node
         else
             "Unknown word: " swap show str-cat compiler-panic
         end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # compile-word-node ( state node -- state )
@@ -1124,11 +1429,13 @@ deferred compile-next-node
         drop drop compile-deferred
     else dup "variable" = if
         drop drop compile-variable
+    else dup "record" = if
+        drop drop compile-record
     else dup "import" = if
         drop drop compile-import
     else
         drop compile-executable-word-node
-    end end end end
+    end end end end end
 ;
 
 # compile-next-node ( state -- state )

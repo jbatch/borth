@@ -26,6 +26,12 @@ export type MapValue = {
   items: Map<string, { key: Value; value: Value }>;
 };
 
+export type RecordValue = {
+  kind: "record";
+  shape: string;
+  fields: Value[];
+};
+
 export type Value =
   | number
   | string
@@ -33,4 +39,5 @@ export type Value =
   | ArrayValue
   | ArrayBuilderValue
   | StringBuilderValue
-  | MapValue;
+  | MapValue
+  | RecordValue;

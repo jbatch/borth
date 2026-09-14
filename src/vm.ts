@@ -9,6 +9,7 @@ import type {
   ArrayBuilderValue,
   ArrayValue,
   MapValue,
+  RecordValue,
   StringBuilderValue,
   Value,
 } from "./value.js";
@@ -68,6 +69,10 @@ type VmProfile = {
   mapHas: number;
   mapSet: number;
   mapSize: number;
+  recordNew: number;
+  recordCopy: number;
+  recordGet: number;
+  recordSet: number;
   readTextFile: number;
   readTextFileBytes: number;
   writeTextFile: number;
@@ -358,6 +363,60 @@ export function execute(
             profile.mapSize += 1;
           }
           state.stack.push(map.items.size);
+          state.ip += 1;
+          break;
+        }
+        case "RECORD_NEW": {
+          const defaults = popArray(state, "RECORD_NEW");
+          const shape = popString(state, "RECORD_NEW");
+          if (profile !== undefined) {
+            profile.recordNew += 1;
+          }
+          state.stack.push({
+            kind: "record",
+            shape,
+            fields: [...defaults.items],
+          });
+          state.ip += 1;
+          break;
+        }
+        case "RECORD_COPY": {
+          const shape = popString(state, "RECORD_COPY");
+          const record = popRecord(state, "RECORD_COPY", shape);
+          if (profile !== undefined) {
+            profile.recordCopy += 1;
+          }
+          state.stack.push({
+            kind: "record",
+            shape: record.shape,
+            fields: [...record.fields],
+          });
+          state.ip += 1;
+          break;
+        }
+        case "RECORD_GET": {
+          const index = popNonNegativeInteger(state, "RECORD_GET", "index");
+          const field = popString(state, "RECORD_GET");
+          const shape = popString(state, "RECORD_GET");
+          const record = popRecord(state, "RECORD_GET", shape);
+          if (profile !== undefined) {
+            profile.recordGet += 1;
+          }
+          state.stack.push(getRecordField(record, index, field, "RECORD_GET"));
+          state.ip += 1;
+          break;
+        }
+        case "RECORD_SET": {
+          const index = popNonNegativeInteger(state, "RECORD_SET", "index");
+          const field = popString(state, "RECORD_SET");
+          const shape = popString(state, "RECORD_SET");
+          const value = pop(state, "RECORD_SET");
+          const record = popRecord(state, "RECORD_SET", shape);
+          if (profile !== undefined) {
+            profile.recordSet += 1;
+          }
+          setRecordField(record, index, field, value, "RECORD_SET");
+          state.stack.push(record);
           state.ip += 1;
           break;
         }
@@ -811,6 +870,10 @@ function createVmProfile(): VmProfile | undefined {
     mapHas: 0,
     mapSet: 0,
     mapSize: 0,
+    recordNew: 0,
+    recordCopy: 0,
+    recordGet: 0,
+    recordSet: 0,
     readTextFile: 0,
     readTextFileBytes: 0,
     writeTextFile: 0,
@@ -853,6 +916,10 @@ function printVmProfile(profile: VmProfile | undefined): void {
   console.error(`map-has: ${profile.mapHas}`);
   console.error(`map-set: ${profile.mapSet}`);
   console.error(`map-size: ${profile.mapSize}`);
+  console.error(`record-new: ${profile.recordNew}`);
+  console.error(`record-copy: ${profile.recordCopy}`);
+  console.error(`record-get: ${profile.recordGet}`);
+  console.error(`record-set: ${profile.recordSet}`);
   console.error(
     `read-text-file: ${profile.readTextFile} bytes=${profile.readTextFileBytes}`,
   );
@@ -908,6 +975,8 @@ function formatValueForStack(value: Value): string {
         return `<string-builder:${value.frozen ? "frozen" : value.length}>`;
       case "map":
         return `<map:${value.items.size}>`;
+      case "record":
+        return `<record:${value.shape}>`;
     }
   }
 
@@ -1029,6 +1098,26 @@ function popMap(state: VmState, op: string): MapValue {
   return value;
 }
 
+function popRecord(
+  state: VmState,
+  op: string,
+  expectedShape: string,
+): RecordValue {
+  const value = pop(state, op);
+
+  if (typeof value !== "object" || value.kind !== "record") {
+    throw new Error(`${op} requires a record on the stack`);
+  }
+
+  if (value.shape !== expectedShape) {
+    throw new Error(
+      `${op} expected record ${expectedShape}, got record ${value.shape}`,
+    );
+  }
+
+  return value;
+}
+
 function popAddress(state: VmState, op: string): Address {
   const value = pop(state, op);
 
@@ -1049,6 +1138,35 @@ function mapKey(value: Value, op: string): string {
   }
 
   throw new Error(`${op} requires map keys to be numbers or strings`);
+}
+
+function getRecordField(
+  record: RecordValue,
+  index: number,
+  field: string,
+  op: string,
+): Value {
+  const value = record.fields[index];
+
+  if (value === undefined) {
+    throw new Error(`${op} field ${field} is missing from record ${record.shape}`);
+  }
+
+  return value;
+}
+
+function setRecordField(
+  record: RecordValue,
+  index: number,
+  field: string,
+  value: Value,
+  op: string,
+): void {
+  if (index >= record.fields.length) {
+    throw new Error(`${op} field ${field} is missing from record ${record.shape}`);
+  }
+
+  record.fields[index] = value;
 }
 
 function loadMemory(state: VmState, address: Address, op: string): Value {

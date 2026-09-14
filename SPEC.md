@@ -154,6 +154,7 @@ effects. Current declarations are:
 variable name       # global storage cell
 deferred name       # word declared now and defined later
 import "path"       # load declarations from another source file
+record name ... end # heap-backed reference record shape
 ```
 
 `deferred` exists to handle genuine source-order cycles during bootstrapping.
@@ -970,7 +971,48 @@ Map decision:
   maps exist because compiler lookup maps are performance-sensitive and because
   hashing belongs below opaque runtime values.
 
-## Milestone 15c: Fatal Errors
+## Milestone 15c: Heap-Backed Records
+
+Goal:
+
+```text
+record point
+  field x 0
+  field label "origin"
+end
+
+point-new
+10 point-set-x
+"moved" point-set-label
+dup point-x print
+point-label print
+```
+
+should print:
+
+```text
+10
+moved
+```
+
+Record decision:
+
+- Records are declared at the top level with `record name ... end`.
+- The current field form is `field name default`, where `default` must be an
+  integer or string literal.
+- A record declaration generates `<record>-new`, `<record>-copy`,
+  `<record>-<field>`, and `<record>-set-<field>` words.
+- Records are heap-backed reference values. `dup` copies the reference, so
+  aliases observe later setter mutations.
+- Setters mutate the record and return the same record reference.
+- Generated copy words create a fresh record object and shallow-copy the field
+  slots.
+- Accessors validate the record shape at runtime, so applying a `line-x` getter
+  to a `point` record is an error.
+- Records are backed by dedicated runtime values rather than arrays so their
+  reference semantics do not change later when arrays evolve.
+
+## Milestone 15d: Fatal Errors
 
 Goal:
 
