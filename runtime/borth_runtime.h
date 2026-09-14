@@ -37,6 +37,7 @@ void borth_op_alloc_variable(BorthRuntime *runtime);
 void borth_op_fetch(BorthRuntime *runtime);
 void borth_op_store(BorthRuntime *runtime);
 void borth_op_random(BorthRuntime *runtime);
+void borth_op_clock_ms(BorthRuntime *runtime);
 void borth_op_read_line(BorthRuntime *runtime);
 void borth_op_read_int(BorthRuntime *runtime);
 void borth_op_read_text_file(BorthRuntime *runtime);

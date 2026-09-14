@@ -92,6 +92,7 @@ array-len  ( array -- number )
 array-get  ( array index -- A )
 
 random ( max -- n )
+clock-ms ( -- ms )
 @      ( addr -- A )
 !      ( A addr -- )
 read-line ( -- string )
@@ -304,6 +305,9 @@ for turning source-relative paths into full paths before reading imported files.
 ```text
 1 100 random-between print
 ```
+
+`clock-ms` pushes the host clock as an integer number of milliseconds. It is
+intended for coarse timing while working on the compiler and native backend.
 
 Variables are global cells. A variable name pushes its address; `@` fetches from
 an address and `!` stores into an address.

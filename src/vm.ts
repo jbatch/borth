@@ -22,6 +22,7 @@ export type ExecuteOptions = {
   env?: (name: string) => string | undefined;
   fileExists?: (path: string) => boolean;
   random?: () => number;
+  clockMs?: () => number;
   read?: () => string;
   runCommand?: (command: string, args: string[]) => RunCommandResult;
   readTextFile?: (path: string) => string;
@@ -45,6 +46,7 @@ export function execute(
   const env = options.env ?? ((name: string) => process.env[name]);
   const fileExists = options.fileExists ?? existsSync;
   const random = options.random ?? Math.random;
+  const clockMs = options.clockMs ?? Date.now;
   const read = options.read;
   const runCommand = options.runCommand ?? runHostCommand;
   const readTextFile =
@@ -248,6 +250,10 @@ export function execute(
           state.ip += 1;
           break;
         }
+        case "CLOCK_MS":
+          state.stack.push(integer(clockMs(), "CLOCK_MS"));
+          state.ip += 1;
+          break;
         case "CALL":
           state.callStack.push(state.ip + 1);
           state.ip = instruction.target;
@@ -407,6 +413,14 @@ function randomInteger(max: number, random: () => number): number {
   }
 
   return Math.floor(value * max);
+}
+
+function integer(value: number, op: string): number {
+  if (!Number.isInteger(value)) {
+    throw new Error(`${op} provider must return an integer`);
+  }
+
+  return value;
 }
 
 function popExitCode(state: VmState): number {

@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <sys/select.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -1264,6 +1265,17 @@ void borth_op_random(BorthRuntime *runtime) {
   }
 
   borth_stack_push(runtime, borth_value_int(rand() % max));
+}
+
+void borth_op_clock_ms(BorthRuntime *runtime) {
+  struct timeval now;
+
+  if (gettimeofday(&now, NULL) != 0) {
+    borth_panic("CLOCK_MS failed to read host clock");
+  }
+
+  long milliseconds = (long)(now.tv_sec * 1000L + now.tv_usec / 1000L);
+  borth_stack_push(runtime, borth_value_int(milliseconds));
 }
 
 void borth_op_read_line(BorthRuntime *runtime) {

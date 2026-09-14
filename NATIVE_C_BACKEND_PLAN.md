@@ -104,7 +104,7 @@ Internally it:
 
 1. Compile Borth to bytecode.
 2. Emit temporary C.
-3. Run `cc`.
+3. Run `cc` with `-O2`.
 4. Removes temporary files unless a debug flag asks to keep them.
 
 The generated C should remain easy to inspect. `--keep-c` and `--emit-c` are
@@ -379,6 +379,7 @@ Compiler/tooling support:
 
 - emit C to a requested file
 - compile C with `cc`
+- pass `-O2` by default
 - choose output executable path
 - optionally keep generated C
 - report `cc` failures clearly

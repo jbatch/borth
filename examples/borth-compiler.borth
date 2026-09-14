@@ -178,7 +178,7 @@ variable COMPILER_ARGS
     # ( file-path spans nodes )
     swap compile-nodes
     compiler-args-c-source-path write-c-program
-    compiler-args-cc array-new compiler-args-c-source-path array-push "-Wall" array-push "-Wextra" array-push  "runtime/borth_runtime.c" array-push "-Iruntime" array-push "-o" array-push compiler-args-output-path array-push run-command
+    compiler-args-cc array-new compiler-args-c-source-path array-push "-O2" array-push "-Wall" array-push "-Wextra" array-push  "runtime/borth_runtime.c" array-push "-Iruntime" array-push "-o" array-push compiler-args-output-path array-push run-command
     # check return code of $CC and print stderr if non-zero
     rot 0 = not if
         "\nCompilation failed: " swap str-cat panic

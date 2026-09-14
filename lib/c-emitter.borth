@@ -103,6 +103,7 @@ import "./strings.borth"
     else dup "FETCH" = if drop drop "  borth_op_fetch(rt);"
     else dup "STORE" = if drop drop "  borth_op_store(rt);"
     else dup "RANDOM" = if drop drop "  borth_op_random(rt);"
+    else dup "CLOCK_MS" = if drop drop "  borth_op_clock_ms(rt);"
     else dup "READ_LINE" = if drop drop "  borth_op_read_line(rt);"
     else dup "READ_INT" = if drop drop "  borth_op_read_int(rt);"
     else dup "READ_TEXT_FILE" = if drop drop "  borth_op_read_text_file(rt);"
@@ -126,7 +127,7 @@ import "./strings.borth"
         drop drop ""
     else
         "C emitter does not support instruction: " swap str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # c-emit-instruction ( instruction index -- c-source )

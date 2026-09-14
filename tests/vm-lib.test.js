@@ -227,7 +227,7 @@ test("Borth VM executes compiled host lookup bytecode", () => {
   );
 });
 
-test("Borth VM executes compiled cwd and random bytecode", () => {
+test("Borth VM executes compiled cwd, random, and clock bytecode", () => {
   const randomValues = [0, 0.999];
 
   assert.deepEqual(
@@ -239,10 +239,11 @@ test("Borth VM executes compiled cwd and random bytecode", () => {
         import "lib/vm.borth"
 
         1 SKIP_PRELUDE !
-        "cwd 10 random 10 random" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
+        "cwd 10 random 10 random clock-ms" lex-src parse-tokens "<test>" compile-nodes run-bytecode show print
       `,
       {
         cwd: () => "/repo",
+        clockMs: () => 987654,
         random: () => {
           const value = randomValues.shift();
 
@@ -254,7 +255,7 @@ test("Borth VM executes compiled cwd and random bytecode", () => {
         },
       },
     ),
-    ['["/repo" 0 9]'],
+    ['["/repo" 0 9 987654]'],
   );
 });
 

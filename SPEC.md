@@ -119,6 +119,7 @@ file-exist?    ( path -- flag )
 env            ( name -- value found? )
 args           ( -- array )
 run-command    ( command args-array -- exit-code stdout stderr )
+clock-ms       ( -- ms )
 ```
 
 Current process-control primitive:
@@ -138,6 +139,10 @@ against the importing file and track loaded modules by full normalized paths.
 `run-command` deliberately takes a command string and an array of argument
 strings rather than a shell command line. Nonzero process exits return normally
 as an exit code. Host spawn failures are VM errors.
+
+`clock-ms` crosses the host clock boundary and pushes an integer millisecond
+timestamp. It is intentionally coarse and primarily exists for timing compiler
+and backend experiments from inside Borth programs.
 
 ## Declarations
 
@@ -1075,8 +1080,8 @@ Native C slice decision:
 - The runtime currently supports integer, string, and array values; a
   heap-allocated runtime object; a growable value stack; stack operations;
   arithmetic and comparisons; string and array primitives; host IO/path/env
-  primitives; `RUN_COMMAND`; `RANDOM`; `PANIC`; `EXIT`; `PRINT_STACK`; and
-  `PRINT` for integers and strings.
+  primitives; `RUN_COMMAND`; `RANDOM`; `CLOCK_MS`; `PANIC`; `EXIT`;
+  `PRINT_STACK`; and `PRINT` for integers and strings.
 - `lib/c-emitter.borth` emits `#include "borth_runtime.h"` and a straight-line
   `main` function with one C label per instruction.
 - `JUMP` lowers to a direct `goto`. `JUMP_IF_FALSE` pops a numeric predicate

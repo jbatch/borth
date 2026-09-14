@@ -483,6 +483,17 @@ import "./array.borth"
     vm-inc-ip
 ;
 
+# execute-clock-ms ( vm -- vm )
+#
+# Execute CLOCK_MS by appending the host millisecond clock value to the
+# interpreted stack.
+: execute-clock-ms
+    dup vm-stack
+        clock-ms array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
 # execute-str-len ( vm -- vm )
 #
 # Execute STR_LEN by replacing the top stack value with its string length.
@@ -811,6 +822,8 @@ import "./array.borth"
         drop execute-panic 1
     else dup "RANDOM" = if drop
         drop execute-random 0
+    else dup "CLOCK_MS" = if drop
+        drop execute-clock-ms 0
     else dup "STR_LEN" = if drop
         drop execute-str-len 0
     else dup "STR_CAT" = if drop
@@ -886,7 +899,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

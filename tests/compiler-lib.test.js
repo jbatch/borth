@@ -75,17 +75,17 @@ test("compiler library compiles string and array primitive words", () => {
   );
 });
 
-test("compiler library compiles stack, host, and random primitive words", () => {
+test("compiler library compiles stack, host, random, and clock primitive words", () => {
   assert.deepEqual(
     outputOf(`
       import "lib/lexer.borth"
       import "lib/parser.borth"
       import "lib/compiler.borth"
 
-      "roll -roll random read-line read-int read-text-file write-text-file append-text-file file-exist? env cwd path-dirname path-resolve" lex-src parse-tokens "<test>" compile-nodes show print
+      "roll -roll random clock-ms read-line read-int read-text-file write-text-file append-text-file file-exist? env cwd path-dirname path-resolve" lex-src parse-tokens "<test>" compile-nodes show print
     `),
     [
-      '[["ROLL"] ["ROLL_REVERSE"] ["RANDOM"] ["READ_LINE"] ["READ_INT"] ["READ_TEXT_FILE"] ["WRITE_TEXT_FILE"] ["APPEND_TEXT_FILE"] ["FILE_EXISTS"] ["ENV"] ["CWD"] ["PATH_DIRNAME"] ["PATH_RESOLVE"] ["HALT"]]',
+      '[["ROLL"] ["ROLL_REVERSE"] ["RANDOM"] ["CLOCK_MS"] ["READ_LINE"] ["READ_INT"] ["READ_TEXT_FILE"] ["WRITE_TEXT_FILE"] ["APPEND_TEXT_FILE"] ["FILE_EXISTS"] ["ENV"] ["CWD"] ["PATH_DIRNAME"] ["PATH_RESOLVE"] ["HALT"]]',
     ],
   );
 });

@@ -45,6 +45,8 @@ test("C emitter writes and runs a tiny native integer program", (t) => {
         import "lib/c-emitter.borth"
 
         array-new
+          array-new "CLOCK_MS" array-push array-push
+          array-new "DROP" array-push array-push
           array-new "PUSH" array-push 10 array-push array-push
           array-new "PUSH" array-push 20 array-push array-push
           array-new "ADD" array-push array-push
@@ -57,6 +59,7 @@ test("C emitter writes and runs a tiny native integer program", (t) => {
 
     const generated = readFileSync(sourcePath, "utf8");
     assert.match(generated, /#include "borth_runtime\.h"/);
+    assert.match(generated, /borth_op_clock_ms\(rt\);/);
     assert.match(generated, /borth_op_push_int\(rt, 10\);/);
     assert.match(generated, /borth_op_push_int\(rt, 20\);/);
     assert.match(generated, /borth_op_add\(rt\);/);

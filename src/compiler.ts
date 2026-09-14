@@ -822,6 +822,8 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "STORE" };
     case "random":
       return { op: "RANDOM" };
+    case "clock-ms":
+      return { op: "CLOCK_MS" };
     case "read-line":
       return { op: "READ_LINE" };
     case "read-int":

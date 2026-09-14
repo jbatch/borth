@@ -194,7 +194,7 @@
         },
         {
           "name": "support.function.random.borth",
-          "match": "(?<!\\S)random(?!\\S)"
+          "match": "(?<!\\S)(?:random|clock-ms)(?!\\S)"
         }
       ]
     },

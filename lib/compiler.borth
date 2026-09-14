@@ -1052,6 +1052,8 @@ deferred compile-next-node
         "PANIC" array-wrap emit-instruction
     else dup "random" = if drop
         "RANDOM" array-wrap emit-instruction
+    else dup "clock-ms" = if drop
+        "CLOCK_MS" array-wrap emit-instruction
 
     # Known user-defined words compile to CALL with their recorded bytecode address.
     else
@@ -1072,7 +1074,7 @@ deferred compile-next-node
         else
             "Unknown word: " swap show str-cat compiler-panic
         end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # compile-word-node ( state node -- state )

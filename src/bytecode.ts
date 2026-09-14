@@ -35,6 +35,7 @@ type InstructionData =
   | { op: "FETCH" }
   | { op: "STORE" }
   | { op: "RANDOM" }
+  | { op: "CLOCK_MS" }
   | { op: "CALL"; target: number }
   | { op: "JUMP"; target: number }
   | { op: "JUMP_IF_FALSE"; target: number }

@@ -53,3 +53,21 @@ test("random validates injected random values", () => {
     /RANDOM provider must return a number >= 0 and < 1/,
   );
 });
+
+test("clock-ms pushes the host millisecond clock", () => {
+  const output = [];
+
+  run("clock-ms print", {
+    clockMs: () => 123456,
+    write: (value) => output.push(value),
+  });
+
+  assert.deepEqual(output, [123456]);
+});
+
+test("clock-ms validates injected clock values", () => {
+  assert.throws(
+    () => run("clock-ms", { clockMs: () => 1.5 }),
+    /CLOCK_MS provider must return an integer/,
+  );
+});
