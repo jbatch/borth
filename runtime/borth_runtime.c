@@ -15,12 +15,17 @@
 typedef struct BorthString BorthString;
 typedef struct BorthArray BorthArray;
 typedef struct BorthArrayBuilder BorthArrayBuilder;
+typedef struct BorthStringBuilder BorthStringBuilder;
+typedef struct BorthMap BorthMap;
+typedef struct BorthMapEntry BorthMapEntry;
 
 typedef enum {
   BORTH_VALUE_INT,
   BORTH_VALUE_STRING,
   BORTH_VALUE_ARRAY,
   BORTH_VALUE_ARRAY_BUILDER,
+  BORTH_VALUE_STRING_BUILDER,
+  BORTH_VALUE_MAP,
 } BorthValueKind;
 
 typedef struct {
@@ -30,6 +35,8 @@ typedef struct {
     BorthString *string;
     BorthArray *array;
     BorthArrayBuilder *array_builder;
+    BorthStringBuilder *string_builder;
+    BorthMap *map;
   } as;
 } BorthValue;
 
@@ -49,6 +56,25 @@ struct BorthArrayBuilder {
   size_t len;
   size_t capacity;
   bool frozen;
+};
+
+struct BorthStringBuilder {
+  char *items;
+  size_t len;
+  size_t capacity;
+  bool frozen;
+};
+
+struct BorthMapEntry {
+  BorthValue key;
+  BorthValue value;
+  BorthMapEntry *next;
+};
+
+struct BorthMap {
+  BorthMapEntry **buckets;
+  size_t bucket_count;
+  size_t len;
 };
 
 typedef struct {
@@ -73,6 +99,8 @@ typedef enum {
   BORTH_HEAP_STRING,
   BORTH_HEAP_ARRAY,
   BORTH_HEAP_ARRAY_BUILDER,
+  BORTH_HEAP_STRING_BUILDER,
+  BORTH_HEAP_MAP,
 } BorthHeapObjectKind;
 
 typedef struct {
@@ -91,6 +119,8 @@ typedef struct {
   size_t heap_strings;
   size_t heap_arrays;
   size_t heap_array_builders;
+  size_t heap_string_builders;
+  size_t heap_maps;
   size_t array_new;
   size_t array_push;
   size_t array_push_copied_items;
@@ -104,6 +134,16 @@ typedef struct {
   size_t array_builder_freeze;
   size_t str_cat;
   size_t str_cat_copied_bytes;
+  size_t str_builder_new;
+  size_t str_builder_push;
+  size_t str_builder_push_copied_bytes;
+  size_t str_builder_len;
+  size_t str_builder_freeze;
+  size_t map_new;
+  size_t map_get;
+  size_t map_has;
+  size_t map_set;
+  size_t map_size;
   size_t read_text_file;
   size_t read_text_file_bytes;
   size_t write_text_file;
@@ -115,12 +155,6 @@ typedef struct {
 
 // TODO: Consider replacing this runtime-owned heap with reference counting once
 // native values need more precise lifetimes than "free everything at shutdown".
-
-typedef struct {
-  char *items;
-  size_t len;
-  size_t capacity;
-} BorthStringBuilder;
 
 struct BorthRuntime {
   BorthValueStack stack;
@@ -198,6 +232,20 @@ static BorthValue borth_value_array_builder(BorthArrayBuilder *value) {
   return result;
 }
 
+static BorthValue borth_value_string_builder(BorthStringBuilder *value) {
+  BorthValue result;
+  result.kind = BORTH_VALUE_STRING_BUILDER;
+  result.as.string_builder = value;
+  return result;
+}
+
+static BorthValue borth_value_map(BorthMap *value) {
+  BorthValue result;
+  result.kind = BORTH_VALUE_MAP;
+  result.as.map = value;
+  return result;
+}
+
 static void borth_heap_grow(BorthRuntime *runtime) {
   size_t next_capacity = runtime->heap.capacity * 2;
   runtime->heap.items = borth_realloc(
@@ -232,6 +280,11 @@ static void borth_profile_print(BorthRuntime *runtime) {
       stderr,
       "heap-array-builders: %zu\n",
       runtime->profile.heap_array_builders);
+  fprintf(
+      stderr,
+      "heap-string-builders: %zu\n",
+      runtime->profile.heap_string_builders);
+  fprintf(stderr, "heap-maps: %zu\n", runtime->profile.heap_maps);
   fprintf(stderr, "array-new: %zu\n", runtime->profile.array_new);
   fprintf(
       stderr,
@@ -269,6 +322,28 @@ static void borth_profile_print(BorthRuntime *runtime) {
       "str-cat: %zu copied-bytes=%zu\n",
       runtime->profile.str_cat,
       runtime->profile.str_cat_copied_bytes);
+  fprintf(
+      stderr,
+      "str-builder-new: %zu\n",
+      runtime->profile.str_builder_new);
+  fprintf(
+      stderr,
+      "str-builder-push: %zu copied-bytes=%zu\n",
+      runtime->profile.str_builder_push,
+      runtime->profile.str_builder_push_copied_bytes);
+  fprintf(
+      stderr,
+      "str-builder-len: %zu\n",
+      runtime->profile.str_builder_len);
+  fprintf(
+      stderr,
+      "str-builder-freeze: %zu\n",
+      runtime->profile.str_builder_freeze);
+  fprintf(stderr, "map-new: %zu\n", runtime->profile.map_new);
+  fprintf(stderr, "map-get: %zu\n", runtime->profile.map_get);
+  fprintf(stderr, "map-has: %zu\n", runtime->profile.map_has);
+  fprintf(stderr, "map-set: %zu\n", runtime->profile.map_set);
+  fprintf(stderr, "map-size: %zu\n", runtime->profile.map_size);
   fprintf(
       stderr,
       "read-text-file: %zu bytes=%zu\n",
@@ -357,6 +432,157 @@ static BorthArrayBuilder *borth_array_builder_new(BorthRuntime *runtime) {
     runtime->profile.heap_array_builders += 1;
   }
   return result;
+}
+
+static BorthStringBuilder *borth_string_builder_new(BorthRuntime *runtime) {
+  BorthStringBuilder *result = borth_malloc(
+      sizeof(BorthStringBuilder),
+      "failed to allocate string builder");
+  result->len = 0;
+  result->capacity = 64;
+  result->items =
+      borth_malloc(result->capacity, "failed to allocate string builder items");
+  result->items[0] = '\0';
+  result->frozen = false;
+
+  borth_heap_register(runtime, BORTH_HEAP_STRING_BUILDER, result);
+  if (runtime->profile.enabled) {
+    runtime->profile.heap_string_builders += 1;
+  }
+  return result;
+}
+
+static size_t borth_hash_bytes(const char *chars, size_t len) {
+  size_t hash = 1469598103934665603UL;
+
+  for (size_t i = 0; i < len; i += 1) {
+    hash ^= (unsigned char)chars[i];
+    hash *= 1099511628211UL;
+  }
+
+  return hash;
+}
+
+static size_t borth_map_key_hash(BorthValue key, const char *op) {
+  switch (key.kind) {
+    case BORTH_VALUE_INT:
+      return ((size_t)key.as.integer * 2654435761UL) ^ 0x01UL;
+    case BORTH_VALUE_STRING:
+      return borth_hash_bytes(key.as.string->chars, key.as.string->len) ^ 0x02UL;
+    default:
+      borth_panic(op);
+  }
+
+  return 0;
+}
+
+static bool borth_map_keys_equal(BorthValue left, BorthValue right) {
+  if (left.kind != right.kind) {
+    return false;
+  }
+
+  switch (left.kind) {
+    case BORTH_VALUE_INT:
+      return left.as.integer == right.as.integer;
+    case BORTH_VALUE_STRING:
+      return left.as.string->len == right.as.string->len &&
+          memcmp(left.as.string->chars, right.as.string->chars, left.as.string->len) == 0;
+    default:
+      return false;
+  }
+}
+
+static BorthMap *borth_map_new(BorthRuntime *runtime) {
+  BorthMap *result = borth_malloc(sizeof(BorthMap), "failed to allocate map");
+  result->bucket_count = 16;
+  result->len = 0;
+  result->buckets = borth_malloc(
+      result->bucket_count * sizeof(BorthMapEntry *),
+      "failed to allocate map buckets");
+  memset(result->buckets, 0, result->bucket_count * sizeof(BorthMapEntry *));
+
+  borth_heap_register(runtime, BORTH_HEAP_MAP, result);
+  if (runtime->profile.enabled) {
+    runtime->profile.heap_maps += 1;
+  }
+  return result;
+}
+
+static BorthMapEntry *borth_map_find_entry(
+    BorthMap *map,
+    BorthValue key,
+    size_t hash) {
+  size_t bucket_index = hash % map->bucket_count;
+
+  for (BorthMapEntry *entry = map->buckets[bucket_index];
+       entry != NULL;
+       entry = entry->next) {
+    if (borth_map_keys_equal(entry->key, key)) {
+      return entry;
+    }
+  }
+
+  return NULL;
+}
+
+static void borth_map_grow(BorthMap *map) {
+  size_t next_bucket_count = map->bucket_count * 2;
+  BorthMapEntry **next_buckets = borth_malloc(
+      next_bucket_count * sizeof(BorthMapEntry *),
+      "failed to grow map buckets");
+  memset(next_buckets, 0, next_bucket_count * sizeof(BorthMapEntry *));
+
+  for (size_t i = 0; i < map->bucket_count; i += 1) {
+    BorthMapEntry *entry = map->buckets[i];
+
+    while (entry != NULL) {
+      BorthMapEntry *next = entry->next;
+      size_t bucket_index =
+          borth_map_key_hash(entry->key, "MAP_SET requires map keys to be integers or strings") %
+          next_bucket_count;
+      entry->next = next_buckets[bucket_index];
+      next_buckets[bucket_index] = entry;
+      entry = next;
+    }
+  }
+
+  free(map->buckets);
+  map->buckets = next_buckets;
+  map->bucket_count = next_bucket_count;
+}
+
+static void borth_map_set(BorthMap *map, BorthValue key, BorthValue value) {
+  size_t hash =
+      borth_map_key_hash(key, "MAP_SET requires map keys to be integers or strings");
+  BorthMapEntry *entry = borth_map_find_entry(map, key, hash);
+
+  if (entry != NULL) {
+    entry->value = value;
+    return;
+  }
+
+  if ((map->len + 1) * 4 > map->bucket_count * 3) {
+    borth_map_grow(map);
+    hash = borth_map_key_hash(
+        key,
+        "MAP_SET requires map keys to be integers or strings");
+  }
+
+  size_t bucket_index = hash % map->bucket_count;
+  entry = borth_malloc(sizeof(BorthMapEntry), "failed to allocate map entry");
+  entry->key = key;
+  entry->value = value;
+  entry->next = map->buckets[bucket_index];
+  map->buckets[bucket_index] = entry;
+  map->len += 1;
+}
+
+static BorthMapEntry *borth_map_get(
+    BorthMap *map,
+    BorthValue key,
+    const char *op) {
+  size_t hash = borth_map_key_hash(key, op);
+  return borth_map_find_entry(map, key, hash);
 }
 
 static void borth_array_append(BorthArray *array, BorthValue value) {
@@ -506,6 +732,31 @@ void borth_runtime_free(BorthRuntime *runtime) {
         free(builder);
         break;
       }
+      case BORTH_HEAP_STRING_BUILDER: {
+        BorthStringBuilder *builder = object.value;
+        free(builder->items);
+        free(builder);
+        break;
+      }
+      case BORTH_HEAP_MAP: {
+        BorthMap *map = object.value;
+
+        for (size_t bucket_index = 0;
+             bucket_index < map->bucket_count;
+             bucket_index += 1) {
+          BorthMapEntry *entry = map->buckets[bucket_index];
+
+          while (entry != NULL) {
+            BorthMapEntry *next = entry->next;
+            free(entry);
+            entry = next;
+          }
+        }
+
+        free(map->buckets);
+        free(map);
+        break;
+      }
     }
   }
 
@@ -621,6 +872,28 @@ static BorthArrayBuilder *borth_pop_array_builder(
   return value.as.array_builder;
 }
 
+static BorthStringBuilder *borth_pop_string_builder(
+    BorthRuntime *runtime,
+    const char *op) {
+  BorthValue value = borth_stack_pop(runtime, op);
+
+  if (value.kind != BORTH_VALUE_STRING_BUILDER) {
+    borth_panic(op);
+  }
+
+  return value.as.string_builder;
+}
+
+static BorthMap *borth_pop_map(BorthRuntime *runtime, const char *op) {
+  BorthValue value = borth_stack_pop(runtime, op);
+
+  if (value.kind != BORTH_VALUE_MAP) {
+    borth_panic(op);
+  }
+
+  return value.as.map;
+}
+
 static size_t borth_pop_index(
     BorthRuntime *runtime,
     const char *op,
@@ -639,6 +912,8 @@ static void borth_builder_init(BorthStringBuilder *builder) {
   builder->capacity = 64;
   builder->items =
       borth_malloc(builder->capacity, "failed to allocate string builder");
+  builder->items[0] = '\0';
+  builder->frozen = false;
 }
 
 static void borth_builder_grow(BorthStringBuilder *builder, size_t needed) {
@@ -656,6 +931,10 @@ static void borth_builder_append_chars(
     BorthStringBuilder *builder,
     const char *chars,
     size_t len) {
+  if (builder->frozen) {
+    borth_panic("STR_BUILDER_PUSH cannot push to a frozen builder");
+  }
+
   size_t needed = builder->len + len + 1;
 
   if (needed > builder->capacity) {
@@ -756,6 +1035,20 @@ static void borth_builder_append_value(
         borth_builder_append_int(builder, (long)value.as.array_builder->len);
         borth_builder_append_char(builder, '>');
       }
+      break;
+    case BORTH_VALUE_STRING_BUILDER:
+      if (value.as.string_builder->frozen) {
+        borth_builder_append_cstr(builder, "<string-builder:frozen>");
+      } else {
+        borth_builder_append_cstr(builder, "<string-builder:");
+        borth_builder_append_int(builder, (long)value.as.string_builder->len);
+        borth_builder_append_char(builder, '>');
+      }
+      break;
+    case BORTH_VALUE_MAP:
+      borth_builder_append_cstr(builder, "<map:");
+      borth_builder_append_int(builder, (long)value.as.map->len);
+      borth_builder_append_char(builder, '>');
       break;
   }
 }
@@ -1391,6 +1684,67 @@ void borth_op_str_index_of(BorthRuntime *runtime) {
   borth_stack_push(runtime, borth_value_int(-1));
 }
 
+void borth_op_str_builder_new(BorthRuntime *runtime) {
+  if (runtime->profile.enabled) {
+    runtime->profile.str_builder_new += 1;
+  }
+  borth_stack_push(
+      runtime,
+      borth_value_string_builder(borth_string_builder_new(runtime)));
+}
+
+void borth_op_str_builder_push(BorthRuntime *runtime) {
+  BorthString *value = borth_pop_string(
+      runtime,
+      "STR_BUILDER_PUSH requires strings on the stack");
+  BorthStringBuilder *builder = borth_pop_string_builder(
+      runtime,
+      "STR_BUILDER_PUSH requires a string builder on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.str_builder_push += 1;
+    runtime->profile.str_builder_push_copied_bytes += value->len;
+  }
+  borth_builder_append_chars(builder, value->chars, value->len);
+  borth_stack_push(runtime, borth_value_string_builder(builder));
+}
+
+void borth_op_str_builder_len(BorthRuntime *runtime) {
+  BorthStringBuilder *builder = borth_pop_string_builder(
+      runtime,
+      "STR_BUILDER_LEN requires a string builder on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.str_builder_len += 1;
+  }
+  borth_stack_push(runtime, borth_value_int((long)builder->len));
+}
+
+void borth_op_str_builder_freeze(BorthRuntime *runtime) {
+  BorthStringBuilder *builder = borth_pop_string_builder(
+      runtime,
+      "STR_BUILDER_FREEZE requires a string builder on the stack");
+
+  if (builder->frozen) {
+    borth_panic("STR_BUILDER_FREEZE cannot freeze a frozen builder");
+  }
+
+  if (runtime->profile.enabled) {
+    runtime->profile.str_builder_freeze += 1;
+  }
+
+  char *chars = builder->items;
+  size_t len = builder->len;
+  builder->items = NULL;
+  builder->len = 0;
+  builder->capacity = 0;
+  builder->frozen = true;
+
+  borth_stack_push(
+      runtime,
+      borth_value_string(borth_string_take_chars(runtime, chars, len)));
+}
+
 void borth_op_show(BorthRuntime *runtime) {
   BorthValue value =
       borth_stack_pop(runtime, "SHOW requires a value on the stack");
@@ -1565,6 +1919,82 @@ void borth_op_array_builder_freeze(BorthRuntime *runtime) {
   borth_stack_push(
       runtime,
       borth_value_array(borth_array_builder_freeze(runtime, builder)));
+}
+
+void borth_op_map_new(BorthRuntime *runtime) {
+  if (runtime->profile.enabled) {
+    runtime->profile.map_new += 1;
+  }
+  borth_stack_push(runtime, borth_value_map(borth_map_new(runtime)));
+}
+
+void borth_op_map_get(BorthRuntime *runtime) {
+  BorthValue key =
+      borth_stack_pop(runtime, "MAP_GET requires a key on the stack");
+  BorthMap *map =
+      borth_pop_map(runtime, "MAP_GET requires a map on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.map_get += 1;
+  }
+
+  BorthMapEntry *entry = borth_map_get(
+      map,
+      key,
+      "MAP_GET requires map keys to be integers or strings");
+
+  if (entry == NULL) {
+    borth_stack_push(runtime, borth_value_int(0));
+    borth_stack_push(runtime, borth_value_int(0));
+    return;
+  }
+
+  borth_stack_push(runtime, entry->value);
+  borth_stack_push(runtime, borth_value_int(1));
+}
+
+void borth_op_map_has(BorthRuntime *runtime) {
+  BorthValue key =
+      borth_stack_pop(runtime, "MAP_HAS requires a key on the stack");
+  BorthMap *map =
+      borth_pop_map(runtime, "MAP_HAS requires a map on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.map_has += 1;
+  }
+
+  borth_stack_push(
+      runtime,
+      borth_value_bool(
+          borth_map_get(
+              map,
+              key,
+              "MAP_HAS requires map keys to be integers or strings") != NULL));
+}
+
+void borth_op_map_set(BorthRuntime *runtime) {
+  BorthValue value =
+      borth_stack_pop(runtime, "MAP_SET requires a value on the stack");
+  BorthValue key =
+      borth_stack_pop(runtime, "MAP_SET requires a key on the stack");
+  BorthMap *map =
+      borth_pop_map(runtime, "MAP_SET requires a map on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.map_set += 1;
+  }
+  borth_map_set(map, key, value);
+  borth_stack_push(runtime, borth_value_map(map));
+}
+
+void borth_op_map_size(BorthRuntime *runtime) {
+  BorthMap *map =
+      borth_pop_map(runtime, "MAP_SIZE requires a map on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.map_size += 1;
+  }
+  borth_stack_push(runtime, borth_value_int((long)map->len));
 }
 
 void borth_op_alloc_variable(BorthRuntime *runtime) {

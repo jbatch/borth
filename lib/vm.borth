@@ -543,6 +543,50 @@ import "./array.borth"
     vm-inc-ip
 ;
 
+# execute-str-builder-new ( vm -- vm )
+#
+# Execute STR_BUILDER_NEW by appending a new string builder to the interpreted
+# stack.
+: execute-str-builder-new
+    dup vm-stack
+        str-builder-new array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-str-builder-push ( vm -- vm )
+#
+# Execute STR_BUILDER_PUSH by appending one string to a string builder.
+: execute-str-builder-push
+    2 "STR_BUILDER_PUSH" assert-stack-length
+    dup vm-stack
+        stack-pop-2 str-builder-push array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-str-builder-len ( vm -- vm )
+#
+# Execute STR_BUILDER_LEN by replacing a builder with its accumulated length.
+: execute-str-builder-len
+    1 "STR_BUILDER_LEN" assert-stack-length
+    dup vm-stack
+        array-pop str-builder-len array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-str-builder-freeze ( vm -- vm )
+#
+# Execute STR_BUILDER_FREEZE by replacing a builder with its finished string.
+: execute-str-builder-freeze
+    1 "STR_BUILDER_FREEZE" assert-stack-length
+    dup vm-stack
+        array-pop str-builder-freeze array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
 # execute-read-line ( vm -- vm )
 #
 # Execute READ_LINE by appending one host input line to the interpreted stack.
@@ -738,6 +782,50 @@ import "./array.borth"
     vm-inc-ip
 ;
 
+# execute-map-new ( vm -- vm )
+: execute-map-new
+    dup vm-stack
+        map-new array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-map-get ( vm -- vm )
+: execute-map-get
+    2 "MAP_GET" assert-stack-length
+    dup vm-stack
+        stack-pop-2 map-get -rot array-push swap array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-map-has ( vm -- vm )
+: execute-map-has
+    2 "MAP_HAS" assert-stack-length
+    dup vm-stack
+        stack-pop-2 map-has? array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-map-set ( vm -- vm )
+: execute-map-set
+    3 "MAP_SET" assert-stack-length
+    dup vm-stack
+        stack-pop-3 map-set array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
+# execute-map-size ( vm -- vm )
+: execute-map-size
+    1 "MAP_SIZE" assert-stack-length
+    dup vm-stack
+        array-pop map-size array-push
+    vm-set-stack
+    vm-inc-ip
+;
+
 # execute-jump ( vm jumpAddr -- vm )
 #
 # Unconditionally set the instruction pointer to jumpAddr. Jumps do not advance
@@ -832,6 +920,14 @@ import "./array.borth"
         drop execute-str-slice 0
     else dup "STR_INDEX_OF" = if drop
         drop execute-str-index-of 0
+    else dup "STR_BUILDER_NEW" = if drop
+        drop execute-str-builder-new 0
+    else dup "STR_BUILDER_PUSH" = if drop
+        drop execute-str-builder-push 0
+    else dup "STR_BUILDER_LEN" = if drop
+        drop execute-str-builder-len 0
+    else dup "STR_BUILDER_FREEZE" = if drop
+        drop execute-str-builder-freeze 0
     else dup "READ_LINE" = if drop
         drop execute-read-line 0
     else dup "READ_INT" = if drop
@@ -866,6 +962,16 @@ import "./array.borth"
         drop execute-array-push 0
     else dup "ARRAY_GET" = if drop
         drop execute-array-get 0
+    else dup "MAP_NEW" = if drop
+        drop execute-map-new 0
+    else dup "MAP_GET" = if drop
+        drop execute-map-get 0
+    else dup "MAP_HAS" = if drop
+        drop execute-map-has 0
+    else dup "MAP_SET" = if drop
+        drop execute-map-set 0
+    else dup "MAP_SIZE" = if drop
+        drop execute-map-size 0
     else dup "ADD" = if nip
         prepare-binary-operation + vm-stack-push vm-inc-ip 0
     else dup "SUB" = if nip
@@ -899,7 +1005,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )

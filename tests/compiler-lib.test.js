@@ -67,10 +67,10 @@ test("compiler library compiles string and array primitive words", () => {
       import "lib/parser.borth"
       import "lib/compiler.borth"
 
-      "str-len str-cat str-slice str-index-of array-new array-len array-push array-get array-builder-new array-builder-push array-builder-len array-builder-get array-builder-set array-builder-freeze" lex-src parse-tokens "<test>" compile-nodes show print
+      "str-len str-cat str-slice str-index-of str-builder-new str-builder-push str-builder-len str-builder-freeze array-new array-len array-push array-get array-builder-new array-builder-push array-builder-len array-builder-get array-builder-set array-builder-freeze map-new map-get map-has? map-set map-size" lex-src parse-tokens "<test>" compile-nodes show print
     `),
     [
-      '[["STR_LEN"] ["STR_CAT"] ["STR_SLICE"] ["STR_INDEX_OF"] ["ARRAY_NEW"] ["ARRAY_LEN"] ["ARRAY_PUSH"] ["ARRAY_GET"] ["ARRAY_BUILDER_NEW"] ["ARRAY_BUILDER_PUSH"] ["ARRAY_BUILDER_LEN"] ["ARRAY_BUILDER_GET"] ["ARRAY_BUILDER_SET"] ["ARRAY_BUILDER_FREEZE"] ["HALT"]]',
+      '[["STR_LEN"] ["STR_CAT"] ["STR_SLICE"] ["STR_INDEX_OF"] ["STR_BUILDER_NEW"] ["STR_BUILDER_PUSH"] ["STR_BUILDER_LEN"] ["STR_BUILDER_FREEZE"] ["ARRAY_NEW"] ["ARRAY_LEN"] ["ARRAY_PUSH"] ["ARRAY_GET"] ["ARRAY_BUILDER_NEW"] ["ARRAY_BUILDER_PUSH"] ["ARRAY_BUILDER_LEN"] ["ARRAY_BUILDER_GET"] ["ARRAY_BUILDER_SET"] ["ARRAY_BUILDER_FREEZE"] ["MAP_NEW"] ["MAP_GET"] ["MAP_HAS"] ["MAP_SET"] ["MAP_SIZE"] ["HALT"]]',
     ],
   );
 });

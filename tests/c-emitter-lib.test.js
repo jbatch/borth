@@ -34,6 +34,28 @@ function compileNativeProgram(t, sourcePath, executablePath) {
   return true;
 }
 
+test("C emitter can return generated source as a string", () => {
+  const output = [];
+
+  run(
+    `
+      import "lib/c-emitter.borth"
+
+      array-new
+        array-new "PUSH" array-push 7 array-push array-push
+        array-new "PRINT" array-push array-push
+        array-new "HALT" array-push array-push
+      emit-c-program-source print
+    `,
+    { write: (value) => output.push(value) },
+  );
+
+  assert.equal(output.length, 1);
+  assert.match(output[0], /#include "borth_runtime\.h"/);
+  assert.match(output[0], /borth_op_push_int\(rt, 7\);/);
+  assert.match(output[0], /borth_op_print\(rt\);/);
+});
+
 test("C emitter writes and runs a tiny native integer program", (t) => {
   const root = mkdtempSync(join(tmpdir(), "borth-c-emitter-"));
   const sourcePath = join(root, "program.c");
@@ -547,6 +569,27 @@ test("C emitter writes and runs native strings and arrays", (t) => {
           array-new "ARRAY_BUILDER_FREEZE" array-push array-push
           array-new "SHOW" array-push array-push
           array-new "PRINT" array-push array-push
+          array-new "STR_BUILDER_NEW" array-push array-push
+          array-new "PUSH" array-push "fast" array-push array-push
+          array-new "STR_BUILDER_PUSH" array-push array-push
+          array-new "PUSH" array-push " strings" array-push array-push
+          array-new "STR_BUILDER_PUSH" array-push array-push
+          array-new "DUP" array-push array-push
+          array-new "STR_BUILDER_LEN" array-push array-push
+          array-new "PRINT" array-push array-push
+          array-new "STR_BUILDER_FREEZE" array-push array-push
+          array-new "PRINT" array-push array-push
+          array-new "MAP_NEW" array-push array-push
+          array-new "PUSH" array-push "name" array-push array-push
+          array-new "PUSH" array-push "borth" array-push array-push
+          array-new "MAP_SET" array-push array-push
+          array-new "DUP" array-push array-push
+          array-new "MAP_SIZE" array-push array-push
+          array-new "PRINT" array-push array-push
+          array-new "PUSH" array-push "name" array-push array-push
+          array-new "MAP_GET" array-push array-push
+          array-new "PRINT" array-push array-push
+          array-new "PRINT" array-push array-push
           array-new "HALT" array-push array-push
         ${JSON.stringify(sourcePath)} write-c-program
       `,
@@ -563,6 +606,14 @@ test("C emitter writes and runs native strings and arrays", (t) => {
     assert.match(generated, /borth_op_array_builder_get\(rt\);/);
     assert.match(generated, /borth_op_array_builder_set\(rt\);/);
     assert.match(generated, /borth_op_array_builder_freeze\(rt\);/);
+    assert.match(generated, /borth_op_str_builder_new\(rt\);/);
+    assert.match(generated, /borth_op_str_builder_push\(rt\);/);
+    assert.match(generated, /borth_op_str_builder_len\(rt\);/);
+    assert.match(generated, /borth_op_str_builder_freeze\(rt\);/);
+    assert.match(generated, /borth_op_map_new\(rt\);/);
+    assert.match(generated, /borth_op_map_set\(rt\);/);
+    assert.match(generated, /borth_op_map_size\(rt\);/);
+    assert.match(generated, /borth_op_map_get\(rt\);/);
 
     const ccCheck = spawnSync("cc", ["--version"], { encoding: "utf8" });
 
@@ -590,7 +641,7 @@ test("C emitter writes and runs native strings and arrays", (t) => {
     assert.equal(runProgram.status, 0, runProgram.stderr);
     assert.equal(
       runProgram.stdout,
-      'hello, native\n3\nell\n8\n["x" 123]\nb\n2\npatched\n["patched" 42]\n',
+      'hello, native\n3\nell\n8\n["x" 123]\nb\n2\npatched\n["patched" 42]\n12\nfast strings\n1\n1\nborth\n',
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

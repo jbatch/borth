@@ -5,17 +5,17 @@
 
 import "./strings.borth"
 
-# c-write ( file-path contents -- file-path )
+# c-write ( builder contents -- builder )
 #
-# Append contents to file-path while keeping file-path on the stack for the next
-# emission step.
+# Append contents to a string builder while keeping the builder on the stack for
+# the next emission step.
 : c-write
-    over swap append-text-file
+    str-builder-push
 ;
 
-# c-write-line ( file-path contents -- file-path )
+# c-write-line ( builder contents -- builder )
 : c-write-line
-    "\n" str-cat c-write
+    c-write "\n" c-write
 ;
 
 # c-instruction-op ( instruction -- op )
@@ -94,6 +94,10 @@ import "./strings.borth"
     else dup "STR_CAT" = if drop drop "  borth_op_str_cat(rt);"
     else dup "STR_SLICE" = if drop drop "  borth_op_str_slice(rt);"
     else dup "STR_INDEX_OF" = if drop drop "  borth_op_str_index_of(rt);"
+    else dup "STR_BUILDER_NEW" = if drop drop "  borth_op_str_builder_new(rt);"
+    else dup "STR_BUILDER_PUSH" = if drop drop "  borth_op_str_builder_push(rt);"
+    else dup "STR_BUILDER_LEN" = if drop drop "  borth_op_str_builder_len(rt);"
+    else dup "STR_BUILDER_FREEZE" = if drop drop "  borth_op_str_builder_freeze(rt);"
     else dup "SHOW" = if drop drop "  borth_op_show(rt);"
     else dup "ARRAY_NEW" = if drop drop "  borth_op_array_new(rt);"
     else dup "ARRAY_PUSH" = if drop drop "  borth_op_array_push(rt);"
@@ -105,6 +109,11 @@ import "./strings.borth"
     else dup "ARRAY_BUILDER_GET" = if drop drop "  borth_op_array_builder_get(rt);"
     else dup "ARRAY_BUILDER_SET" = if drop drop "  borth_op_array_builder_set(rt);"
     else dup "ARRAY_BUILDER_FREEZE" = if drop drop "  borth_op_array_builder_freeze(rt);"
+    else dup "MAP_NEW" = if drop drop "  borth_op_map_new(rt);"
+    else dup "MAP_GET" = if drop drop "  borth_op_map_get(rt);"
+    else dup "MAP_HAS" = if drop drop "  borth_op_map_has(rt);"
+    else dup "MAP_SET" = if drop drop "  borth_op_map_set(rt);"
+    else dup "MAP_SIZE" = if drop drop "  borth_op_map_size(rt);"
     else dup "ALLOC_VARIABLE" = if drop drop "  borth_op_alloc_variable(rt);"
     else dup "FETCH" = if drop drop "  borth_op_fetch(rt);"
     else dup "STORE" = if drop drop "  borth_op_store(rt);"
@@ -133,7 +142,7 @@ import "./strings.borth"
         drop drop ""
     else
         "C emitter does not support instruction: " swap str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # c-emit-instruction ( instruction index -- c-source )
@@ -150,7 +159,15 @@ import "./strings.borth"
     end end
 ;
 
-# write-c-instructions ( file-path instructions -- file-path )
+# _c-write-line-keep-instruction-loop ( builder instructions index line -- builder instructions index )
+#
+# Append one generated line while preserving the instruction-loop state.
+: _c-write-line-keep-instruction-loop
+    3 roll swap c-write 2 -roll
+    "\n" 3 roll swap c-write 2 -roll
+;
+
+# write-c-instructions ( builder instructions -- builder instructions )
 #
 # Emit each supported instruction as one C statement.
 : write-c-instructions
@@ -159,27 +176,24 @@ import "./strings.borth"
         2dup swap array-len <
     while
         dup c-emit-label
-        3over swap append-text-file
-        2over "\n" append-text-file
+        _c-write-line-keep-instruction-loop
         2dup array-get over c-emit-instruction
         dup "" = if
             drop
         else
-            3over swap append-text-file
-            2over "\n" append-text-file
+            _c-write-line-keep-instruction-loop
         end
         1 +
     repeat
-    drop drop
+    drop
 ;
 
-# c-write-line-with-instructions ( file-path instructions contents -- file-path instructions )
+# c-write-line-with-instructions ( builder instructions contents -- builder instructions )
 : c-write-line-with-instructions
-    2over swap append-text-file
-    over "\n" append-text-file
+    rot swap c-write-line swap
 ;
 
-# write-c-return-dispatch ( file-path instructions -- file-path )
+# write-c-return-dispatch ( builder instructions -- builder instructions )
 #
 # Emit the shared return dispatcher used by RET.
 : write-c-return-dispatch
@@ -195,31 +209,38 @@ import "./strings.borth"
         "    case " swap str-cat ": goto " str-cat
         over c-label-name
         str-cat ";" str-cat
-        3over swap append-text-file
-        2over "\n" append-text-file
+        _c-write-line-keep-instruction-loop
         1 +
     repeat
     drop
     "    default: borth_op_invalid_return(rt);" c-write-line-with-instructions
     "  }" c-write-line-with-instructions
     "borth_program_end:" c-write-line-with-instructions
+;
+
+# emit-c-program-source ( instructions -- source )
+#
+# Return one generated C source string for the instruction array.
+: emit-c-program-source
+    str-builder-new swap
+    "#include \"borth_runtime.h\"" c-write-line-with-instructions
+    "" c-write-line-with-instructions
+    "int main(int argc, char **argv) {" c-write-line-with-instructions
+    "  BorthRuntime *rt = borth_runtime_new_with_args(argc - 1, argv + 1);" c-write-line-with-instructions
+    write-c-instructions
+    write-c-return-dispatch
     drop
+    "  borth_runtime_free(rt);" c-write-line
+    "  return 0;" c-write-line
+    "}" c-write-line
+    str-builder-freeze
 ;
 
 # write-c-program ( instructions file-path -- )
 #
 # Replace file-path with one generated C source file.
 : write-c-program
-    dup "" write-text-file
-    "#include \"borth_runtime.h\"" c-write-line
-    "" c-write-line
-    "int main(int argc, char **argv) {" c-write-line
-    "  BorthRuntime *rt = borth_runtime_new_with_args(argc - 1, argv + 1);" c-write-line
     swap
-    2dup write-c-instructions drop
-    write-c-return-dispatch
-    "  borth_runtime_free(rt);" c-write-line
-    "  return 0;" c-write-line
-    "}" c-write-line
-    drop
+    emit-c-program-source
+    write-text-file
 ;

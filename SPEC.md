@@ -873,6 +873,38 @@ String inspection decision:
 - These words are the next step toward lexer-like programs without introducing
   arrays or token data structures yet.
 
+## Milestone 14b: String Builders
+
+Goal:
+
+```text
+str-builder-new
+"hello" str-builder-push
+", borth" str-builder-push
+str-builder-freeze print
+```
+
+should print:
+
+```text
+hello, borth
+```
+
+String builder decision:
+
+- String builders are separate mutable construction values.
+- The current builder words are `str-builder-new`, `str-builder-push`,
+  `str-builder-len`, and `str-builder-freeze`.
+- `str-builder-push ( builder string -- builder )` mutates the builder and
+  returns it.
+- `str-builder-freeze ( builder -- string )` returns an ordinary string and
+  makes the builder unusable for later mutation.
+- Builders are VM/runtime primitives because Borth strings are opaque values;
+  efficient append needs access to a growable runtime character buffer.
+- `str-join ( strings separator -- string )` and
+  `str-concat ( strings -- string )` are library words built on top of string
+  builders.
+
 ## Milestone 15a: Arrays
 
 Goal:
@@ -906,7 +938,39 @@ Array decision:
 - Arrays are intended as the first high-level container for token lists and
   simple token records.
 
-## Milestone 15b: Fatal Errors
+## Milestone 15b: Runtime Maps
+
+Goal:
+
+```text
+map-new
+"answer" 42 map-set
+"answer" map-get .s
+```
+
+should print:
+
+```text
+[42 1]
+```
+
+Map decision:
+
+- Maps are runtime values constructed with words, not source literals.
+- Current map words are `map-new`, `map-get`, `map-has?`, `map-set`, and
+  `map-size`.
+- Map keys are strings or integers. Other heap values are rejected as keys until
+  Borth has a deliberate value-equality story for them.
+- `map-get ( map key -- value found? )` returns the stored value and `1` when a
+  key exists, or `0 0` when it does not.
+- `map-set ( map key value -- map )` mutates the map object and returns the same
+  map. This is a deliberate performance-oriented difference from immutable
+  arrays.
+- The earlier Borth library map was an array-backed association list. Runtime
+  maps exist because compiler lookup maps are performance-sensitive and because
+  hashing belongs below opaque runtime values.
+
+## Milestone 15c: Fatal Errors
 
 Goal:
 

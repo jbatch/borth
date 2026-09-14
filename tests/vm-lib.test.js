@@ -118,6 +118,21 @@ test("Borth VM executes compiled array primitive bytecode", () => {
   );
 });
 
+test("Borth VM executes compiled map primitive bytecode", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/lexer.borth"
+      import "lib/parser.borth"
+      import "lib/compiler.borth"
+      import "lib/vm.borth"
+
+      "map-new \\"a\\" 1 map-set \\"a\\" map-get" lex-src parse-tokens "<test>" compile-nodes
+      run-bytecode show print
+    `),
+    ["[1 1]"],
+  );
+});
+
 test("Borth VM executes compiled roll bytecode", () => {
   assert.deepEqual(
     outputOf(`

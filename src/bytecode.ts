@@ -27,6 +27,15 @@ type InstructionData =
   | { op: "STR_CAT" }
   | { op: "STR_SLICE" }
   | { op: "STR_INDEX_OF" }
+  | { op: "STR_BUILDER_NEW" }
+  | { op: "STR_BUILDER_PUSH" }
+  | { op: "STR_BUILDER_LEN" }
+  | { op: "STR_BUILDER_FREEZE" }
+  | { op: "MAP_NEW" }
+  | { op: "MAP_GET" }
+  | { op: "MAP_HAS" }
+  | { op: "MAP_SET" }
+  | { op: "MAP_SIZE" }
   | { op: "SHOW" }
   | { op: "ARRAY_NEW" }
   | { op: "ARRAY_PUSH" }

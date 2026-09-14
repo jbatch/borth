@@ -84,12 +84,22 @@ str-len      ( string -- number )
 str-cat      ( string string -- string )
 str-slice    ( string start length -- string )
 str-index-of ( string needle start -- index )
+str-builder-new    ( -- builder )
+str-builder-push   ( builder string -- builder )
+str-builder-len    ( builder -- number )
+str-builder-freeze ( builder -- string )
 show         ( A -- string )
 
 array-new  ( -- array )
 array-push ( array A -- array )
 array-len  ( array -- number )
 array-get  ( array index -- A )
+
+map-new   ( -- map )
+map-get   ( map key -- value found? )
+map-has?  ( map key -- flag )
+map-set   ( map key value -- map )
+map-size  ( map -- number )
 
 random ( max -- n )
 clock-ms ( -- ms )
@@ -165,6 +175,16 @@ index and returns `-1` when the needle is not found.
 "hello" "l" 3 str-index-of print
 ```
 
+String builders are mutable construction values for building strings without
+repeated prefix copies:
+
+```text
+str-builder-new
+"hello" str-builder-push
+", borth" str-builder-push
+str-builder-freeze print
+```
+
 Arrays are runtime values built with words rather than literal syntax:
 
 ```text
@@ -172,6 +192,15 @@ array-new
 "integer" array-push
 123 array-push
 show print
+```
+
+Maps are runtime values keyed by strings or integers. `map-set` mutates the map
+object and returns it:
+
+```text
+map-new
+"answer" 42 map-set
+"answer" map-get .s
 ```
 
 User-defined words:

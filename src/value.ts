@@ -14,4 +14,23 @@ export type ArrayBuilderValue = {
   frozen: boolean;
 };
 
-export type Value = number | string | Address | ArrayValue | ArrayBuilderValue;
+export type StringBuilderValue = {
+  kind: "string-builder";
+  chunks: string[];
+  length: number;
+  frozen: boolean;
+};
+
+export type MapValue = {
+  kind: "map";
+  items: Map<string, { key: Value; value: Value }>;
+};
+
+export type Value =
+  | number
+  | string
+  | Address
+  | ArrayValue
+  | ArrayBuilderValue
+  | StringBuilderValue
+  | MapValue;

@@ -61,6 +61,84 @@ test("str-cat leaves the concatenated string on the stack", () => {
   assert.deepEqual(state.stack, ["ab"]);
 });
 
+test("string builders freeze into ordinary strings", () => {
+  assert.deepEqual(
+    outputOf(`
+      str-builder-new
+      "hello" str-builder-push
+      ", " str-builder-push
+      "borth" str-builder-push
+      str-builder-freeze print
+    `),
+    ["hello, borth"],
+  );
+});
+
+test("string builders report accumulated length", () => {
+  assert.deepEqual(
+    outputOf(`
+      str-builder-new
+      "ab" str-builder-push
+      "cde" str-builder-push
+      dup str-builder-len print
+      str-builder-freeze print
+    `),
+    [5, "abcde"],
+  );
+});
+
+test("string builders cannot be pushed after freeze", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        str-builder-new
+        dup "a" str-builder-push
+        str-builder-freeze drop
+        "b" str-builder-push
+      `),
+    /STR_BUILDER_PUSH cannot push to a frozen builder/,
+  );
+});
+
+test("str-join joins arrays of strings with a separator", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/strings.borth"
+
+      array-new
+        "red" array-push
+        "green" array-push
+        "blue" array-push
+      ", " str-join print
+    `),
+    ["red, green, blue"],
+  );
+});
+
+test("str-join handles empty and single-item arrays", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/strings.borth"
+
+      array-new "," str-join print
+      array-new "solo" array-push "," str-join print
+    `),
+    ["", "solo"],
+  );
+});
+
+test("str-concat concatenates arrays of strings", () => {
+  assert.deepEqual(
+    outputOf(`
+      import "lib/strings.borth"
+
+      array-new "a" array-push "b" array-push "c" array-push
+      str-concat print
+    `),
+    ["abc"],
+  );
+});
+
 test("show converts values to debug strings", () => {
   assert.deepEqual(
     outputOf(`

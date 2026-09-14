@@ -45,3 +45,36 @@ test("map-set preserves other entries when updating one key", () => {
     [3, 2, 2],
   );
 });
+
+test("map-set mutates the runtime map object", () => {
+  assert.deepEqual(
+    outputOf(`
+      variable saved
+
+      map-new saved !
+      saved @ "a" 1 map-set drop
+      saved @ "a" map-get drop print
+    `),
+    [1],
+  );
+});
+
+test("maps support integer keys and missing lookups", () => {
+  assert.deepEqual(
+    outputOf(`
+      map-new
+        42 "answer" map-set
+      dup 42 map-get print print
+      7 map-get print print
+    `),
+    [1, "answer", 0, 0],
+  );
+});
+
+test("map words validate maps and supported key types", () => {
+  assert.throws(() => outputOf('"not-map" "a" map-get'), /MAP_GET requires a map/);
+  assert.throws(
+    () => outputOf('map-new array-new "value" map-set'),
+    /MAP_SET requires map keys to be numbers or strings/,
+  );
+});

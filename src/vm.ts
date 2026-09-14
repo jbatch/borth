@@ -4,7 +4,14 @@ import { spawnSync } from "node:child_process";
 
 import type { Instruction } from "./bytecode.js";
 import { formatSourceLocation } from "./source-location.js";
-import type { Address, ArrayBuilderValue, ArrayValue, Value } from "./value.js";
+import type {
+  Address,
+  ArrayBuilderValue,
+  ArrayValue,
+  MapValue,
+  StringBuilderValue,
+  Value,
+} from "./value.js";
 
 const integerInputPattern = /^-?\d+$/;
 
@@ -51,6 +58,16 @@ type VmProfile = {
   arrayBuilderFreeze: number;
   strCat: number;
   strCatCopiedBytes: number;
+  strBuilderNew: number;
+  strBuilderPush: number;
+  strBuilderPushCopiedBytes: number;
+  strBuilderLen: number;
+  strBuilderFreeze: number;
+  mapNew: number;
+  mapGet: number;
+  mapHas: number;
+  mapSet: number;
+  mapSize: number;
   readTextFile: number;
   readTextFileBytes: number;
   writeTextFile: number;
@@ -235,6 +252,112 @@ export function execute(
           const needle = popString(state, "STR_INDEX_OF");
           const value = popString(state, "STR_INDEX_OF");
           state.stack.push(indexOfString(value, needle, start));
+          state.ip += 1;
+          break;
+        }
+        case "STR_BUILDER_NEW":
+          if (profile !== undefined) {
+            profile.strBuilderNew += 1;
+          }
+          state.stack.push({
+            kind: "string-builder",
+            chunks: [],
+            length: 0,
+            frozen: false,
+          });
+          state.ip += 1;
+          break;
+        case "STR_BUILDER_PUSH": {
+          const value = popString(state, "STR_BUILDER_PUSH");
+          const builder = popStringBuilder(state, "STR_BUILDER_PUSH");
+          if (builder.frozen) {
+            throw new Error("STR_BUILDER_PUSH cannot push to a frozen builder");
+          }
+          if (profile !== undefined) {
+            profile.strBuilderPush += 1;
+            profile.strBuilderPushCopiedBytes += value.length;
+          }
+          builder.chunks.push(value);
+          builder.length += value.length;
+          state.stack.push(builder);
+          state.ip += 1;
+          break;
+        }
+        case "STR_BUILDER_LEN": {
+          const builder = popStringBuilder(state, "STR_BUILDER_LEN");
+          if (profile !== undefined) {
+            profile.strBuilderLen += 1;
+          }
+          state.stack.push(builder.length);
+          state.ip += 1;
+          break;
+        }
+        case "STR_BUILDER_FREEZE": {
+          const builder = popStringBuilder(state, "STR_BUILDER_FREEZE");
+          if (builder.frozen) {
+            throw new Error("STR_BUILDER_FREEZE cannot freeze a frozen builder");
+          }
+          if (profile !== undefined) {
+            profile.strBuilderFreeze += 1;
+          }
+          const value = builder.chunks.join("");
+          builder.chunks = [];
+          builder.length = 0;
+          builder.frozen = true;
+          state.stack.push(value);
+          state.ip += 1;
+          break;
+        }
+        case "MAP_NEW":
+          if (profile !== undefined) {
+            profile.mapNew += 1;
+          }
+          state.stack.push({ kind: "map", items: new Map() });
+          state.ip += 1;
+          break;
+        case "MAP_GET": {
+          const key = pop(state, "MAP_GET");
+          const map = popMap(state, "MAP_GET");
+          if (profile !== undefined) {
+            profile.mapGet += 1;
+          }
+          const entry = map.items.get(mapKey(key, "MAP_GET"));
+          if (entry === undefined) {
+            state.stack.push(0, 0);
+          } else {
+            state.stack.push(entry.value, 1);
+          }
+          state.ip += 1;
+          break;
+        }
+        case "MAP_HAS": {
+          const key = pop(state, "MAP_HAS");
+          const map = popMap(state, "MAP_HAS");
+          if (profile !== undefined) {
+            profile.mapHas += 1;
+          }
+          state.stack.push(bool(map.items.has(mapKey(key, "MAP_HAS"))));
+          state.ip += 1;
+          break;
+        }
+        case "MAP_SET": {
+          const value = pop(state, "MAP_SET");
+          const key = pop(state, "MAP_SET");
+          const map = popMap(state, "MAP_SET");
+          if (profile !== undefined) {
+            profile.mapSet += 1;
+          }
+          map.items.set(mapKey(key, "MAP_SET"), { key, value });
+          state.stack.push(map);
+          state.ip += 1;
+          break;
+        }
+        case "MAP_SIZE": {
+          const map = popMap(state, "MAP_SIZE");
+          if (profile !== undefined) {
+            profile.mapSize += 1;
+          }
+          state.stack.push(map.items.size);
           state.ip += 1;
           break;
         }
@@ -678,6 +801,16 @@ function createVmProfile(): VmProfile | undefined {
     arrayBuilderFreeze: 0,
     strCat: 0,
     strCatCopiedBytes: 0,
+    strBuilderNew: 0,
+    strBuilderPush: 0,
+    strBuilderPushCopiedBytes: 0,
+    strBuilderLen: 0,
+    strBuilderFreeze: 0,
+    mapNew: 0,
+    mapGet: 0,
+    mapHas: 0,
+    mapSet: 0,
+    mapSize: 0,
     readTextFile: 0,
     readTextFileBytes: 0,
     writeTextFile: 0,
@@ -709,6 +842,17 @@ function printVmProfile(profile: VmProfile | undefined): void {
   console.error(
     `str-cat: ${profile.strCat} copied-bytes=${profile.strCatCopiedBytes}`,
   );
+  console.error(`str-builder-new: ${profile.strBuilderNew}`);
+  console.error(
+    `str-builder-push: ${profile.strBuilderPush} copied-bytes=${profile.strBuilderPushCopiedBytes}`,
+  );
+  console.error(`str-builder-len: ${profile.strBuilderLen}`);
+  console.error(`str-builder-freeze: ${profile.strBuilderFreeze}`);
+  console.error(`map-new: ${profile.mapNew}`);
+  console.error(`map-get: ${profile.mapGet}`);
+  console.error(`map-has: ${profile.mapHas}`);
+  console.error(`map-set: ${profile.mapSet}`);
+  console.error(`map-size: ${profile.mapSize}`);
   console.error(
     `read-text-file: ${profile.readTextFile} bytes=${profile.readTextFileBytes}`,
   );
@@ -760,6 +904,10 @@ function formatValueForStack(value: Value): string {
         return `[${value.items.map(formatValueForStack).join(" ")}]`;
       case "array-builder":
         return `<array-builder:${value.frozen ? "frozen" : value.items.length}>`;
+      case "string-builder":
+        return `<string-builder:${value.frozen ? "frozen" : value.length}>`;
+      case "map":
+        return `<map:${value.items.size}>`;
     }
   }
 
@@ -861,6 +1009,26 @@ function popArrayBuilder(state: VmState, op: string): ArrayBuilderValue {
   return value;
 }
 
+function popStringBuilder(state: VmState, op: string): StringBuilderValue {
+  const value = pop(state, op);
+
+  if (typeof value !== "object" || value.kind !== "string-builder") {
+    throw new Error(`${op} requires a string builder on the stack`);
+  }
+
+  return value;
+}
+
+function popMap(state: VmState, op: string): MapValue {
+  const value = pop(state, op);
+
+  if (typeof value !== "object" || value.kind !== "map") {
+    throw new Error(`${op} requires a map on the stack`);
+  }
+
+  return value;
+}
+
 function popAddress(state: VmState, op: string): Address {
   const value = pop(state, op);
 
@@ -869,6 +1037,18 @@ function popAddress(state: VmState, op: string): Address {
   }
 
   return value;
+}
+
+function mapKey(value: Value, op: string): string {
+  if (typeof value === "number") {
+    return `i:${value}`;
+  }
+
+  if (typeof value === "string") {
+    return `s:${value}`;
+  }
+
+  throw new Error(`${op} requires map keys to be numbers or strings`);
 }
 
 function loadMemory(state: VmState, address: Address, op: string): Value {

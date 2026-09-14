@@ -981,6 +981,14 @@ deferred compile-next-node
         "STR_SLICE" array-wrap emit-instruction
     else dup "str-index-of" = if drop
         "STR_INDEX_OF" array-wrap emit-instruction
+    else dup "str-builder-new" = if drop
+        "STR_BUILDER_NEW" array-wrap emit-instruction
+    else dup "str-builder-push" = if drop
+        "STR_BUILDER_PUSH" array-wrap emit-instruction
+    else dup "str-builder-len" = if drop
+        "STR_BUILDER_LEN" array-wrap emit-instruction
+    else dup "str-builder-freeze" = if drop
+        "STR_BUILDER_FREEZE" array-wrap emit-instruction
 
     # Host I/O operations.
     else dup "read-line" = if drop
@@ -1035,6 +1043,18 @@ deferred compile-next-node
     else dup "array-builder-freeze" = if drop
         "ARRAY_BUILDER_FREEZE" array-wrap emit-instruction
 
+    # Map operations.
+    else dup "map-new" = if drop
+        "MAP_NEW" array-wrap emit-instruction
+    else dup "map-get" = if drop
+        "MAP_GET" array-wrap emit-instruction
+    else dup "map-has?" = if drop
+        "MAP_HAS" array-wrap emit-instruction
+    else dup "map-set" = if drop
+        "MAP_SET" array-wrap emit-instruction
+    else dup "map-size" = if drop
+        "MAP_SIZE" array-wrap emit-instruction
+
     # Control-flow operations.
     else dup "if" = if drop
         compile-if
@@ -1086,7 +1106,7 @@ deferred compile-next-node
         else
             "Unknown word: " swap show str-cat compiler-panic
         end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # compile-word-node ( state node -- state )

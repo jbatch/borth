@@ -3,6 +3,10 @@
 # This module is importable library code: it defines words only and has no
 # top-level executable test code.
 
+variable _STR_JOIN_STRINGS
+variable _STR_JOIN_SEPARATOR
+variable _STR_JOIN_INDEX
+
 # digit? ( ch -- flag )
 #
 # Return 1 when ch is one of "0".."9"; otherwise return 0.
@@ -148,4 +152,35 @@
 # Return 1 when the first character of str equals char.
 : str-starts-with?
   swap 0 char-at =
+;
+
+# str-join ( strings separator -- string )
+#
+# Join an array of strings with separator between each item.
+: str-join
+  _STR_JOIN_SEPARATOR !
+  _STR_JOIN_STRINGS !
+  0 _STR_JOIN_INDEX !
+
+  str-builder-new
+  loop
+    _STR_JOIN_INDEX @ _STR_JOIN_STRINGS @ array-len <
+  while
+    # Add the separator before every item after the first.
+    _STR_JOIN_INDEX @ 0 > if
+      _STR_JOIN_SEPARATOR @ str-builder-push
+    end
+
+    # Add strings[index].
+    _STR_JOIN_STRINGS @ _STR_JOIN_INDEX @ array-get str-builder-push
+    _STR_JOIN_INDEX @ 1 + _STR_JOIN_INDEX !
+  repeat
+  str-builder-freeze
+;
+
+# str-concat ( strings -- string )
+#
+# Concatenate an array of strings without a separator.
+: str-concat
+  "" str-join
 ;

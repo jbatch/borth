@@ -806,6 +806,24 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "STR_SLICE" };
     case "str-index-of":
       return { op: "STR_INDEX_OF" };
+    case "str-builder-new":
+      return { op: "STR_BUILDER_NEW" };
+    case "str-builder-push":
+      return { op: "STR_BUILDER_PUSH" };
+    case "str-builder-len":
+      return { op: "STR_BUILDER_LEN" };
+    case "str-builder-freeze":
+      return { op: "STR_BUILDER_FREEZE" };
+    case "map-new":
+      return { op: "MAP_NEW" };
+    case "map-get":
+      return { op: "MAP_GET" };
+    case "map-has?":
+      return { op: "MAP_HAS" };
+    case "map-set":
+      return { op: "MAP_SET" };
+    case "map-size":
+      return { op: "MAP_SIZE" };
     case "show":
       return { op: "SHOW" };
     case "array-new":
