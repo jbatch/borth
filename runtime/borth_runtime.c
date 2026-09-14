@@ -128,7 +128,6 @@ struct BorthRuntime {
   BorthReturnStack return_stack;
   BorthHeap heap;
   BorthProfile profile;
-  bool unsafe_mutable_array_push;
   int argc;
   char **argv;
 };
@@ -439,8 +438,6 @@ BorthRuntime *borth_runtime_new_with_args(int argc, char **argv) {
   runtime->heap.items = malloc(runtime->heap.capacity * sizeof(BorthHeapObject));
   runtime->profile = (BorthProfile){0};
   runtime->profile.enabled = getenv("BORTH_PROFILE") != NULL;
-  runtime->unsafe_mutable_array_push =
-      getenv("BORTH_UNSAFE_MUTABLE_ARRAY_PUSH") != NULL;
   runtime->argc = argc;
   runtime->argv = argv;
 
@@ -1437,15 +1434,6 @@ void borth_op_array_push(BorthRuntime *runtime) {
       borth_stack_pop(runtime, "ARRAY_PUSH requires a value on the stack");
   BorthArray *array =
       borth_pop_array(runtime, "ARRAY_PUSH requires an array on the stack");
-
-  if (runtime->unsafe_mutable_array_push) {
-    if (runtime->profile.enabled) {
-      runtime->profile.array_push += 1;
-    }
-    borth_array_append(array, value);
-    borth_stack_push(runtime, borth_value_array(array));
-    return;
-  }
 
   BorthArray *next = borth_array_new(runtime, array->len + 1);
 

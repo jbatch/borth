@@ -1105,10 +1105,6 @@ Native C slice decision:
 - Setting `BORTH_PROFILE` asks the TypeScript VM or native runtime to print
   primitive counters to stderr at normal shutdown. This is instrumentation, not
   language semantics.
-- The native runtime also has `BORTH_UNSAFE_MUTABLE_ARRAY_PUSH` as a profiling
-  experiment. It mutates arrays in place to estimate the cost of repeated
-  immutable copies. It must not be treated as correct language behavior because
-  old aliases would observe mutations.
 
 ## Milestone 18: Borth Compiler Library Slice
 
