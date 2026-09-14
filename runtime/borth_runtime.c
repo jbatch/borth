@@ -75,6 +75,26 @@ typedef struct {
   size_t capacity;
 } BorthHeap;
 
+typedef struct {
+  bool enabled;
+  size_t heap_strings;
+  size_t heap_arrays;
+  size_t array_new;
+  size_t array_push;
+  size_t array_push_copied_items;
+  size_t array_len;
+  size_t array_get;
+  size_t str_cat;
+  size_t str_cat_copied_bytes;
+  size_t read_text_file;
+  size_t read_text_file_bytes;
+  size_t write_text_file;
+  size_t write_text_file_bytes;
+  size_t append_text_file;
+  size_t append_text_file_bytes;
+  size_t run_command;
+} BorthProfile;
+
 // TODO: Consider replacing this runtime-owned heap with reference counting once
 // native values need more precise lifetimes than "free everything at shutdown".
 
@@ -89,6 +109,8 @@ struct BorthRuntime {
   BorthValueMemory memory;
   BorthReturnStack return_stack;
   BorthHeap heap;
+  BorthProfile profile;
+  bool unsafe_mutable_array_push;
   int argc;
   char **argv;
 };
@@ -174,6 +196,45 @@ static void borth_heap_register(
   runtime->heap.len += 1;
 }
 
+static void borth_profile_print(BorthRuntime *runtime) {
+  if (!runtime->profile.enabled) {
+    return;
+  }
+
+  fprintf(stderr, "[borth profile]\n");
+  fprintf(stderr, "heap-strings: %zu\n", runtime->profile.heap_strings);
+  fprintf(stderr, "heap-arrays: %zu\n", runtime->profile.heap_arrays);
+  fprintf(stderr, "array-new: %zu\n", runtime->profile.array_new);
+  fprintf(
+      stderr,
+      "array-push: %zu copied-items=%zu\n",
+      runtime->profile.array_push,
+      runtime->profile.array_push_copied_items);
+  fprintf(stderr, "array-len: %zu\n", runtime->profile.array_len);
+  fprintf(stderr, "array-get: %zu\n", runtime->profile.array_get);
+  fprintf(
+      stderr,
+      "str-cat: %zu copied-bytes=%zu\n",
+      runtime->profile.str_cat,
+      runtime->profile.str_cat_copied_bytes);
+  fprintf(
+      stderr,
+      "read-text-file: %zu bytes=%zu\n",
+      runtime->profile.read_text_file,
+      runtime->profile.read_text_file_bytes);
+  fprintf(
+      stderr,
+      "write-text-file: %zu bytes=%zu\n",
+      runtime->profile.write_text_file,
+      runtime->profile.write_text_file_bytes);
+  fprintf(
+      stderr,
+      "append-text-file: %zu bytes=%zu\n",
+      runtime->profile.append_text_file,
+      runtime->profile.append_text_file_bytes);
+  fprintf(stderr, "run-command: %zu\n", runtime->profile.run_command);
+}
+
 static char *borth_copy_chars(const char *chars, size_t len) {
   char *result = borth_malloc(len + 1, "failed to allocate string contents");
   memcpy(result, chars, len);
@@ -191,6 +252,25 @@ static BorthString *borth_string_new(
   result->len = len;
 
   borth_heap_register(runtime, BORTH_HEAP_STRING, result);
+  if (runtime->profile.enabled) {
+    runtime->profile.heap_strings += 1;
+  }
+  return result;
+}
+
+static BorthString *borth_string_take_chars(
+    BorthRuntime *runtime,
+    char *chars,
+    size_t len) {
+  BorthString *result =
+      borth_malloc(sizeof(BorthString), "failed to allocate string");
+  result->chars = chars;
+  result->len = len;
+
+  borth_heap_register(runtime, BORTH_HEAP_STRING, result);
+  if (runtime->profile.enabled) {
+    runtime->profile.heap_strings += 1;
+  }
   return result;
 }
 
@@ -204,6 +284,9 @@ static BorthArray *borth_array_new(BorthRuntime *runtime, size_t capacity) {
       "failed to allocate array items");
 
   borth_heap_register(runtime, BORTH_HEAP_ARRAY, result);
+  if (runtime->profile.enabled) {
+    runtime->profile.heap_arrays += 1;
+  }
   return result;
 }
 
@@ -240,6 +323,10 @@ BorthRuntime *borth_runtime_new_with_args(int argc, char **argv) {
   runtime->heap.len = 0;
   runtime->heap.capacity = 64;
   runtime->heap.items = malloc(runtime->heap.capacity * sizeof(BorthHeapObject));
+  runtime->profile = (BorthProfile){0};
+  runtime->profile.enabled = getenv("BORTH_PROFILE") != NULL;
+  runtime->unsafe_mutable_array_push =
+      getenv("BORTH_UNSAFE_MUTABLE_ARRAY_PUSH") != NULL;
   runtime->argc = argc;
   runtime->argv = argv;
 
@@ -283,6 +370,8 @@ void borth_runtime_free(BorthRuntime *runtime) {
   if (runtime == NULL) {
     return;
   }
+
+  borth_profile_print(runtime);
 
   for (size_t i = 0; i < runtime->heap.len; i += 1) {
     BorthHeapObject object = runtime->heap.items[i];
@@ -648,11 +737,16 @@ static BorthString *borth_read_file(BorthRuntime *runtime, BorthString *path) {
   }
 
   BorthString *result = borth_string_from_builder(runtime, &builder);
+  if (runtime->profile.enabled) {
+    runtime->profile.read_text_file += 1;
+    runtime->profile.read_text_file_bytes += result->len;
+  }
   free(builder.items);
   return result;
 }
 
 static void borth_write_file(
+    BorthRuntime *runtime,
     BorthString *path,
     BorthString *contents,
     const char *mode,
@@ -671,6 +765,16 @@ static void borth_write_file(
 
   if (fclose(file) != 0) {
     borth_panic(op);
+  }
+
+  if (runtime->profile.enabled) {
+    if (strcmp(mode, "ab") == 0) {
+      runtime->profile.append_text_file += 1;
+      runtime->profile.append_text_file_bytes += contents->len;
+    } else {
+      runtime->profile.write_text_file += 1;
+      runtime->profile.write_text_file_bytes += contents->len;
+    }
   }
 }
 
@@ -1080,9 +1184,14 @@ void borth_op_str_cat(BorthRuntime *runtime) {
   memcpy(chars, left->chars, left->len);
   memcpy(chars + left->len, right->chars, right->len);
   chars[len] = '\0';
+  if (runtime->profile.enabled) {
+    runtime->profile.str_cat += 1;
+    runtime->profile.str_cat_copied_bytes += len;
+  }
 
-  borth_stack_push(runtime, borth_value_string(borth_string_new(runtime, chars, len)));
-  free(chars);
+  borth_stack_push(
+      runtime,
+      borth_value_string(borth_string_take_chars(runtime, chars, len)));
 }
 
 void borth_op_str_slice(BorthRuntime *runtime) {
@@ -1176,6 +1285,9 @@ void borth_op_print_stack(BorthRuntime *runtime) {
 }
 
 void borth_op_array_new(BorthRuntime *runtime) {
+  if (runtime->profile.enabled) {
+    runtime->profile.array_new += 1;
+  }
   borth_stack_push(runtime, borth_value_array(borth_array_new(runtime, 4)));
 }
 
@@ -1184,9 +1296,23 @@ void borth_op_array_push(BorthRuntime *runtime) {
       borth_stack_pop(runtime, "ARRAY_PUSH requires a value on the stack");
   BorthArray *array =
       borth_pop_array(runtime, "ARRAY_PUSH requires an array on the stack");
+
+  if (runtime->unsafe_mutable_array_push) {
+    if (runtime->profile.enabled) {
+      runtime->profile.array_push += 1;
+    }
+    borth_array_append(array, value);
+    borth_stack_push(runtime, borth_value_array(array));
+    return;
+  }
+
   BorthArray *next = borth_array_new(runtime, array->len + 1);
 
   memcpy(next->items, array->items, array->len * sizeof(BorthValue));
+  if (runtime->profile.enabled) {
+    runtime->profile.array_push += 1;
+    runtime->profile.array_push_copied_items += array->len;
+  }
   next->items[array->len] = value;
   next->len = array->len + 1;
 
@@ -1196,6 +1322,9 @@ void borth_op_array_push(BorthRuntime *runtime) {
 void borth_op_array_len(BorthRuntime *runtime) {
   BorthArray *array =
       borth_pop_array(runtime, "ARRAY_LEN requires an array on the stack");
+  if (runtime->profile.enabled) {
+    runtime->profile.array_len += 1;
+  }
   borth_stack_push(runtime, borth_value_int((long)array->len));
 }
 
@@ -1211,6 +1340,9 @@ void borth_op_array_get(BorthRuntime *runtime) {
     borth_panic("ARRAY_GET index is past end of array");
   }
 
+  if (runtime->profile.enabled) {
+    runtime->profile.array_get += 1;
+  }
   borth_stack_push(runtime, array->items[index]);
 }
 
@@ -1302,6 +1434,7 @@ void borth_op_write_text_file(BorthRuntime *runtime) {
       borth_pop_string(runtime, "WRITE_TEXT_FILE requires strings on the stack");
 
   borth_write_file(
+      runtime,
       path,
       contents,
       "wb",
@@ -1315,6 +1448,7 @@ void borth_op_append_text_file(BorthRuntime *runtime) {
       borth_pop_string(runtime, "APPEND_TEXT_FILE requires strings on the stack");
 
   borth_write_file(
+      runtime,
       path,
       contents,
       "ab",
@@ -1364,6 +1498,9 @@ void borth_op_run_command(BorthRuntime *runtime) {
       borth_pop_array(runtime, "RUN_COMMAND requires an array on the stack");
   BorthString *command =
       borth_pop_string(runtime, "RUN_COMMAND requires strings on the stack");
+  if (runtime->profile.enabled) {
+    runtime->profile.run_command += 1;
+  }
   char **argv =
       borth_malloc((args->len + 2) * sizeof(char *), "failed to allocate argv");
 

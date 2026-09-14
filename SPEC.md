@@ -1095,6 +1095,13 @@ Native C slice decision:
 - A more structured function-per-word C backend remains a later cleanup path.
   The current native backend prioritizes bytecode parity and self-hosting over
   pretty generated C.
+- Setting `BORTH_PROFILE` asks the TypeScript VM or native runtime to print
+  primitive counters to stderr at normal shutdown. This is instrumentation, not
+  language semantics.
+- The native runtime also has `BORTH_UNSAFE_MUTABLE_ARRAY_PUSH` as a profiling
+  experiment. It mutates arrays in place to estimate the cost of repeated
+  immutable copies. It must not be treated as correct language behavior because
+  old aliases would observe mutations.
 
 ## Milestone 18: Borth Compiler Library Slice
 
@@ -1214,6 +1221,11 @@ Array helper decision:
 - `array-set ( array index value -- array )` replaces an existing item and
   returns a new array. It does not append and does not mutate the input array.
 - `array-slice` and `array-set` both rebuild arrays using existing primitives.
+- Native self-compile profiling showed that immutable `array-push` can dominate
+  performance: compiling `examples/borth-compiler.borth` performed about 4.7M
+  pushes and copied about 3.6B array items. A future safe improvement should
+  preserve immutable semantics, likely with an internal builder or ownership
+  check rather than visible mutable arrays.
 - Do not promote these helpers to TypeScript VM primitives until the
   inefficiency blocks the next small language milestone.
 

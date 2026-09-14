@@ -37,6 +37,23 @@ export type RunCommandResult = {
   stderr: string;
 };
 
+type VmProfile = {
+  arrayNew: number;
+  arrayPush: number;
+  arrayPushCopiedItems: number;
+  arrayLen: number;
+  arrayGet: number;
+  strCat: number;
+  strCatCopiedBytes: number;
+  readTextFile: number;
+  readTextFileBytes: number;
+  writeTextFile: number;
+  writeTextFileBytes: number;
+  appendTextFile: number;
+  appendTextFileBytes: number;
+  runCommand: number;
+};
+
 export function execute(
   instructions: Instruction[],
   options: ExecuteOptions = {},
@@ -64,6 +81,12 @@ export function execute(
     callStack: [],
     memory: [],
   };
+  const profile = createVmProfile();
+
+  function finish(): VmState {
+    printVmProfile(profile);
+    return state;
+  }
 
   while (state.ip < instructions.length) {
     const instruction = instructions[state.ip];
@@ -182,7 +205,14 @@ export function execute(
           break;
         }
         case "STR_CAT": {
-          binaryStringOp(state, "STR_CAT", (a, b) => a + b);
+          requireStackDepth(state, "STR_CAT", 2);
+          const b = popString(state, "STR_CAT");
+          const a = popString(state, "STR_CAT");
+          if (profile !== undefined) {
+            profile.strCat += 1;
+            profile.strCatCopiedBytes += a.length + b.length;
+          }
+          state.stack.push(a + b);
           state.ip += 1;
           break;
         }
@@ -208,18 +238,28 @@ export function execute(
           break;
         }
         case "ARRAY_NEW":
+          if (profile !== undefined) {
+            profile.arrayNew += 1;
+          }
           state.stack.push({ kind: "array", items: [] });
           state.ip += 1;
           break;
         case "ARRAY_PUSH": {
           const value = pop(state, "ARRAY_PUSH");
           const array = popArray(state, "ARRAY_PUSH");
+          if (profile !== undefined) {
+            profile.arrayPush += 1;
+            profile.arrayPushCopiedItems += array.items.length;
+          }
           state.stack.push({ kind: "array", items: [...array.items, value] });
           state.ip += 1;
           break;
         }
         case "ARRAY_LEN": {
           const array = popArray(state, "ARRAY_LEN");
+          if (profile !== undefined) {
+            profile.arrayLen += 1;
+          }
           state.stack.push(array.items.length);
           state.ip += 1;
           break;
@@ -227,6 +267,9 @@ export function execute(
         case "ARRAY_GET": {
           const index = popNonNegativeInteger(state, "ARRAY_GET", "index");
           const array = popArray(state, "ARRAY_GET");
+          if (profile !== undefined) {
+            profile.arrayGet += 1;
+          }
           state.stack.push(getArrayValue(array, index));
           state.ip += 1;
           break;
@@ -280,7 +323,7 @@ export function execute(
         }
         case "EXIT": {
           state.exitCode = popExitCode(state);
-          return state;
+          return finish();
         }
         case "READ_LINE":
           state.stack.push(readInput(read, "READ_LINE"));
@@ -292,13 +335,22 @@ export function execute(
           break;
         case "READ_TEXT_FILE": {
           const path = popString(state, "READ_TEXT_FILE");
-          state.stack.push(readTextFile(path));
+          const contents = readTextFile(path);
+          if (profile !== undefined) {
+            profile.readTextFile += 1;
+            profile.readTextFileBytes += contents.length;
+          }
+          state.stack.push(contents);
           state.ip += 1;
           break;
         }
         case "WRITE_TEXT_FILE": {
           const contents = popString(state, "WRITE_TEXT_FILE");
           const path = popString(state, "WRITE_TEXT_FILE");
+          if (profile !== undefined) {
+            profile.writeTextFile += 1;
+            profile.writeTextFileBytes += contents.length;
+          }
           writeTextFile(path, contents);
           state.ip += 1;
           break;
@@ -306,6 +358,10 @@ export function execute(
         case "APPEND_TEXT_FILE": {
           const contents = popString(state, "APPEND_TEXT_FILE");
           const path = popString(state, "APPEND_TEXT_FILE");
+          if (profile !== undefined) {
+            profile.appendTextFile += 1;
+            profile.appendTextFileBytes += contents.length;
+          }
           appendTextFile(path, contents);
           state.ip += 1;
           break;
@@ -330,6 +386,9 @@ export function execute(
         case "RUN_COMMAND": {
           const commandArgs = popStringArray(state, "RUN_COMMAND", "args");
           const command = popString(state, "RUN_COMMAND");
+          if (profile !== undefined) {
+            profile.runCommand += 1;
+          }
           const result = runCommand(command, commandArgs);
           state.stack.push(result.exitCode, result.stdout, result.stderr);
           state.ip += 1;
@@ -363,14 +422,14 @@ export function execute(
           break;
         }
         case "HALT":
-          return state;
+          return finish();
       }
     } catch (error) {
       throw runtimeError(instruction, error);
     }
   }
 
-  return state;
+  return finish();
 }
 
 function runtimeError(instruction: Instruction, error: unknown): Error {
@@ -503,16 +562,54 @@ function reverseRollStack(state: VmState, op: string, depth: number): void {
   state.stack.splice(index, 0, value);
 }
 
-function binaryStringOp(
-  state: VmState,
-  op: string,
-  apply: (a: string, b: string) => string,
-): void {
-  requireStackDepth(state, op, 2);
-  const b = popString(state, op);
-  const a = popString(state, op);
+function createVmProfile(): VmProfile | undefined {
+  if (process.env.BORTH_PROFILE === undefined) {
+    return undefined;
+  }
 
-  state.stack.push(apply(a, b));
+  return {
+    arrayNew: 0,
+    arrayPush: 0,
+    arrayPushCopiedItems: 0,
+    arrayLen: 0,
+    arrayGet: 0,
+    strCat: 0,
+    strCatCopiedBytes: 0,
+    readTextFile: 0,
+    readTextFileBytes: 0,
+    writeTextFile: 0,
+    writeTextFileBytes: 0,
+    appendTextFile: 0,
+    appendTextFileBytes: 0,
+    runCommand: 0,
+  };
+}
+
+function printVmProfile(profile: VmProfile | undefined): void {
+  if (profile === undefined) {
+    return;
+  }
+
+  console.error("[borth profile]");
+  console.error(`array-new: ${profile.arrayNew}`);
+  console.error(
+    `array-push: ${profile.arrayPush} copied-items=${profile.arrayPushCopiedItems}`,
+  );
+  console.error(`array-len: ${profile.arrayLen}`);
+  console.error(`array-get: ${profile.arrayGet}`);
+  console.error(
+    `str-cat: ${profile.strCat} copied-bytes=${profile.strCatCopiedBytes}`,
+  );
+  console.error(
+    `read-text-file: ${profile.readTextFile} bytes=${profile.readTextFileBytes}`,
+  );
+  console.error(
+    `write-text-file: ${profile.writeTextFile} bytes=${profile.writeTextFileBytes}`,
+  );
+  console.error(
+    `append-text-file: ${profile.appendTextFile} bytes=${profile.appendTextFileBytes}`,
+  );
+  console.error(`run-command: ${profile.runCommand}`);
 }
 
 function binaryEqualOp(state: VmState): void {
