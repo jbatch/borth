@@ -32,6 +32,12 @@ type InstructionData =
   | { op: "ARRAY_PUSH" }
   | { op: "ARRAY_LEN" }
   | { op: "ARRAY_GET" }
+  | { op: "ARRAY_BUILDER_NEW" }
+  | { op: "ARRAY_BUILDER_PUSH" }
+  | { op: "ARRAY_BUILDER_LEN" }
+  | { op: "ARRAY_BUILDER_GET" }
+  | { op: "ARRAY_BUILDER_SET" }
+  | { op: "ARRAY_BUILDER_FREEZE" }
   | { op: "FETCH" }
   | { op: "STORE" }
   | { op: "RANDOM" }

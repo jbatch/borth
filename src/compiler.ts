@@ -816,6 +816,18 @@ function compileBuiltInWord(name: string): Instruction | undefined {
       return { op: "ARRAY_LEN" };
     case "array-get":
       return { op: "ARRAY_GET" };
+    case "array-builder-new":
+      return { op: "ARRAY_BUILDER_NEW" };
+    case "array-builder-push":
+      return { op: "ARRAY_BUILDER_PUSH" };
+    case "array-builder-len":
+      return { op: "ARRAY_BUILDER_LEN" };
+    case "array-builder-get":
+      return { op: "ARRAY_BUILDER_GET" };
+    case "array-builder-set":
+      return { op: "ARRAY_BUILDER_SET" };
+    case "array-builder-freeze":
+      return { op: "ARRAY_BUILDER_FREEZE" };
     case "@":
       return { op: "FETCH" };
     case "!":

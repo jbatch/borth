@@ -73,6 +73,47 @@ test("array-push does not mutate the original array", () => {
   );
 });
 
+test("array builders freeze into ordinary arrays", () => {
+  assert.deepEqual(
+    outputOf(`
+      array-builder-new
+      10 array-builder-push
+      "word" array-builder-push
+      array-builder-freeze
+      show print
+    `),
+    ['[10 "word"]'],
+  );
+});
+
+test("array builders support internal len get and set", () => {
+  assert.deepEqual(
+    outputOf(`
+      array-builder-new
+      "old" array-builder-push
+      123 array-builder-push
+      dup array-builder-len print
+      dup 0 array-builder-get print
+      0 "new" array-builder-set
+      array-builder-freeze show print
+    `),
+    [2, "old", '["new" 123]'],
+  );
+});
+
+test("array builders cannot be pushed after freeze", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        array-builder-new
+        dup 1 array-builder-push
+        array-builder-freeze drop
+        2 array-builder-push
+      `),
+    /ARRAY_BUILDER_PUSH cannot push to a frozen builder/,
+  );
+});
+
 test("array words require arrays", () => {
   assert.throws(() => outputOf('1 array-len'), /ARRAY_LEN requires an array/);
   assert.throws(

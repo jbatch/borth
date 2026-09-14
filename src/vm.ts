@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 
 import type { Instruction } from "./bytecode.js";
 import { formatSourceLocation } from "./source-location.js";
-import type { Address, ArrayValue, Value } from "./value.js";
+import type { Address, ArrayBuilderValue, ArrayValue, Value } from "./value.js";
 
 const integerInputPattern = /^-?\d+$/;
 
@@ -43,6 +43,12 @@ type VmProfile = {
   arrayPushCopiedItems: number;
   arrayLen: number;
   arrayGet: number;
+  arrayBuilderNew: number;
+  arrayBuilderPush: number;
+  arrayBuilderLen: number;
+  arrayBuilderGet: number;
+  arrayBuilderSet: number;
+  arrayBuilderFreeze: number;
   strCat: number;
   strCatCopiedBytes: number;
   readTextFile: number;
@@ -271,6 +277,87 @@ export function execute(
             profile.arrayGet += 1;
           }
           state.stack.push(getArrayValue(array, index));
+          state.ip += 1;
+          break;
+        }
+        case "ARRAY_BUILDER_NEW":
+          if (profile !== undefined) {
+            profile.arrayBuilderNew += 1;
+          }
+          state.stack.push({ kind: "array-builder", items: [], frozen: false });
+          state.ip += 1;
+          break;
+        case "ARRAY_BUILDER_PUSH": {
+          const value = pop(state, "ARRAY_BUILDER_PUSH");
+          const builder = popArrayBuilder(state, "ARRAY_BUILDER_PUSH");
+          if (builder.frozen) {
+            throw new Error("ARRAY_BUILDER_PUSH cannot push to a frozen builder");
+          }
+          if (profile !== undefined) {
+            profile.arrayBuilderPush += 1;
+          }
+          builder.items.push(value);
+          state.stack.push(builder);
+          state.ip += 1;
+          break;
+        }
+        case "ARRAY_BUILDER_LEN": {
+          const builder = popArrayBuilder(state, "ARRAY_BUILDER_LEN");
+          if (profile !== undefined) {
+            profile.arrayBuilderLen += 1;
+          }
+          state.stack.push(builder.items.length);
+          state.ip += 1;
+          break;
+        }
+        case "ARRAY_BUILDER_GET": {
+          const index = popNonNegativeInteger(
+            state,
+            "ARRAY_BUILDER_GET",
+            "index",
+          );
+          const builder = popArrayBuilder(state, "ARRAY_BUILDER_GET");
+          if (profile !== undefined) {
+            profile.arrayBuilderGet += 1;
+          }
+          state.stack.push(getArrayBuilderValue(builder, index));
+          state.ip += 1;
+          break;
+        }
+        case "ARRAY_BUILDER_SET": {
+          const value = pop(state, "ARRAY_BUILDER_SET");
+          const index = popNonNegativeInteger(
+            state,
+            "ARRAY_BUILDER_SET",
+            "index",
+          );
+          const builder = popArrayBuilder(state, "ARRAY_BUILDER_SET");
+          if (builder.frozen) {
+            throw new Error("ARRAY_BUILDER_SET cannot set a frozen builder");
+          }
+          if (index >= builder.items.length) {
+            throw new Error("ARRAY_BUILDER_SET index is past end of builder");
+          }
+          if (profile !== undefined) {
+            profile.arrayBuilderSet += 1;
+          }
+          builder.items[index] = value;
+          state.stack.push(builder);
+          state.ip += 1;
+          break;
+        }
+        case "ARRAY_BUILDER_FREEZE": {
+          const builder = popArrayBuilder(state, "ARRAY_BUILDER_FREEZE");
+          if (builder.frozen) {
+            throw new Error("ARRAY_BUILDER_FREEZE cannot freeze a frozen builder");
+          }
+          if (profile !== undefined) {
+            profile.arrayBuilderFreeze += 1;
+          }
+          const items = builder.items;
+          builder.items = [];
+          builder.frozen = true;
+          state.stack.push({ kind: "array", items });
           state.ip += 1;
           break;
         }
@@ -536,6 +623,16 @@ function getArrayValue(array: ArrayValue, index: number): Value {
   return value;
 }
 
+function getArrayBuilderValue(builder: ArrayBuilderValue, index: number): Value {
+  const value = builder.items[index];
+
+  if (value === undefined) {
+    throw new Error("ARRAY_BUILDER_GET index is past end of builder");
+  }
+
+  return value;
+}
+
 function binaryNumberOp(
   state: VmState,
   op: string,
@@ -573,6 +670,12 @@ function createVmProfile(): VmProfile | undefined {
     arrayPushCopiedItems: 0,
     arrayLen: 0,
     arrayGet: 0,
+    arrayBuilderNew: 0,
+    arrayBuilderPush: 0,
+    arrayBuilderLen: 0,
+    arrayBuilderGet: 0,
+    arrayBuilderSet: 0,
+    arrayBuilderFreeze: 0,
     strCat: 0,
     strCatCopiedBytes: 0,
     readTextFile: 0,
@@ -597,6 +700,12 @@ function printVmProfile(profile: VmProfile | undefined): void {
   );
   console.error(`array-len: ${profile.arrayLen}`);
   console.error(`array-get: ${profile.arrayGet}`);
+  console.error(`array-builder-new: ${profile.arrayBuilderNew}`);
+  console.error(`array-builder-push: ${profile.arrayBuilderPush}`);
+  console.error(`array-builder-len: ${profile.arrayBuilderLen}`);
+  console.error(`array-builder-get: ${profile.arrayBuilderGet}`);
+  console.error(`array-builder-set: ${profile.arrayBuilderSet}`);
+  console.error(`array-builder-freeze: ${profile.arrayBuilderFreeze}`);
   console.error(
     `str-cat: ${profile.strCat} copied-bytes=${profile.strCatCopiedBytes}`,
   );
@@ -649,6 +758,8 @@ function formatValueForStack(value: Value): string {
         return `<addr:${value.index}>`;
       case "array":
         return `[${value.items.map(formatValueForStack).join(" ")}]`;
+      case "array-builder":
+        return `<array-builder:${value.frozen ? "frozen" : value.items.length}>`;
     }
   }
 
@@ -735,6 +846,16 @@ function popArray(state: VmState, op: string): ArrayValue {
 
   if (typeof value !== "object" || value.kind !== "array") {
     throw new Error(`${op} requires an array on the stack`);
+  }
+
+  return value;
+}
+
+function popArrayBuilder(state: VmState, op: string): ArrayBuilderValue {
+  const value = pop(state, op);
+
+  if (typeof value !== "object" || value.kind !== "array-builder") {
+    throw new Error(`${op} requires an array builder on the stack`);
   }
 
   return value;

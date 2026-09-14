@@ -14,11 +14,13 @@
 
 typedef struct BorthString BorthString;
 typedef struct BorthArray BorthArray;
+typedef struct BorthArrayBuilder BorthArrayBuilder;
 
 typedef enum {
   BORTH_VALUE_INT,
   BORTH_VALUE_STRING,
   BORTH_VALUE_ARRAY,
+  BORTH_VALUE_ARRAY_BUILDER,
 } BorthValueKind;
 
 typedef struct {
@@ -27,6 +29,7 @@ typedef struct {
     long integer;
     BorthString *string;
     BorthArray *array;
+    BorthArrayBuilder *array_builder;
   } as;
 } BorthValue;
 
@@ -39,6 +42,13 @@ struct BorthArray {
   BorthValue *items;
   size_t len;
   size_t capacity;
+};
+
+struct BorthArrayBuilder {
+  BorthValue *items;
+  size_t len;
+  size_t capacity;
+  bool frozen;
 };
 
 typedef struct {
@@ -62,6 +72,7 @@ typedef struct {
 typedef enum {
   BORTH_HEAP_STRING,
   BORTH_HEAP_ARRAY,
+  BORTH_HEAP_ARRAY_BUILDER,
 } BorthHeapObjectKind;
 
 typedef struct {
@@ -79,11 +90,18 @@ typedef struct {
   bool enabled;
   size_t heap_strings;
   size_t heap_arrays;
+  size_t heap_array_builders;
   size_t array_new;
   size_t array_push;
   size_t array_push_copied_items;
   size_t array_len;
   size_t array_get;
+  size_t array_builder_new;
+  size_t array_builder_push;
+  size_t array_builder_len;
+  size_t array_builder_get;
+  size_t array_builder_set;
+  size_t array_builder_freeze;
   size_t str_cat;
   size_t str_cat_copied_bytes;
   size_t read_text_file;
@@ -174,6 +192,13 @@ static BorthValue borth_value_array(BorthArray *value) {
   return result;
 }
 
+static BorthValue borth_value_array_builder(BorthArrayBuilder *value) {
+  BorthValue result;
+  result.kind = BORTH_VALUE_ARRAY_BUILDER;
+  result.as.array_builder = value;
+  return result;
+}
+
 static void borth_heap_grow(BorthRuntime *runtime) {
   size_t next_capacity = runtime->heap.capacity * 2;
   runtime->heap.items = borth_realloc(
@@ -204,6 +229,10 @@ static void borth_profile_print(BorthRuntime *runtime) {
   fprintf(stderr, "[borth profile]\n");
   fprintf(stderr, "heap-strings: %zu\n", runtime->profile.heap_strings);
   fprintf(stderr, "heap-arrays: %zu\n", runtime->profile.heap_arrays);
+  fprintf(
+      stderr,
+      "heap-array-builders: %zu\n",
+      runtime->profile.heap_array_builders);
   fprintf(stderr, "array-new: %zu\n", runtime->profile.array_new);
   fprintf(
       stderr,
@@ -212,6 +241,30 @@ static void borth_profile_print(BorthRuntime *runtime) {
       runtime->profile.array_push_copied_items);
   fprintf(stderr, "array-len: %zu\n", runtime->profile.array_len);
   fprintf(stderr, "array-get: %zu\n", runtime->profile.array_get);
+  fprintf(
+      stderr,
+      "array-builder-new: %zu\n",
+      runtime->profile.array_builder_new);
+  fprintf(
+      stderr,
+      "array-builder-push: %zu\n",
+      runtime->profile.array_builder_push);
+  fprintf(
+      stderr,
+      "array-builder-len: %zu\n",
+      runtime->profile.array_builder_len);
+  fprintf(
+      stderr,
+      "array-builder-get: %zu\n",
+      runtime->profile.array_builder_get);
+  fprintf(
+      stderr,
+      "array-builder-set: %zu\n",
+      runtime->profile.array_builder_set);
+  fprintf(
+      stderr,
+      "array-builder-freeze: %zu\n",
+      runtime->profile.array_builder_freeze);
   fprintf(
       stderr,
       "str-cat: %zu copied-bytes=%zu\n",
@@ -290,6 +343,23 @@ static BorthArray *borth_array_new(BorthRuntime *runtime, size_t capacity) {
   return result;
 }
 
+static BorthArrayBuilder *borth_array_builder_new(BorthRuntime *runtime) {
+  BorthArrayBuilder *result =
+      borth_malloc(sizeof(BorthArrayBuilder), "failed to allocate array builder");
+  result->len = 0;
+  result->capacity = 4;
+  result->items = borth_malloc(
+      result->capacity * sizeof(BorthValue),
+      "failed to allocate array builder items");
+  result->frozen = false;
+
+  borth_heap_register(runtime, BORTH_HEAP_ARRAY_BUILDER, result);
+  if (runtime->profile.enabled) {
+    runtime->profile.heap_array_builders += 1;
+  }
+  return result;
+}
+
 static void borth_array_append(BorthArray *array, BorthValue value) {
   if (array->len == array->capacity) {
     array->capacity *= 2;
@@ -301,6 +371,50 @@ static void borth_array_append(BorthArray *array, BorthValue value) {
 
   array->items[array->len] = value;
   array->len += 1;
+}
+
+static void borth_array_builder_append(
+    BorthArrayBuilder *builder,
+    BorthValue value) {
+  if (builder->frozen) {
+    borth_panic("ARRAY_BUILDER_PUSH cannot push to a frozen builder");
+  }
+
+  if (builder->len == builder->capacity) {
+    builder->capacity *= 2;
+    builder->items = borth_realloc(
+        builder->items,
+        builder->capacity * sizeof(BorthValue),
+        "failed to grow array builder");
+  }
+
+  builder->items[builder->len] = value;
+  builder->len += 1;
+}
+
+static BorthArray *borth_array_builder_freeze(
+    BorthRuntime *runtime,
+    BorthArrayBuilder *builder) {
+  if (builder->frozen) {
+    borth_panic("ARRAY_BUILDER_FREEZE cannot freeze a frozen builder");
+  }
+
+  BorthArray *array =
+      borth_malloc(sizeof(BorthArray), "failed to allocate frozen array");
+  array->items = builder->items;
+  array->len = builder->len;
+  array->capacity = builder->capacity;
+
+  builder->items = NULL;
+  builder->len = 0;
+  builder->capacity = 0;
+  builder->frozen = true;
+
+  borth_heap_register(runtime, BORTH_HEAP_ARRAY, array);
+  if (runtime->profile.enabled) {
+    runtime->profile.heap_arrays += 1;
+  }
+  return array;
 }
 
 BorthRuntime *borth_runtime_new_with_args(int argc, char **argv) {
@@ -387,6 +501,12 @@ void borth_runtime_free(BorthRuntime *runtime) {
         BorthArray *array = object.value;
         free(array->items);
         free(array);
+        break;
+      }
+      case BORTH_HEAP_ARRAY_BUILDER: {
+        BorthArrayBuilder *builder = object.value;
+        free(builder->items);
+        free(builder);
         break;
       }
     }
@@ -490,6 +610,18 @@ static BorthArray *borth_pop_array(BorthRuntime *runtime, const char *op) {
   }
 
   return value.as.array;
+}
+
+static BorthArrayBuilder *borth_pop_array_builder(
+    BorthRuntime *runtime,
+    const char *op) {
+  BorthValue value = borth_stack_pop(runtime, op);
+
+  if (value.kind != BORTH_VALUE_ARRAY_BUILDER) {
+    borth_panic(op);
+  }
+
+  return value.as.array_builder;
 }
 
 static size_t borth_pop_index(
@@ -618,6 +750,15 @@ static void borth_builder_append_value(
       break;
     case BORTH_VALUE_ARRAY:
       borth_builder_append_array(builder, value.as.array);
+      break;
+    case BORTH_VALUE_ARRAY_BUILDER:
+      if (value.as.array_builder->frozen) {
+        borth_builder_append_cstr(builder, "<array-builder:frozen>");
+      } else {
+        borth_builder_append_cstr(builder, "<array-builder:");
+        borth_builder_append_int(builder, (long)value.as.array_builder->len);
+        borth_builder_append_char(builder, '>');
+      }
       break;
   }
 }
@@ -1344,6 +1485,98 @@ void borth_op_array_get(BorthRuntime *runtime) {
     runtime->profile.array_get += 1;
   }
   borth_stack_push(runtime, array->items[index]);
+}
+
+void borth_op_array_builder_new(BorthRuntime *runtime) {
+  if (runtime->profile.enabled) {
+    runtime->profile.array_builder_new += 1;
+  }
+  borth_stack_push(
+      runtime,
+      borth_value_array_builder(borth_array_builder_new(runtime)));
+}
+
+void borth_op_array_builder_push(BorthRuntime *runtime) {
+  BorthValue value =
+      borth_stack_pop(runtime, "ARRAY_BUILDER_PUSH requires a value on the stack");
+  BorthArrayBuilder *builder = borth_pop_array_builder(
+      runtime,
+      "ARRAY_BUILDER_PUSH requires an array builder on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.array_builder_push += 1;
+  }
+  borth_array_builder_append(builder, value);
+  borth_stack_push(runtime, borth_value_array_builder(builder));
+}
+
+void borth_op_array_builder_len(BorthRuntime *runtime) {
+  BorthArrayBuilder *builder = borth_pop_array_builder(
+      runtime,
+      "ARRAY_BUILDER_LEN requires an array builder on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.array_builder_len += 1;
+  }
+  borth_stack_push(runtime, borth_value_int((long)builder->len));
+}
+
+void borth_op_array_builder_get(BorthRuntime *runtime) {
+  size_t index = borth_pop_index(
+      runtime,
+      "ARRAY_BUILDER_GET requires integers on the stack",
+      "ARRAY_BUILDER_GET requires index to be a non-negative integer");
+  BorthArrayBuilder *builder = borth_pop_array_builder(
+      runtime,
+      "ARRAY_BUILDER_GET requires an array builder on the stack");
+
+  if (index >= builder->len) {
+    borth_panic("ARRAY_BUILDER_GET index is past end of builder");
+  }
+
+  if (runtime->profile.enabled) {
+    runtime->profile.array_builder_get += 1;
+  }
+  borth_stack_push(runtime, builder->items[index]);
+}
+
+void borth_op_array_builder_set(BorthRuntime *runtime) {
+  BorthValue value =
+      borth_stack_pop(runtime, "ARRAY_BUILDER_SET requires a value on the stack");
+  size_t index = borth_pop_index(
+      runtime,
+      "ARRAY_BUILDER_SET requires integers on the stack",
+      "ARRAY_BUILDER_SET requires index to be a non-negative integer");
+  BorthArrayBuilder *builder = borth_pop_array_builder(
+      runtime,
+      "ARRAY_BUILDER_SET requires an array builder on the stack");
+
+  if (builder->frozen) {
+    borth_panic("ARRAY_BUILDER_SET cannot set a frozen builder");
+  }
+
+  if (index >= builder->len) {
+    borth_panic("ARRAY_BUILDER_SET index is past end of builder");
+  }
+
+  if (runtime->profile.enabled) {
+    runtime->profile.array_builder_set += 1;
+  }
+  builder->items[index] = value;
+  borth_stack_push(runtime, borth_value_array_builder(builder));
+}
+
+void borth_op_array_builder_freeze(BorthRuntime *runtime) {
+  BorthArrayBuilder *builder = borth_pop_array_builder(
+      runtime,
+      "ARRAY_BUILDER_FREEZE requires an array builder on the stack");
+
+  if (runtime->profile.enabled) {
+    runtime->profile.array_builder_freeze += 1;
+  }
+  borth_stack_push(
+      runtime,
+      borth_value_array(borth_array_builder_freeze(runtime, builder)));
 }
 
 void borth_op_alloc_variable(BorthRuntime *runtime) {

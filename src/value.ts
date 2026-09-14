@@ -8,4 +8,10 @@ export type ArrayValue = {
   items: Value[];
 };
 
-export type Value = number | string | Address | ArrayValue;
+export type ArrayBuilderValue = {
+  kind: "array-builder";
+  items: Value[];
+  frozen: boolean;
+};
+
+export type Value = number | string | Address | ArrayValue | ArrayBuilderValue;

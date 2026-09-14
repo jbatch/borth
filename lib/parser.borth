@@ -75,7 +75,7 @@ import "strings.borth"
 # Parse an array of token strings into an array of AST node arrays.
 : parse-tokens
   # ( tokens -- nodes tokens index )
-  array-new swap 0
+  array-builder-new swap 0
   loop
     over array-len 2dup swap - 0 > nip
   while
@@ -85,7 +85,7 @@ import "strings.borth"
 
     # Push node into nodes and increment index.
     # ( nodes tokens index node -- nodes tokens index )
-    3 roll swap array-push 2 -roll 1 +
+    3 roll swap array-builder-push 2 -roll 1 +
   repeat
-  drop drop
+  drop drop array-builder-freeze
 ;

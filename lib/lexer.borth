@@ -38,8 +38,8 @@ import "./array.borth"
   0 array-push          # index
   0 array-push          # line
   0 array-push          # col
-  array-new array-push  # tokens
-  array-new array-push  # spans
+  array-builder-new array-push  # tokens
+  array-builder-new array-push  # spans
 ;
 
 # lexer-file-path ( lexer -- file-path )
@@ -154,7 +154,7 @@ import "./array.borth"
 # Return lexer with token appended to its token array.
 : lexer-append-token
   swap dup lexer-tokens
-    rot array-push
+    rot array-builder-push
   lexer-set-tokens
 ;
 
@@ -163,7 +163,7 @@ import "./array.borth"
 # Return lexer with span appended to its span array.
 : lexer-append-span
   swap dup lexer-spans
-    rot array-push
+    rot array-builder-push
   lexer-set-spans
 ;
 
@@ -420,6 +420,7 @@ import "./array.borth"
     end
   repeat
   dup lexer-tokens swap lexer-spans
+  array-builder-freeze swap array-builder-freeze swap
 ;
 
 

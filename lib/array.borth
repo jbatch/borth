@@ -1,19 +1,31 @@
+# _array-copy-range-into-builder ( builder array start len -- builder )
+#
+# Copy len items from array[start,start+len) into builder. The builder is
+# mutated internally and returned for further construction.
+: _array-copy-range-into-builder
+    over + # builder array index end
+    loop
+        2dup = not
+    while
+        # ( builder array index end -- builder array end index value )
+        swap 2over over array-get
+
+        # Append value, restore builder array index end, then advance index.
+        # ( builder array end index value -- builder' array index+1 end )
+        4 roll swap array-builder-push 3 -roll swap
+        swap 1 + swap
+    repeat
+    drop drop drop
+;
+
 # array-append ( target src -- target )
 #
 # Append every item from src onto target, preserving item order.
 : array-append
-    # Thread an index through src while rebuilding target with array-push.
-    0
-    loop
-        over array-len 2dup swap - 0 > nip
-    while
-        # ( target src index -- target src index value )
-        2dup array-get
-
-        # ( target src index value -- target' src index+1 )
-        3 roll swap array-push 2 -roll 1 +
-    repeat
-    drop drop
+    array-builder-new rot
+    dup array-len 0 swap _array-copy-range-into-builder
+    swap dup array-len 0 swap _array-copy-range-into-builder
+    array-builder-freeze
 ;
 
 # array-last ( array -- value )
@@ -26,26 +38,13 @@
 # array-pop  ( array -- rest value )
 #
 # Return a copy of the array without its final item, plus the final item.
-# This rebuilds the prefix one item at a time because Borth arrays do not yet
-# have mutable update or slice operations.
+# This copies the prefix into a builder so the returned array is still a fresh
+# immutable value without rebuilding the prefix after every item.
 : array-pop
-    # Save the final value, then build a new array for the prefix.
-    # ( array -- value array prefix )
-    dup array-last swap array-new swap
-
-    # Copy every item before the final index into the prefix.
-    # ( value array prefix -- value array prefix index )
-    0
-    loop
-        over array-len 1 - 2dup swap - 0 > nip
-    while
-        # ( value array prefix index -- value array prefix index item )
-        2dup array-get
-
-        # ( value array prefix index item -- value array prefix index+1 )
-        3 roll swap array-push 2 -roll 1 +
-    repeat
-    drop drop swap
+    dup array-last swap
+    array-builder-new swap
+    dup array-len 1 - 0 swap _array-copy-range-into-builder
+    array-builder-freeze swap
 ;
 
 # array-valid-index? ( array index -- flag )
@@ -108,19 +107,9 @@
 : array-slice
     _array-assert-valid-range
 
-    # ( slice array start end )
-    over + array-new 3 -roll
-
-    # copy values from arr[start] til arr[end] into slice
-    loop
-        2dup = not
-    while
-        # ( slice array index end )
-        3 -roll 2dup array-get 3 roll swap array-push 3 -roll rot
-        # increment index
-        swap 1 + swap
-    repeat
-    drop drop drop
+    array-builder-new 3 -roll
+    _array-copy-range-into-builder
+    array-builder-freeze
 ;
 
 # array-set ( array targetIndex value -- array )

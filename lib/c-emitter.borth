@@ -99,6 +99,12 @@ import "./strings.borth"
     else dup "ARRAY_PUSH" = if drop drop "  borth_op_array_push(rt);"
     else dup "ARRAY_LEN" = if drop drop "  borth_op_array_len(rt);"
     else dup "ARRAY_GET" = if drop drop "  borth_op_array_get(rt);"
+    else dup "ARRAY_BUILDER_NEW" = if drop drop "  borth_op_array_builder_new(rt);"
+    else dup "ARRAY_BUILDER_PUSH" = if drop drop "  borth_op_array_builder_push(rt);"
+    else dup "ARRAY_BUILDER_LEN" = if drop drop "  borth_op_array_builder_len(rt);"
+    else dup "ARRAY_BUILDER_GET" = if drop drop "  borth_op_array_builder_get(rt);"
+    else dup "ARRAY_BUILDER_SET" = if drop drop "  borth_op_array_builder_set(rt);"
+    else dup "ARRAY_BUILDER_FREEZE" = if drop drop "  borth_op_array_builder_freeze(rt);"
     else dup "ALLOC_VARIABLE" = if drop drop "  borth_op_alloc_variable(rt);"
     else dup "FETCH" = if drop drop "  borth_op_fetch(rt);"
     else dup "STORE" = if drop drop "  borth_op_store(rt);"
@@ -127,7 +133,7 @@ import "./strings.borth"
         drop drop ""
     else
         "C emitter does not support instruction: " swap str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # c-emit-instruction ( instruction index -- c-source )

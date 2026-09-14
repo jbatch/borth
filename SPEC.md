@@ -896,6 +896,13 @@ Array decision:
   mutating the input array. This keeps aliases through variables predictable.
 - `array-get` uses zero-based indexes and throws when the requested index is
   outside the array.
+- Array builders are a separate mutable construction value. The current builder
+  words are `array-builder-new`, `array-builder-push`, `array-builder-len`,
+  `array-builder-get`, `array-builder-set`, and `array-builder-freeze`.
+- `array-builder-freeze ( builder -- array )` returns an ordinary immutable
+  array and makes the builder unusable for later mutation. Builders exist so
+  compiler and library internals can construct arrays without repeatedly copying
+  growing prefixes.
 - Arrays are intended as the first high-level container for token lists and
   simple token records.
 
@@ -1221,13 +1228,16 @@ Array helper decision:
 - `array-set ( array index value -- array )` replaces an existing item and
   returns a new array. It does not append and does not mutate the input array.
 - `array-slice` and `array-set` both rebuild arrays using existing primitives.
-- Native self-compile profiling showed that immutable `array-push` can dominate
-  performance: compiling `examples/borth-compiler.borth` performed about 4.7M
-  pushes and copied about 3.6B array items. A future safe improvement should
-  preserve immutable semantics, likely with an internal builder or ownership
-  check rather than visible mutable arrays.
-- Do not promote these helpers to TypeScript VM primitives until the
-  inefficiency blocks the next small language milestone.
+- Native self-compile profiling showed that immutable `array-push` dominated
+  performance before builders: compiling `examples/borth-compiler.borth`
+  performed about 4.7M pushes and copied about 3.6B array items.
+- After introducing builders in lexer token/span accumulation, parser node
+  accumulation, compiler instruction accumulation, and array helper internals,
+  the same compile performed about 312K ordinary array pushes and copied about
+  889K array items. The remaining construction work moved to builder pushes,
+  which preserve ordinary array immutability after freeze.
+- Keep ordinary array operations value-like; use builders only where mutable
+  construction is intentional and locally scoped.
 
 ## Near-Term Roadmap: Compiler Parity, Then Backends
 

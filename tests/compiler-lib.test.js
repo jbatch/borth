@@ -67,10 +67,10 @@ test("compiler library compiles string and array primitive words", () => {
       import "lib/parser.borth"
       import "lib/compiler.borth"
 
-      "str-len str-cat str-slice str-index-of array-new array-len array-push array-get" lex-src parse-tokens "<test>" compile-nodes show print
+      "str-len str-cat str-slice str-index-of array-new array-len array-push array-get array-builder-new array-builder-push array-builder-len array-builder-get array-builder-set array-builder-freeze" lex-src parse-tokens "<test>" compile-nodes show print
     `),
     [
-      '[["STR_LEN"] ["STR_CAT"] ["STR_SLICE"] ["STR_INDEX_OF"] ["ARRAY_NEW"] ["ARRAY_LEN"] ["ARRAY_PUSH"] ["ARRAY_GET"] ["HALT"]]',
+      '[["STR_LEN"] ["STR_CAT"] ["STR_SLICE"] ["STR_INDEX_OF"] ["ARRAY_NEW"] ["ARRAY_LEN"] ["ARRAY_PUSH"] ["ARRAY_GET"] ["ARRAY_BUILDER_NEW"] ["ARRAY_BUILDER_PUSH"] ["ARRAY_BUILDER_LEN"] ["ARRAY_BUILDER_GET"] ["ARRAY_BUILDER_SET"] ["ARRAY_BUILDER_FREEZE"] ["HALT"]]',
     ],
   );
 });

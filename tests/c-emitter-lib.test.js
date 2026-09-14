@@ -529,6 +529,24 @@ test("C emitter writes and runs native strings and arrays", (t) => {
           array-new "PUSH" array-push 1 array-push array-push
           array-new "ARRAY_GET" array-push array-push
           array-new "PRINT" array-push array-push
+          array-new "ARRAY_BUILDER_NEW" array-push array-push
+          array-new "PUSH" array-push "builder" array-push array-push
+          array-new "ARRAY_BUILDER_PUSH" array-push array-push
+          array-new "PUSH" array-push 42 array-push array-push
+          array-new "ARRAY_BUILDER_PUSH" array-push array-push
+          array-new "DUP" array-push array-push
+          array-new "ARRAY_BUILDER_LEN" array-push array-push
+          array-new "PRINT" array-push array-push
+          array-new "PUSH" array-push 0 array-push array-push
+          array-new "PUSH" array-push "patched" array-push array-push
+          array-new "ARRAY_BUILDER_SET" array-push array-push
+          array-new "DUP" array-push array-push
+          array-new "PUSH" array-push 0 array-push array-push
+          array-new "ARRAY_BUILDER_GET" array-push array-push
+          array-new "PRINT" array-push array-push
+          array-new "ARRAY_BUILDER_FREEZE" array-push array-push
+          array-new "SHOW" array-push array-push
+          array-new "PRINT" array-push array-push
           array-new "HALT" array-push array-push
         ${JSON.stringify(sourcePath)} write-c-program
       `,
@@ -539,6 +557,12 @@ test("C emitter writes and runs native strings and arrays", (t) => {
     assert.match(generated, /borth_op_push_string\(rt, "hello, "\);/);
     assert.match(generated, /borth_op_str_cat\(rt\);/);
     assert.match(generated, /borth_op_array_push\(rt\);/);
+    assert.match(generated, /borth_op_array_builder_new\(rt\);/);
+    assert.match(generated, /borth_op_array_builder_push\(rt\);/);
+    assert.match(generated, /borth_op_array_builder_len\(rt\);/);
+    assert.match(generated, /borth_op_array_builder_get\(rt\);/);
+    assert.match(generated, /borth_op_array_builder_set\(rt\);/);
+    assert.match(generated, /borth_op_array_builder_freeze\(rt\);/);
 
     const ccCheck = spawnSync("cc", ["--version"], { encoding: "utf8" });
 
@@ -564,7 +588,10 @@ test("C emitter writes and runs native strings and arrays", (t) => {
     const runProgram = spawnSync(executablePath, [], { encoding: "utf8" });
 
     assert.equal(runProgram.status, 0, runProgram.stderr);
-    assert.equal(runProgram.stdout, 'hello, native\n3\nell\n8\n["x" 123]\nb\n');
+    assert.equal(
+      runProgram.stdout,
+      'hello, native\n3\nell\n8\n["x" 123]\nb\n2\npatched\n["patched" 42]\n',
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
