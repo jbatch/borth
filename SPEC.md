@@ -1267,6 +1267,9 @@ Compiler library decision:
   `generated-word-context`. These contexts keep scratch state explicit and
   re-entrant instead of storing an in-progress declaration in global variable
   cells.
+- These contexts are ordinary heap records explicitly passed between Borth
+  words. They do not introduce lexical local variables; `variable` cells remain
+  globally scoped under the current language design.
 - Record field names are accumulated in a map while parsing the declaration, so
   duplicate-field checks do not repeatedly scan the field array.
 - `compiler-instructions` stores the emitted instruction array for the current

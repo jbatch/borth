@@ -52,6 +52,12 @@ variable SKIP_PRELUDE
 # Temporary state used while compiling one record declaration. Keeping the
 # compiler reference here makes the record helpers explicit and re-entrant
 # without threading a wide pair of state objects through every stack effect.
+#
+# `fields` preserves declaration order as [name default] pairs. `field-names`
+# supports duplicate detection while parsing, and `generated-names` catches
+# collisions among the constructor, copy word, getters, and setters. The
+# current-field values and index are cursors reused by sequential generation
+# passes. `generated-instructions` accumulates the constructor body.
 record record-compile-context
     field compiler 0
     field name ""
@@ -75,7 +81,9 @@ end
     array-new record-compile-context-set-generated-instructions
 ;
 
-# Temporary state used while emitting one generated callable word.
+# Temporary state used while emitting one generated callable word. This is a
+# separate lifetime from record parsing: emit-generated-word can eventually be
+# reused by declarations other than records without expanding their contexts.
 record generated-word-context
     field compiler 0
     field name ""
@@ -1067,6 +1075,15 @@ deferred compile-next-node
 #
 # Emit a hidden word definition with a skip jump, body instructions, and RET.
 # This is used by declarations that expand into ordinary callable words.
+#
+# The emitted layout is:
+#
+#   JUMP after-definition
+#   <name>: <instructions> RET
+#   after-definition:
+#
+# The context remembers the placeholder and body cursor while the compiler
+# state remains the owner of emitted instructions and word addresses.
 : emit-generated-word
     new-generated-word-context
 
@@ -1168,6 +1185,10 @@ deferred compile-next-node
 ;
 
 # assert-record-generated-word-names ( context -- context )
+#
+# Validate every public name before emitting any definitions. The context map
+# detects collisions within this declaration, such as a field named `new`,
+# while the compiler maps detect collisions with earlier words and variables.
 : assert-record-generated-word-names
     dup record-compile-context-name "-new" str-cat
     assert-record-generated-word-available
@@ -1199,6 +1220,10 @@ deferred compile-next-node
 ;
 
 # record-new-instructions ( context -- instructions )
+#
+# Build the constructor body in declaration order:
+#
+#   PUSH shape, ARRAY_NEW, (PUSH default, ARRAY_PUSH)*, RECORD_NEW
 : record-new-instructions
     array-new record-compile-context-set-generated-instructions
 
@@ -1267,6 +1292,9 @@ deferred compile-next-node
 ;
 
 # emit-record-definitions ( context -- context )
+#
+# Validate the complete generated namespace first, then emit callable new/copy
+# definitions and register getters/setters as compact inline instructions.
 : emit-record-definitions
     assert-record-generated-word-names
 
@@ -1284,6 +1312,10 @@ deferred compile-next-node
 ;
 
 # append-current-record-field ( context -- context )
+#
+# Consume the name and default nodes following the current `field` node. Keep
+# the compiler cursor in the nested compiler state, and keep declaration data in
+# this short-lived context.
 : append-current-record-field
     dup record-compile-context-compiler
         "field requires a name" assert-has-next-node
@@ -1325,6 +1357,9 @@ deferred compile-next-node
 #
 # Compile a top-level record declaration into ordinary generated helper words:
 #   <name>-new, <name>-copy, <name>-<field>, and <name>-set-<field>.
+#
+# The post-condition loop consumes one `field` form per iteration. Encountering
+# `end` emits the helpers and supplies the true flag that exits the loop.
 : compile-record
     dup "record declarations can only appear at the root level" assert-no-open-blocks
 
