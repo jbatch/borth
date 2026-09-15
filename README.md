@@ -101,7 +101,7 @@ map-has?  ( map key -- flag )
 map-set   ( map key value -- map )
 map-size  ( map -- number )
 
-record-new  ( shape defaults-array -- record )
+record-new  ( shape display-names-array defaults-array -- record )
 record-copy ( record shape -- record )
 record-get  ( record shape field index -- value )
 record-set  ( record value shape field index -- record )
@@ -214,6 +214,7 @@ declaration generates a constructor, a copy word, and field getter/setter words:
 ```text
 record point
   field x 0
+  hidden field source-lines 0
   field label "origin"
 end
 
@@ -227,7 +228,8 @@ point-label print
 `dup` copies the record reference, so setters are visible through aliases.
 Setters mutate the record and return it. Use the generated `<record>-copy` word
 when you want a fresh record object with copied field slots. Field defaults are
-currently integer or string literals.
+currently integer or string literals. Prefix a field with `hidden` to omit it
+from `show` and `.s`; its generated getter and setter still work normally.
 
 User-defined words:
 

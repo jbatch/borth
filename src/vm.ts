@@ -370,13 +370,30 @@ export function execute(
         }
         case "RECORD_NEW": {
           const defaults = popArray(state, "RECORD_NEW");
+          const displayNames = popArray(state, "RECORD_NEW");
           const shape = popString(state, "RECORD_NEW");
+
+          if (displayNames.items.length !== defaults.items.length) {
+            throw new Error(
+              "RECORD_NEW requires one display name for each default value",
+            );
+          }
+
+          const names = displayNames.items.map((value) => {
+            if (typeof value !== "string") {
+              throw new Error("RECORD_NEW requires string display names");
+            }
+
+            return value;
+          });
+
           if (profile !== undefined) {
             profile.recordNew += 1;
           }
           state.stack.push({
             kind: "record",
             shape,
+            displayNames: names,
             fields: [...defaults.items],
           });
           state.ip += 1;
@@ -391,6 +408,7 @@ export function execute(
           state.stack.push({
             kind: "record",
             shape: record.shape,
+            displayNames: [...record.displayNames],
             fields: [...record.fields],
           });
           state.ip += 1;
@@ -994,10 +1012,10 @@ function bool(value: boolean): number {
 }
 
 function formatStack(stack: Value[]): string {
-  return `[${stack.map(formatValueForStack).join(" ")}]`;
+  return `[${stack.map((value) => formatValueForStack(value)).join(" ")}]`;
 }
 
-function formatValueForStack(value: Value): string {
+function formatValueForStack(value: Value, path = new Set<object>()): string {
   if (typeof value === "string") {
     return JSON.stringify(value);
   }
@@ -1006,16 +1024,38 @@ function formatValueForStack(value: Value): string {
     switch (value.kind) {
       case "address":
         return `<addr:${value.index}>`;
-      case "array":
-        return `[${value.items.map(formatValueForStack).join(" ")}]`;
+      case "array": {
+        if (path.has(value)) {
+          return "<array:cycle>";
+        }
+
+        path.add(value);
+        const result = `[${value.items
+          .map((item) => formatValueForStack(item, path))
+          .join(" ")}]`;
+        path.delete(value);
+        return result;
+      }
       case "array-builder":
         return `<array-builder:${value.frozen ? "frozen" : value.items.length}>`;
       case "string-builder":
         return `<string-builder:${value.frozen ? "frozen" : value.length}>`;
       case "map":
         return `<map:${value.items.size}>`;
-      case "record":
-        return `<record:${value.shape}>`;
+      case "record": {
+        if (path.has(value)) {
+          return `<record:${value.shape}:cycle>`;
+        }
+
+        path.add(value);
+        const fields = value.displayNames.flatMap((name, index) =>
+          name === ""
+            ? []
+            : [`${name}=${formatValueForStack(value.fields[index], path)}`],
+        );
+        path.delete(value);
+        return `<record:${value.shape}${fields.length === 0 ? "" : ` ${fields.join(" ")}`}>`;
+      }
     }
   }
 

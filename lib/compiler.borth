@@ -30,17 +30,17 @@ import "./parser.borth"
 
 record compiler-state
     field file-path 0
-    field nodes 0
-    field spans 0
+    hidden field nodes 0
+    hidden field spans 0
     field node-index 0
-    field instructions 0
+    hidden field instructions 0
     field allow-top-level-code 0
-    field block-stack 0
-    field words 0
-    field variables 0
-    field deferred-calls 0
-    field imported-modules 0
-    field record-accessors 0
+    hidden field block-stack 0
+    hidden field words 0
+    hidden field variables 0
+    hidden field deferred-calls 0
+    hidden field imported-modules 0
+    hidden field record-accessors 0
 end
 
 variable COMPILER_DEBUG
@@ -53,20 +53,21 @@ variable SKIP_PRELUDE
 # compiler reference here makes the record helpers explicit and re-entrant
 # without threading a wide pair of state objects through every stack effect.
 #
-# `fields` preserves declaration order as [name default] pairs. `field-names`
+# `fields` preserves declaration order as [name default hidden?] triples. `field-names`
 # supports duplicate detection while parsing, and `generated-names` catches
 # collisions among the constructor, copy word, getters, and setters. The
 # current-field values and index are cursors reused by sequential generation
 # passes. `generated-instructions` accumulates the constructor body.
 record record-compile-context
-    field compiler 0
+    hidden field compiler 0
     field name ""
-    field fields 0
-    field field-names 0
-    field generated-names 0
+    hidden field fields 0
+    hidden field field-names 0
+    hidden field generated-names 0
     field current-field-name ""
     field current-field-default 0
-    field generated-instructions 0
+    field current-field-hidden 0
+    hidden field generated-instructions 0
     field index 0
 end
 
@@ -85,9 +86,9 @@ end
 # separate lifetime from record parsing: emit-generated-word can eventually be
 # reused by declarations other than records without expanding their contexts.
 record generated-word-context
-    field compiler 0
+    hidden field compiler 0
     field name ""
-    field instructions 0
+    hidden field instructions 0
     field skip-index 0
     field index 0
 end
@@ -1135,6 +1136,11 @@ deferred compile-next-node
     1 array-get
 ;
 
+# record-field-hidden? ( field -- flag )
+: record-field-hidden?
+    2 array-get
+;
+
 # record-context-panic ( context error-message -- never )
 : record-context-panic
     swap record-compile-context-compiler swap compiler-panic
@@ -1223,12 +1229,37 @@ deferred compile-next-node
 #
 # Build the constructor body in declaration order:
 #
-#   PUSH shape, ARRAY_NEW, (PUSH default, ARRAY_PUSH)*, RECORD_NEW
+#   PUSH shape
+#   ARRAY_NEW, (PUSH display-name, ARRAY_PUSH)*
+#   ARRAY_NEW, (PUSH default, ARRAY_PUSH)*
+#   RECORD_NEW
 : record-new-instructions
     array-new record-compile-context-set-generated-instructions
 
     dup record-compile-context-name create-push-value-instruction
     record-append-generated-instruction
+
+    "ARRAY_NEW" array-wrap record-append-generated-instruction
+
+    0 record-compile-context-set-index
+    loop
+        dup record-compile-context-index
+        over record-compile-context-fields array-len <
+    while
+        dup record-compile-context-fields
+            over record-compile-context-index array-get
+        dup record-field-hidden? if
+            drop ""
+        else
+            record-field-name
+        end
+        create-push-value-instruction record-append-generated-instruction
+        "ARRAY_PUSH" array-wrap record-append-generated-instruction
+
+        dup record-compile-context-index 1 +
+        record-compile-context-set-index
+    repeat
+
     "ARRAY_NEW" array-wrap record-append-generated-instruction
 
     0 record-compile-context-set-index
@@ -1311,12 +1342,14 @@ deferred compile-next-node
     register-record-field-accessors
 ;
 
-# append-current-record-field ( context -- context )
+# append-current-record-field ( context hidden? -- context )
 #
 # Consume the name and default nodes following the current `field` node. Keep
 # the compiler cursor in the nested compiler state, and keep declaration data in
 # this short-lived context.
 : append-current-record-field
+    record-compile-context-set-current-field-hidden
+
     dup record-compile-context-compiler
         "field requires a name" assert-has-next-node
         compiler-increment-node-index dup compiler-current-node
@@ -1349,6 +1382,7 @@ deferred compile-next-node
     array-new
         over record-compile-context-current-field-name array-push
         over record-compile-context-current-field-default array-push
+        over record-compile-context-current-field-hidden array-push
     over record-compile-context-fields swap array-push
     record-compile-context-set-fields
 ;
@@ -1358,8 +1392,9 @@ deferred compile-next-node
 # Compile a top-level record declaration into ordinary generated helper words:
 #   <name>-new, <name>-copy, <name>-<field>, and <name>-set-<field>.
 #
-# The post-condition loop consumes one `field` form per iteration. Encountering
-# `end` emits the helpers and supplies the true flag that exits the loop.
+# The post-condition loop consumes one `field` or `hidden field` form per
+# iteration. Encountering `end` emits the helpers and supplies the true flag
+# that exits the loop.
 : compile-record
     dup "record declarations can only appear at the root level" assert-no-open-blocks
 
@@ -1376,16 +1411,29 @@ deferred compile-next-node
         nip
 
         dup node-kind "word" = not if
-            drop "record body expects field or end" record-context-panic
+            drop "record body expects field, hidden field, or end" record-context-panic
         end
 
         dup node-value "end" = if
             drop emit-record-definitions 1
         else dup node-value "field" = if
-            drop append-current-record-field 0
+            drop 0 append-current-record-field 0
+        else dup node-value "hidden" = if
+            drop
+            dup record-compile-context-compiler
+                "hidden must precede a record field" assert-has-next-node
+                compiler-increment-node-index dup compiler-current-node
+            nip
+            dup node-kind "word" = not if
+                drop "hidden must precede a record field" record-context-panic
+            end
+            node-value "field" = not if
+                "hidden must precede a record field" record-context-panic
+            end
+            1 append-current-record-field 0
         else
-            drop "record body expects field or end" record-context-panic
-        end end
+            drop "record body expects field, hidden field, or end" record-context-panic
+        end end end
     until
 
     record-compile-context-compiler
@@ -1570,6 +1618,8 @@ deferred compile-next-node
         "record declarations are only supported at top level" compiler-panic
     else dup "field" = if drop
         "field declarations are only supported inside records" compiler-panic
+    else dup "hidden" = if drop
+        "hidden field declarations are only supported inside records" compiler-panic
 
     # Utility operations.
     else dup "print" = if drop
@@ -1606,7 +1656,7 @@ deferred compile-next-node
         else
             "Unknown word: " swap show str-cat compiler-panic
         end end end
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # compile-word-node ( state node -- state )

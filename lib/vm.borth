@@ -849,9 +849,9 @@ end
 
 # execute-record-new ( vm -- vm )
 : execute-record-new
-    2 "RECORD_NEW" assert-stack-length
+    3 "RECORD_NEW" assert-stack-length
     dup vm-state-stack
-        stack-pop-2 record-new array-push
+        stack-pop-3 record-new array-push
     vm-state-set-stack
     vm-inc-ip
 ;

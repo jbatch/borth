@@ -29,6 +29,7 @@ export type MapValue = {
 export type RecordValue = {
   kind: "record";
   shape: string;
+  displayNames: string[];
   fields: Value[];
 };
 

@@ -978,6 +978,7 @@ Goal:
 ```text
 record point
   field x 0
+  hidden field source-lines 0
   field label "origin"
 end
 
@@ -998,8 +999,9 @@ moved
 Record decision:
 
 - Records are declared at the top level with `record name ... end`.
-- The current field form is `field name default`, where `default` must be an
-  integer or string literal.
+- The current field forms are `field name default` and
+  `hidden field name default`, where `default` must be an integer or string
+  literal.
 - A record declaration generates `<record>-new`, `<record>-copy`,
   `<record>-<field>`, and `<record>-set-<field>` words.
 - Records are heap-backed reference values. `dup` copies the reference, so
@@ -1007,10 +1009,18 @@ Record decision:
 - Setters mutate the record and return the same record reference.
 - Generated copy words create a fresh record object and shallow-copy the field
   slots.
+- Hidden fields behave normally for access and mutation, but `show` and `.s`
+  omit them. This keeps large implementation details out of diagnostic output
+  without changing the record's data model.
+- Visible fields are rendered as `<record:shape field=value ...>`. Recursive
+  arrays and records use cycle markers rather than recursing forever.
 - Accessors validate the record shape at runtime, so applying a `line-x` getter
   to a `point` record is an error.
 - Records are backed by dedicated runtime values rather than arrays so their
   reference semantics do not change later when arrays evolve.
+- The low-level `record-new` primitive consumes the record shape, an array of
+  display names, and an array of defaults. An empty display name marks a hidden
+  field; record declarations generate this metadata automatically.
 - Generated record accessors use compact `RECORD_GET_FIELD` and
   `RECORD_SET_FIELD` instructions that carry shape, field name, and field index
   as instruction operands. The public `record-get` and `record-set` primitives

@@ -82,6 +82,7 @@ struct BorthMap {
 
 struct BorthRecord {
   BorthString *shape;
+  BorthArray *display_names;
   BorthValue *fields;
   size_t len;
 };
@@ -542,11 +543,13 @@ static BorthMap *borth_map_new(BorthRuntime *runtime) {
 static BorthRecord *borth_record_new(
     BorthRuntime *runtime,
     BorthString *shape,
+    BorthArray *display_names,
     BorthValue *fields,
     size_t len) {
   BorthRecord *result =
       borth_malloc(sizeof(BorthRecord), "failed to allocate record");
   result->shape = shape;
+  result->display_names = display_names;
   result->len = len;
 
   if (len == 0) {
@@ -1100,13 +1103,40 @@ static void borth_builder_append_debug_string(
   borth_builder_append_char(builder, '"');
 }
 
+typedef struct BorthFormatPath {
+  BorthValueKind kind;
+  const void *object;
+  const struct BorthFormatPath *parent;
+} BorthFormatPath;
+
+static bool borth_format_path_contains(
+    const BorthFormatPath *path,
+    BorthValueKind kind,
+    const void *object) {
+  for (const BorthFormatPath *item = path; item != NULL; item = item->parent) {
+    if (item->kind == kind && item->object == object) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 static void borth_builder_append_value(
     BorthStringBuilder *builder,
-    BorthValue value);
+    BorthValue value,
+    const BorthFormatPath *path);
 
 static void borth_builder_append_array(
     BorthStringBuilder *builder,
-    BorthArray *array) {
+    BorthArray *array,
+    const BorthFormatPath *path) {
+  if (borth_format_path_contains(path, BORTH_VALUE_ARRAY, array)) {
+    borth_builder_append_cstr(builder, "<array:cycle>");
+    return;
+  }
+
+  BorthFormatPath next_path = {BORTH_VALUE_ARRAY, array, path};
   borth_builder_append_char(builder, '[');
 
   for (size_t i = 0; i < array->len; i += 1) {
@@ -1114,15 +1144,50 @@ static void borth_builder_append_array(
       borth_builder_append_char(builder, ' ');
     }
 
-    borth_builder_append_value(builder, array->items[i]);
+    borth_builder_append_value(builder, array->items[i], &next_path);
   }
 
   borth_builder_append_char(builder, ']');
 }
 
+static void borth_builder_append_record(
+    BorthStringBuilder *builder,
+    BorthRecord *record,
+    const BorthFormatPath *path) {
+  if (borth_format_path_contains(path, BORTH_VALUE_RECORD, record)) {
+    borth_builder_append_cstr(builder, "<record:");
+    borth_builder_append_chars(
+        builder, record->shape->chars, record->shape->len);
+    borth_builder_append_cstr(builder, ":cycle>");
+    return;
+  }
+
+  BorthFormatPath next_path = {BORTH_VALUE_RECORD, record, path};
+  borth_builder_append_cstr(builder, "<record:");
+  borth_builder_append_chars(
+      builder, record->shape->chars, record->shape->len);
+
+  for (size_t i = 0; i < record->len; i += 1) {
+    BorthString *display_name = record->display_names->items[i].as.string;
+
+    if (display_name->len == 0) {
+      continue;
+    }
+
+    borth_builder_append_char(builder, ' ');
+    borth_builder_append_chars(
+        builder, display_name->chars, display_name->len);
+    borth_builder_append_char(builder, '=');
+    borth_builder_append_value(builder, record->fields[i], &next_path);
+  }
+
+  borth_builder_append_char(builder, '>');
+}
+
 static void borth_builder_append_value(
     BorthStringBuilder *builder,
-    BorthValue value) {
+    BorthValue value,
+    const BorthFormatPath *path) {
   switch (value.kind) {
     case BORTH_VALUE_INT:
       borth_builder_append_int(builder, value.as.integer);
@@ -1131,7 +1196,7 @@ static void borth_builder_append_value(
       borth_builder_append_debug_string(builder, value.as.string);
       break;
     case BORTH_VALUE_ARRAY:
-      borth_builder_append_array(builder, value.as.array);
+      borth_builder_append_array(builder, value.as.array, path);
       break;
     case BORTH_VALUE_ARRAY_BUILDER:
       if (value.as.array_builder->frozen) {
@@ -1157,12 +1222,7 @@ static void borth_builder_append_value(
       borth_builder_append_char(builder, '>');
       break;
     case BORTH_VALUE_RECORD:
-      borth_builder_append_cstr(builder, "<record:");
-      borth_builder_append_chars(
-          builder,
-          value.as.record->shape->chars,
-          value.as.record->shape->len);
-      borth_builder_append_char(builder, '>');
+      borth_builder_append_record(builder, value.as.record, path);
       break;
   }
 }
@@ -1864,7 +1924,7 @@ void borth_op_show(BorthRuntime *runtime) {
       borth_stack_pop(runtime, "SHOW requires a value on the stack");
   BorthStringBuilder builder;
   borth_builder_init(&builder);
-  borth_builder_append_value(&builder, value);
+  borth_builder_append_value(&builder, value, NULL);
 
   borth_stack_push(
       runtime,
@@ -1882,7 +1942,7 @@ void borth_op_print_stack(BorthRuntime *runtime) {
       borth_builder_append_char(&builder, ' ');
     }
 
-    borth_builder_append_value(&builder, runtime->stack.items[i]);
+    borth_builder_append_value(&builder, runtime->stack.items[i], NULL);
   }
 
   borth_builder_append_char(&builder, ']');
@@ -2114,8 +2174,21 @@ void borth_op_map_size(BorthRuntime *runtime) {
 void borth_op_record_new(BorthRuntime *runtime) {
   BorthArray *defaults =
       borth_pop_array(runtime, "RECORD_NEW requires defaults array on the stack");
+  BorthArray *display_names = borth_pop_array(
+      runtime,
+      "RECORD_NEW requires display names array on the stack");
   BorthString *shape =
       borth_pop_string(runtime, "RECORD_NEW requires shape string on the stack");
+
+  if (display_names->len != defaults->len) {
+    borth_panic("RECORD_NEW requires one display name for each default value");
+  }
+
+  for (size_t i = 0; i < display_names->len; i += 1) {
+    if (display_names->items[i].kind != BORTH_VALUE_STRING) {
+      borth_panic("RECORD_NEW requires string display names");
+    }
+  }
 
   if (runtime->profile.enabled) {
     runtime->profile.record_new += 1;
@@ -2124,7 +2197,12 @@ void borth_op_record_new(BorthRuntime *runtime) {
   borth_stack_push(
       runtime,
       borth_value_record(
-          borth_record_new(runtime, shape, defaults->items, defaults->len)));
+          borth_record_new(
+              runtime,
+              shape,
+              display_names,
+              defaults->items,
+              defaults->len)));
 }
 
 void borth_op_record_copy(BorthRuntime *runtime) {
@@ -2140,7 +2218,12 @@ void borth_op_record_copy(BorthRuntime *runtime) {
   borth_stack_push(
       runtime,
       borth_value_record(
-          borth_record_new(runtime, record->shape, record->fields, record->len)));
+          borth_record_new(
+              runtime,
+              record->shape,
+              record->display_names,
+              record->fields,
+              record->len)));
 }
 
 void borth_op_record_get(BorthRuntime *runtime) {

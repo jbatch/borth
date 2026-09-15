@@ -36,6 +36,7 @@ export type CompilerState = {
 type RecordField = {
   name: string;
   defaultValue: number | string;
+  hidden: boolean;
   node: AstNode;
 };
 
@@ -348,15 +349,32 @@ function compileRecord(
   let index = recordIndex + 2;
 
   for (; index < nodes.length; index += 1) {
-    const node = nodes[index];
+    let node = nodes[index];
+    let hidden = false;
 
     if (isWord(node, "end")) {
       emitRecordDefinitions(state, recordName, nameNode, fields, options);
       return index;
     }
 
+    if (isWord(node, "hidden")) {
+      hidden = true;
+      const fieldNode = nodes[index + 1];
+
+      if (!isWord(fieldNode, "field")) {
+        throw compileError(options, node, "hidden must precede a record field");
+      }
+
+      index += 1;
+      node = fieldNode;
+    }
+
     if (!isWord(node, "field")) {
-      throw compileError(options, node, "record body expects field or end");
+      throw compileError(
+        options,
+        node,
+        "record body expects field, hidden field, or end",
+      );
     }
 
     const fieldNameNode = nodes[index + 1];
@@ -402,6 +420,7 @@ function compileRecord(
     fields.push({
       name: fieldNameNode.name,
       defaultValue: defaultNode.value,
+      hidden,
       node: fieldNameNode,
     });
     index += 2;
@@ -456,6 +475,11 @@ function emitRecordDefinitions(
     nameNode,
     [
       { op: "PUSH", value: recordName },
+      { op: "ARRAY_NEW" },
+      ...fields.flatMap((field): Instruction[] => [
+        { op: "PUSH", value: field.hidden ? "" : field.name },
+        { op: "ARRAY_PUSH" },
+      ]),
       { op: "ARRAY_NEW" },
       ...fields.flatMap((field): Instruction[] => [
         { op: "PUSH", value: field.defaultValue },
@@ -646,6 +670,12 @@ function compileControlWord(
         options,
         node,
         "field declarations are only supported inside records",
+      );
+    case "hidden":
+      throw compileError(
+        options,
+        node,
+        "hidden field declarations are only supported inside records",
       );
     case ";":
       throw compileError(options, node, "; without matching :");
@@ -1190,6 +1220,7 @@ function isReservedWord(name: string): boolean {
     name === "deferred" ||
     name === "record" ||
     name === "field" ||
+    name === "hidden" ||
     compileBuiltInWord(name) !== undefined
   );
 }
