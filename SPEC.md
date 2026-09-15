@@ -1011,6 +1011,19 @@ Record decision:
   to a `point` record is an error.
 - Records are backed by dedicated runtime values rather than arrays so their
   reference semantics do not change later when arrays evolve.
+- Generated record accessors use compact `RECORD_GET_FIELD` and
+  `RECORD_SET_FIELD` instructions that carry shape, field name, and field index
+  as instruction operands. The public `record-get` and `record-set` primitives
+  remain available, but generated accessors avoid pushing their metadata through
+  the value stack.
+- Calls to generated record getters and setters compile directly to
+  `RECORD_GET_FIELD` and `RECORD_SET_FIELD`. Their names remain in the ordinary
+  word namespace, but no callable helper bodies are emitted because every
+  accessor use site is resolved to the compact instruction.
+- The Borth-written lexer, compiler, and VM now use records for their larger
+  internal state objects. Their public accessor/setter words remain the
+  threading boundary, but setters now mutate named record fields instead of
+  rebuilding positional arrays.
 
 ## Milestone 15d: Fatal Errors
 
@@ -1196,7 +1209,8 @@ Native C slice decision:
   primitives; `RUN_COMMAND`; `RANDOM`; `CLOCK_MS`; `PANIC`; `EXIT`;
   `PRINT_STACK`; and `PRINT` for integers and strings.
 - `lib/c-emitter.borth` emits `#include "borth_runtime.h"` and a straight-line
-  `main` function with one C label per instruction.
+  `main` function. It emits C labels only for entry and control-flow targets;
+  sequential instructions fall through without labels.
 - `JUMP` lowers to a direct `goto`. `JUMP_IF_FALSE` pops a numeric predicate
   through the runtime and lowers to a conditional `goto`.
 - `ALLOC_VARIABLE`, `FETCH`, and `STORE` use a growable runtime memory array.
@@ -1204,7 +1218,8 @@ Native C slice decision:
   they are integer memory indexes.
 - `CALL` pushes the next instruction index onto a runtime return stack and jumps
   to the call target. `RET` jumps to a generated return dispatcher that pops the
-  return index and switches back to the matching instruction label.
+  return index and switches back to the matching instruction label. The switch
+  contains only real `CALL` continuation indexes rather than every instruction.
 - A more structured function-per-word C backend remains a later cleanup path.
   The current native backend prioritizes bytecode parity and self-hosting over
   pretty generated C.
@@ -1242,9 +1257,10 @@ Compiler library decision:
 - Compiler helpers emit instructions into `compiler-instructions` rather than
   returning instruction arrays for each node. This keeps the contract ready for
   future words that expand into zero, one, or many instructions.
-- The compiler library now uses global compiler state rather than threading the
-  instruction array through every helper. This keeps the stack shape manageable
-  as control-flow words need to remember and patch earlier instruction indexes.
+- The compiler library threads a `compiler-state` record rather than threading
+  the instruction array through every helper. This keeps the stack shape
+  manageable as control-flow words need to remember and patch earlier
+  instruction indexes.
 - `compiler-instructions` stores the emitted instruction array for the current
   compilation.
 - `compiler-block-stack` stores unresolved control-flow frames. Current frame
@@ -1295,7 +1311,8 @@ VM library decision:
 
 - `lib/vm.borth` is a tiny interpreter for the inspectable instruction arrays
   produced by `lib/compiler.borth`.
-- The VM state is threaded as `instructions ip stack`.
+- The VM state is threaded as a `vm-state` record containing `instructions`,
+  `ip`, `stack`, `call-stack`, and `memory`.
 - Current instruction support covers literal `PUSH`, arithmetic, comparisons,
   stack operations, string operations, array operations, host IO/path
   primitives, random numbers, `JUMP`, `JUMP_IF_FALSE`, `CALL`, `RET`, `PRINT`,

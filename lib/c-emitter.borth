@@ -5,6 +5,9 @@
 
 import "./strings.borth"
 
+variable _C_LABEL_INDEXES
+variable _C_SCAN_INDEX
+
 # c-write ( builder contents -- builder )
 #
 # Append contents to a string builder while keeping the builder on the stack for
@@ -67,6 +70,66 @@ import "./strings.borth"
     str-cat ";" str-cat
 ;
 
+# c-emit-record-get-field-instruction ( instruction -- c-source )
+: c-emit-record-get-field-instruction
+    dup 1 array-get show "  borth_op_record_get_field(rt, " swap str-cat
+    ", " str-cat
+    over 2 array-get show str-cat
+    ", " str-cat
+    swap 3 array-get show str-cat
+    ");" str-cat
+;
+
+# c-emit-record-set-field-instruction ( instruction -- c-source )
+: c-emit-record-set-field-instruction
+    dup 1 array-get show "  borth_op_record_set_field(rt, " swap str-cat
+    ", " str-cat
+    over 2 array-get show str-cat
+    ", " str-cat
+    swap 3 array-get show str-cat
+    ");" str-cat
+;
+
+# c-record-label-index ( index -- )
+#
+# Remember that generated control flow can jump to index.
+: c-record-label-index
+    _C_LABEL_INDEXES @ swap 1 map-set drop
+;
+
+# c-collect-label-indexes ( instructions -- instructions )
+#
+# Collect the bytecode indexes that need C labels: the program entry, explicit
+# jump/call targets, and the continuation after each CALL.
+: c-collect-label-indexes
+    map-new _C_LABEL_INDEXES !
+    dup array-len 0 > if
+        0 c-record-label-index
+    end
+    0 _C_SCAN_INDEX !
+
+    loop
+        _C_SCAN_INDEX @ over array-len <
+    while
+        dup _C_SCAN_INDEX @ array-get
+        dup c-instruction-op
+        dup "CALL" = if
+            drop
+            dup 1 array-get c-record-label-index
+            _C_SCAN_INDEX @ 1 + c-record-label-index
+            drop
+        else dup "JUMP" = if
+            drop 1 array-get c-record-label-index
+        else dup "JUMP_IF_FALSE" = if
+            drop 1 array-get c-record-label-index
+        else
+            drop drop
+        end end end
+
+        _C_SCAN_INDEX @ 1 + _C_SCAN_INDEX !
+    repeat
+;
+
 # c-emit-simple-instruction ( instruction -- c-source )
 #
 # Return the C statement for one supported instruction that does not need the
@@ -118,6 +181,10 @@ import "./strings.borth"
     else dup "RECORD_COPY" = if drop drop "  borth_op_record_copy(rt);"
     else dup "RECORD_GET" = if drop drop "  borth_op_record_get(rt);"
     else dup "RECORD_SET" = if drop drop "  borth_op_record_set(rt);"
+    else dup "RECORD_GET_FIELD" = if drop
+        c-emit-record-get-field-instruction
+    else dup "RECORD_SET_FIELD" = if drop
+        c-emit-record-set-field-instruction
     else dup "ALLOC_VARIABLE" = if drop drop "  borth_op_alloc_variable(rt);"
     else dup "FETCH" = if drop drop "  borth_op_fetch(rt);"
     else dup "STORE" = if drop drop "  borth_op_store(rt);"
@@ -146,7 +213,7 @@ import "./strings.borth"
         drop drop ""
     else
         "C emitter does not support instruction: " swap str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # c-emit-instruction ( instruction index -- c-source )
@@ -179,8 +246,10 @@ import "./strings.borth"
     loop
         2dup swap array-len <
     while
-        dup c-emit-label
-        _c-write-line-keep-instruction-loop
+        _C_LABEL_INDEXES @ over map-has? if
+            dup c-emit-label
+            _c-write-line-keep-instruction-loop
+        end
         2dup array-get over c-emit-instruction
         dup "" = if
             drop
@@ -199,7 +268,8 @@ import "./strings.borth"
 
 # write-c-return-dispatch ( builder instructions -- builder instructions )
 #
-# Emit the shared return dispatcher used by RET.
+# Emit the shared return dispatcher used by RET. Only the instruction following
+# a CALL can be a valid return address, so omit unreachable switch cases.
 : write-c-return-dispatch
     "  if (argc < 0) { goto borth_return_dispatch; }" c-write-line-with-instructions
     "  goto borth_program_end;" c-write-line-with-instructions
@@ -209,11 +279,18 @@ import "./strings.borth"
     loop
         2dup swap array-len <
     while
-        dup show
-        "    case " swap str-cat ": goto " str-cat
-        over c-label-name
-        str-cat ";" str-cat
-        _c-write-line-keep-instruction-loop
+        2dup array-get c-instruction-op "CALL" = if
+            over array-len over 1 + = if
+                dup 1 + show
+                "    case " swap str-cat ": goto borth_program_end;" str-cat
+            else
+                dup 1 + show
+                "    case " swap str-cat ": goto " str-cat
+                over 1 + c-label-name
+                str-cat ";" str-cat
+            end
+            _c-write-line-keep-instruction-loop
+        end
         1 +
     repeat
     drop
@@ -226,11 +303,15 @@ import "./strings.borth"
 #
 # Return one generated C source string for the instruction array.
 : emit-c-program-source
+    c-collect-label-indexes
     str-builder-new swap
     "#include \"borth_runtime.h\"" c-write-line-with-instructions
     "" c-write-line-with-instructions
     "int main(int argc, char **argv) {" c-write-line-with-instructions
     "  BorthRuntime *rt = borth_runtime_new_with_args(argc - 1, argv + 1);" c-write-line-with-instructions
+    dup array-len 0 > if
+        "  goto borth_ip_0;" c-write-line-with-instructions
+    end
     write-c-instructions
     write-c-return-dispatch
     drop

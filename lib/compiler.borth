@@ -13,9 +13,9 @@ import "./parser.borth"
 #   ["HALT"]
 #
 # Compilation threads one explicit state object through most compiler words.
-# The state object layout is:
+# The compiler state is a heap-backed record with these fields:
 #
-#   [ file-path nodes spans node-index instructions allow-top-level-code block-stack words variables deferred-calls imported-modules ]
+#   file-path nodes spans node-index instructions allow-top-level-code block-stack words variables deferred-calls imported-modules record-accessors
 #
 # `nodes` is the parser output being compiled. `spans` is a parallel array with
 # one source span per node. `node-index` points at the node currently being
@@ -23,10 +23,25 @@ import "./parser.borth"
 # legal outside a definition; imported modules use 0. The remaining fields are
 # evolving compiler-session data: emitted bytecode, open control-flow/definition
 # blocks, user-defined word addresses, variable memory indexes, deferred calls,
-# and imported module paths.
+# imported module paths, and generated record accessor inline instructions.
 #
-# Accessor words consume the compiler state they inspect. Setter words return a
-# new compiler state with one field replaced, ready for explicit threading.
+# Accessor words consume the compiler state they inspect. Setter words mutate the
+# compiler-state record and return it, ready for explicit threading.
+
+record compiler-state
+    field file-path 0
+    field nodes 0
+    field spans 0
+    field node-index 0
+    field instructions 0
+    field allow-top-level-code 0
+    field block-stack 0
+    field words 0
+    field variables 0
+    field deferred-calls 0
+    field imported-modules 0
+    field record-accessors 0
+end
 
 variable COMPILER_DEBUG
 
@@ -58,46 +73,46 @@ variable _GEN_WORD_INDEX
 # modules will pass 0 so they can define words and variables without running
 # loose stack code at import time.
 : compiler-new
-    # ( file-path nodes spans allow-top-level-code array )
-    array-new
-    4 roll array-push       # file-path
-    3 roll array-push       # nodes
-    rot array-push          # spans
-    0 array-push            # node-index
-    array-builder-new array-push # instructions
-    swap array-push         # allow-top-level-code
-    array-new array-push    # block-stack
-    map-new array-push      # words
-    map-new array-push      # variables
-    map-new array-push      # deferred-calls
-    map-new array-push      # imported-modules
+    compiler-state-new
+    4 roll compiler-state-set-file-path
+    3 roll compiler-state-set-nodes
+    rot compiler-state-set-spans
+    0 compiler-state-set-node-index
+    array-builder-new compiler-state-set-instructions
+    swap compiler-state-set-allow-top-level-code
+    array-new compiler-state-set-block-stack
+    map-new compiler-state-set-words
+    map-new compiler-state-set-variables
+    map-new compiler-state-set-deferred-calls
+    map-new compiler-state-set-imported-modules
+    map-new compiler-state-set-record-accessors
 ;
 
 # compiler-file-path ( state -- file-path )
 : compiler-file-path
-    0 array-get
+    compiler-state-file-path
 ;
 
 # compiler-nodes ( state -- nodes )
 : compiler-nodes
-    1 array-get
+    compiler-state-nodes
 ;
 
 # compiler-spans ( state -- spans )
 #
 # Return the source-span array parallel to compiler-nodes.
 : compiler-spans
-    2 array-get
+    compiler-state-spans
 ;
 
 # compiler-node-index ( state -- index )
 : compiler-node-index
-    3 array-get
+    compiler-state-node-index
 ;
 
 # compiler-instructions ( state -- instructions )
 : compiler-instructions
-    4 array-get
+    compiler-state-instructions
 ;
 
 # compiler-allow-top-level-code ( state -- allow-top-level-code )
@@ -105,99 +120,109 @@ variable _GEN_WORD_INDEX
 # Return the flag that decides whether executable source is legal outside a
 # definition.
 : compiler-allow-top-level-code
-    5 array-get
+    compiler-state-allow-top-level-code
 ;
 
 # compiler-block-stack ( state -- block-stack )
 : compiler-block-stack
-    6 array-get
+    compiler-state-block-stack
 ;
 
 # compiler-words ( state -- words )
 : compiler-words
-    7 array-get
+    compiler-state-words
 ;
 
 # compiler-variables ( state -- variables )
 : compiler-variables
-    8 array-get
+    compiler-state-variables
 ;
 
 # compiler-deferred-calls ( state -- deferred-calls )
 : compiler-deferred-calls
-    9 array-get
+    compiler-state-deferred-calls
 ;
 
 # compiler-imported-modules ( state -- imported-modules )
 : compiler-imported-modules
-    10 array-get
+    compiler-state-imported-modules
+;
+
+# compiler-record-accessors ( state -- record-accessors )
+: compiler-record-accessors
+    compiler-state-record-accessors
 ;
 
 # compiler-set-file-path ( state file-path -- state )
 : compiler-set-file-path
-    0 swap array-set
+    compiler-state-set-file-path
 ;
 
 # compiler-set-nodes ( state nodes -- state )
 : compiler-set-nodes
-    1 swap array-set
+    compiler-state-set-nodes
 ;
 
 # compiler-set-spans ( state spans -- state )
 #
 # Replace the source spans array parallel to compiler-nodes.
 : compiler-set-spans
-    2 swap array-set
+    compiler-state-set-spans
 ;
 
 # compiler-set-node-index ( state index -- state )
 : compiler-set-node-index
-    3 swap array-set
+    compiler-state-set-node-index
 ;
 
 # compiler-set-instructions ( state instructions -- state )
 : compiler-set-instructions
-    4 swap array-set
+    compiler-state-set-instructions
 ;
 
 # compiler-set-allow-top-level-code ( state allow-top-level-code -- state )
 #
 # Replace the flag that decides whether executable top-level source is legal.
 : compiler-set-allow-top-level-code
-    5 swap array-set
+    compiler-state-set-allow-top-level-code
 ;
 
 # compiler-set-block-stack ( state block-stack -- state )
 : compiler-set-block-stack
-    6 swap array-set
+    compiler-state-set-block-stack
 ;
 
 # compiler-set-words ( state words -- state )
 : compiler-set-words
-    7 swap array-set
+    compiler-state-set-words
 ;
 
 # compiler-set-variables ( state variables -- state )
 : compiler-set-variables
-    8 swap array-set
+    compiler-state-set-variables
 ;
 
 # compiler-set-deferred-calls ( state deferred-calls -- state )
 : compiler-set-deferred-calls
-    9 swap array-set
+    compiler-state-set-deferred-calls
 ;
 
 # compiler-set-imported-modules ( state imported-modules -- state )
 : compiler-set-imported-modules
-    10 swap array-set
+    compiler-state-set-imported-modules
+;
+
+# compiler-set-record-accessors ( state record-accessors -- state )
+: compiler-set-record-accessors
+    compiler-state-set-record-accessors
 ;
 
 # compiler-finished? ( state -- flag )
 #
 # Return 1 once node-index has reached or passed the number of nodes.
 : compiler-finished?
-    dup compiler-nodes array-len
-    swap compiler-node-index
+    dup compiler-state-nodes array-len
+    swap compiler-state-node-index
     swap < not
 ;
 
@@ -205,29 +230,29 @@ variable _GEN_WORD_INDEX
 #
 # Move the compiler to the next parser node.
 : compiler-increment-node-index
-    dup compiler-node-index
+    dup compiler-state-node-index
         1 +
-    compiler-set-node-index
+    compiler-state-set-node-index
 ;
 
 # compiler-current-node ( state -- node )
 #
 # Return the parser node at the current node-index.
 : compiler-current-node
-    dup compiler-nodes
-    swap compiler-node-index array-get
+    dup compiler-state-nodes
+    swap compiler-state-node-index array-get
 ;
 
 # compiler-append-imported-module ( state absolute-file-path -- state )
 : compiler-append-imported-module
-    over compiler-imported-modules
+    over compiler-state-imported-modules
         swap 1 map-set
-    compiler-set-imported-modules
+    compiler-state-set-imported-modules
 ;
 
 # compiler-module-already-imported? ( state absolute-file-path -- flag )
 : compiler-module-already-imported?
-    swap compiler-imported-modules swap map-has?
+    swap compiler-state-imported-modules swap map-has?
 ;
 
 # compiler-debug? ( -- flag )
@@ -244,7 +269,7 @@ variable _GEN_WORD_INDEX
 # unclosed-block errors still point at the source being compiled.
 : compiler-panic
     # ( state error-msg -- error-msg state index spans )
-    swap dup compiler-node-index over compiler-spans
+    swap dup compiler-state-node-index over compiler-state-spans
 
     # If node-index is past the last span, report the last span instead.
     # ( error-msg state index spans )
@@ -253,7 +278,7 @@ variable _GEN_WORD_INDEX
         nip dup array-len 1 - swap
     end
 
-    swap array-get swap compiler-file-path
+    swap array-get swap compiler-state-file-path
     # ( error-msg span file-path )
 
     # ( error-msg span "error: $file-path:" )
@@ -272,7 +297,7 @@ variable _GEN_WORD_INDEX
 # Panic with errorMsg if advancing node-index would move past the parser node
 # array. Declaration parsers use this before consuming required operands.
 : assert-has-next-node
-    swap dup compiler-node-index 1 + over compiler-nodes array-len < not if
+    swap dup compiler-state-node-index 1 + over compiler-state-nodes array-len < not if
         swap compiler-panic
     end
     swap drop
@@ -284,18 +309,19 @@ variable _GEN_WORD_INDEX
 # file path, nodes, spans, node cursor, and block stack, while sharing the
 # parent's emitted instructions, words, variables, and imported-module cache.
 : module-compiler-new
-    array-new
-    3 roll array-push                           # file-path
-    rot array-push                              # nodes
-    swap array-push                             # spans
-    0 array-push                                # node-index
-    over compiler-instructions array-push       # instructions
-    0 array-push                                # allow-top-level-code
-    array-new array-push                        # block-stack
-    over compiler-words array-push              # words
-    over compiler-variables array-push          # variables
-    map-new array-push                          # deferred-calls
-    over compiler-imported-modules array-push   # imported-modules
+    compiler-state-new
+    3 roll compiler-state-set-file-path
+    2 roll compiler-state-set-nodes
+    swap compiler-state-set-spans
+    0 compiler-state-set-node-index
+    over compiler-state-instructions compiler-state-set-instructions
+    0 compiler-state-set-allow-top-level-code
+    array-new compiler-state-set-block-stack
+    over compiler-state-words compiler-state-set-words
+    over compiler-state-variables compiler-state-set-variables
+    map-new compiler-state-set-deferred-calls
+    over compiler-state-imported-modules compiler-state-set-imported-modules
+    over compiler-state-record-accessors compiler-state-set-record-accessors
     nip
 ;
 
@@ -323,20 +349,20 @@ variable _GEN_WORD_INDEX
 
 # emit-instruction ( state instruction -- state )
 #
-# Append one instruction to compiler-instructions.
+# Append one instruction to compiler-state-instructions.
 : emit-instruction
     swap dup
     # ( instruction state -- instruction state instructions )
-    compiler-instructions
+    compiler-state-instructions
         rot array-builder-push
-    compiler-set-instructions
+    compiler-state-set-instructions
 ;
 
 # compiler-next-instruction-index ( state -- index )
 #
 # Return the index where the next emitted instruction will be written.
 : compiler-next-instruction-index
-    compiler-instructions array-builder-len
+    compiler-state-instructions array-builder-len
 ;
 
 # assert-top-level-code-allowed ( state errorMsg -- )
@@ -350,8 +376,8 @@ variable _GEN_WORD_INDEX
 : assert-top-level-code-allowed
     # TODO: Replace the block-stack check with an explicit
     # compiler-inside-definition? helper.
-    over compiler-allow-top-level-code not if
-        over compiler-block-stack array-len 0 = if
+    over compiler-state-allow-top-level-code not if
+        over compiler-state-block-stack array-len 0 = if
             compiler-panic
         end
     end
@@ -364,9 +390,9 @@ variable _GEN_WORD_INDEX
 : patch-instruction
     rot dup
     # ( state index instruction -- state instructions index instruction )
-    compiler-instructions
+    compiler-state-instructions
         3 roll 3 roll array-builder-set
-    compiler-set-instructions
+    compiler-state-set-instructions
 ;
 
 # record-word-name ( state name -- state )
@@ -378,16 +404,16 @@ variable _GEN_WORD_INDEX
     # Put the compiler state under the name so the words map can be inspected
     # and then updated.
     # ( state name -- name state )
-    swap dup compiler-words
+    swap dup compiler-state-words
         rot
         # ( state words name )
         2dup map-has? if
             nip "word already defined: " swap str-cat compiler-panic
         end
-        # TODO: Also reject names that collide with compiler-variables or built-in
+        # TODO: Also reject names that collide with compiler-state-variables or built-in
         # words once the compiler has a single helper for checking the word namespace.
         2over compiler-next-instruction-index map-set
-    compiler-set-words
+    compiler-state-set-words
 ;
 
 # declare-deferred-word ( state name -- state )
@@ -395,25 +421,25 @@ variable _GEN_WORD_INDEX
 # Record a word name as deferred. Calls to this name compile as patchable CALL
 # placeholders until a later definition supplies the real instruction address.
 : declare-deferred-word
-    swap dup compiler-words
+    swap dup compiler-state-words
         rot
         # ( state words name )
         2dup map-has? if
             nip "word already defined: " swap str-cat compiler-panic
         end
-        # TODO: Also reject names that collide with compiler-variables or built-in
+        # TODO: Also reject names that collide with compiler-state-variables or built-in
         # words once the compiler has a single helper for checking the word namespace.
 
         # Store -1 as the placeholder address until the definition is found.
         -1 map-set
-    compiler-set-words
+    compiler-state-set-words
 ;
 
 # user-defined-word? ( state name -- flag )
 #
 # Return 1 when name is already known as a user-defined word.
 : user-defined-word?
-    swap compiler-words swap map-has?
+    swap compiler-state-words swap map-has?
 ;
 
 # user-defined-word-address ( state name -- address )
@@ -425,7 +451,7 @@ variable _GEN_WORD_INDEX
     # ( state name -- state name state name )
     2dup
     # ( state name state name -- state name value found-flag )
-    swap compiler-words swap map-get not if drop
+    swap compiler-state-words swap map-get not if drop
         "Unknown word: " swap show str-cat compiler-panic
     end
     nip nip
@@ -435,29 +461,67 @@ variable _GEN_WORD_INDEX
 #
 # Return 1 when name is already known as a user-defined variable.
 : user-defined-variable?
-    swap compiler-variables swap map-has?
+    swap compiler-state-variables swap map-has?
+;
+
+# user-defined-record-accessor? ( state name -- flag )
+#
+# Return 1 when name is a generated record getter or setter that can compile
+# directly to a compact field-access instruction.
+: user-defined-record-accessor?
+    swap compiler-state-record-accessors swap map-has?
+;
+
+# record-current-getter-instruction ( -- instruction )
+#
+# Build the compact field-access instruction for the current record/field loop.
+: record-current-getter-instruction
+    array-new
+        "RECORD_GET_FIELD" array-push
+        _RECORD_COMPILE_NAME @ array-push
+        _RECORD_FIELD_NAME @ array-push
+        _RECORD_INDEX @ array-push
+;
+
+# record-current-accessor-inline ( state name instruction -- state )
+#
+# Remember that name can be emitted as the supplied compact field instruction.
+: record-current-accessor-inline
+    2 roll dup compiler-state-record-accessors
+        3 roll 3 roll map-set
+    compiler-state-set-record-accessors
+;
+
+# get-record-accessor-instruction ( state name -- instruction )
+#
+# Resolve a generated record accessor name to its compact instruction.
+: get-record-accessor-instruction
+    swap compiler-state-record-accessors over map-get not if drop
+        "Unknown word: " swap show str-cat compiler-panic
+    end
+    nip
 ;
 
 # next-variable-index ( state -- index )
 #
 # Return the memory index that will be assigned to the next variable declaration.
 : next-variable-index
-    compiler-variables map-size
+    compiler-state-variables map-size
 ;
 
 # define-variable ( state name -- state )
 #
 # Record a user-defined variable name and assign it the next VM memory index.
 : define-variable
-    # TODO: Reject names that collide with compiler-words, compiler-variables,
+    # TODO: Reject names that collide with compiler-state-words, compiler-state-variables,
     # or built-in words once name availability checking is centralized.
     swap
     # ( state name -- name state variables )
-    dup compiler-variables
+    dup compiler-state-variables
         # Store the next memory index under the variable name.
         # ( name state variables -- state variables )
         rot 2over next-variable-index map-set
-    compiler-set-variables
+    compiler-state-set-variables
 ;
 
 # get-variable-address ( state name -- address )
@@ -470,7 +534,7 @@ variable _GEN_WORD_INDEX
     # defensive branch becomes reachable without a prior user-defined-variable?
     # check.
     # ( state name -- name value found-flag )
-    swap compiler-variables over map-get not if drop
+    swap compiler-state-variables over map-get not if drop
         "Unknown word: " swap show str-cat compiler-panic
     end
     nip
@@ -478,15 +542,15 @@ variable _GEN_WORD_INDEX
 
 # push-open-block ( state entry -- state )
 #
-# Add an open block frame to compiler-block-stack.
+# Add an open block frame to compiler-state-block-stack.
 # Frames look like ["if" jumpIndex], ["else" jumpIndex], [":" jumpIndex],
 # ["loop" startIndex], or ["while" startIndex falseJumpIndex].
 : push-open-block
     swap
     # ( state entry -- entry state block-stack )
-    dup compiler-block-stack
+    dup compiler-state-block-stack
         rot array-push
-    compiler-set-block-stack
+    compiler-state-set-block-stack
 ;
 
 # pop-open-block ( state -- state blockEntry )
@@ -495,9 +559,9 @@ variable _GEN_WORD_INDEX
 : pop-open-block
     dup
     # ( state block-stack )
-    compiler-block-stack
+    compiler-state-block-stack
         array-pop -rot
-    compiler-set-block-stack
+    compiler-state-set-block-stack
     swap
 ;
 
@@ -510,7 +574,7 @@ variable _GEN_WORD_INDEX
     # Bring state to the top so the current block stack can be inspected.
     # ( state expectedKind errorMsg -- expectedKind errorMsg state state )
     rot dup
-    compiler-block-stack array-len 0 = if
+    compiler-state-block-stack array-len 0 = if
         swap compiler-panic
     end
     # ( expectedKind errorMsg state )
@@ -531,7 +595,7 @@ variable _GEN_WORD_INDEX
 #
 # Ensure every opened control-flow block was closed before HALT is emitted.
 : assert-no-open-blocks
-    over compiler-block-stack array-len 0 = not if
+    over compiler-state-block-stack array-len 0 = not if
         compiler-panic
     end
     drop drop
@@ -545,7 +609,7 @@ variable _GEN_WORD_INDEX
     # ( instruction-index state name state )
     -rot over
     # ( instruction-index state name deferred-calls )
-    compiler-deferred-calls
+    compiler-state-deferred-calls
         # ( instruction-index state deferred-calls name )
         swap
         # ( instruction-index state deferred-calls name )
@@ -556,7 +620,7 @@ variable _GEN_WORD_INDEX
             # (  state deferred-calls )
             3 roll array-wrap map-set
         end
-    compiler-set-deferred-calls
+    compiler-state-set-deferred-calls
 ;
 
 # patch-deferred-call ( state instruction-index -- state )
@@ -565,7 +629,7 @@ variable _GEN_WORD_INDEX
 # address.
 : patch-deferred-call
     # ( state instructions instruction-index  )
-    over compiler-instructions swap
+    over compiler-state-instructions swap
         # ( state instructions instruction-index instruction )
         2dup array-builder-get
         dup node-kind "CALL" = not if
@@ -575,7 +639,7 @@ variable _GEN_WORD_INDEX
         drop
         # ( state instructions )
         "CALL" array-wrap 3over compiler-next-instruction-index array-push array-builder-set
-    compiler-set-instructions
+    compiler-state-set-instructions
 ;
 
 # patch-deferred-calls ( state name -- state )
@@ -584,7 +648,7 @@ variable _GEN_WORD_INDEX
 : patch-deferred-calls
     over
     # ( state name deferred-calls )
-    compiler-deferred-calls
+    compiler-state-deferred-calls
         # ( state name deferred-calls list found-flag )
         2dup swap map-get not if
             drop drop
@@ -603,7 +667,7 @@ variable _GEN_WORD_INDEX
         repeat
         # ( state deferred-calls  )
         2over swap map-set nip
-    compiler-set-deferred-calls
+    compiler-state-set-deferred-calls
 ;
 
 # compile-variable ( state -- state )
@@ -653,7 +717,7 @@ variable _GEN_WORD_INDEX
 # patches the earlier JUMP_IF_FALSE to land at the false branch, then stores an
 # else frame. The matching end patches the JUMP to land after the false branch.
 : compile-else
-    dup compiler-block-stack array-len 0 = if
+    dup compiler-state-block-stack array-len 0 = if
         "else without matching if" compiler-panic
     end
 
@@ -686,7 +750,7 @@ variable _GEN_WORD_INDEX
 # Close an if or if/else block by patching its remaining jump placeholder to the
 # next instruction.
 : compile-end
-    dup compiler-block-stack array-len 0 = if
+    dup compiler-state-block-stack array-len 0 = if
         "end without matching if" compiler-panic
     end
 
@@ -800,14 +864,14 @@ variable _GEN_WORD_INDEX
 
     # If the word was previously deferred, patch recorded calls. Otherwise record
     # the new word name and address.
-    2dup compiler-words swap map-get if
+    2dup compiler-state-words swap map-get if
         # ( word-name state addr -- word-name state )
         -1 = if
             over patch-deferred-calls
             # ( word-name state )
-            swap over compiler-words
+            swap over compiler-state-words
                 swap 2over compiler-next-instruction-index map-set
-            compiler-set-words
+            compiler-state-set-words
         else
             "word already defined: " 2over str-cat compiler-panic
         end
@@ -841,7 +905,7 @@ variable _GEN_WORD_INDEX
 # End a user-defined word by emitting RET, closing the ":" frame, and patching
 # the earlier skip jump to the first instruction after the word body.
 : compile-end-definition
-    dup compiler-block-stack array-len 0 = if
+    dup compiler-state-block-stack array-len 0 = if
         "; without matching :" compiler-panic
     end
 
@@ -895,11 +959,12 @@ deferred compile-next-node
         # Copy updated session data back to the parent compiler, including
         # transitive imports observed by the child compiler.
         swap
-        over compiler-instructions compiler-set-instructions
-        over compiler-words compiler-set-words
-        over compiler-variables compiler-set-variables
-        over compiler-imported-modules compiler-set-imported-modules
-        over compiler-file-path compiler-append-imported-module
+        over compiler-state-instructions compiler-state-set-instructions
+        over compiler-state-words compiler-state-set-words
+        over compiler-state-variables compiler-state-set-variables
+        over compiler-state-imported-modules compiler-state-set-imported-modules
+        over compiler-state-record-accessors compiler-state-set-record-accessors
+        over compiler-state-file-path compiler-append-imported-module
         nip
     else
         # Module already compiled. Drop file-path and source.
@@ -915,7 +980,7 @@ deferred compile-next-node
 
     # Resolve the module path relative to the currently compiled file and read it.
     # ( state absolute-file-path absolute-file-path )
-    over compiler-file-path path-dirname swap path-resolve dup
+    over compiler-state-file-path path-dirname swap path-resolve dup
     # ( state absolute-file-path source )
     read-text-file
     # ( state absolute-file-path source -- state )
@@ -1079,10 +1144,11 @@ deferred compile-next-node
     _RECORD_INDEX !
     _RECORD_FIELD_NAME !
     array-new
-        _RECORD_COMPILE_NAME @ create-push-value-instruction array-push
-        _RECORD_FIELD_NAME @ create-push-value-instruction array-push
-        _RECORD_INDEX @ create-push-value-instruction array-push
-        "RECORD_GET" array-wrap array-push
+        "RECORD_GET_FIELD" array-push
+        _RECORD_COMPILE_NAME @ array-push
+        _RECORD_FIELD_NAME @ array-push
+        _RECORD_INDEX @ array-push
+    array-wrap
 ;
 
 # record-setter-instructions ( field-name index -- instructions )
@@ -1090,14 +1156,18 @@ deferred compile-next-node
     _RECORD_INDEX !
     _RECORD_FIELD_NAME !
     array-new
-        _RECORD_COMPILE_NAME @ create-push-value-instruction array-push
-        _RECORD_FIELD_NAME @ create-push-value-instruction array-push
-        _RECORD_INDEX @ create-push-value-instruction array-push
-        "RECORD_SET" array-wrap array-push
+        "RECORD_SET_FIELD" array-push
+        _RECORD_COMPILE_NAME @ array-push
+        _RECORD_FIELD_NAME @ array-push
+        _RECORD_INDEX @ array-push
+    array-wrap
 ;
 
-# emit-record-field-definitions ( state -- state )
-: emit-record-field-definitions
+# register-record-field-accessors ( state -- state )
+#
+# Reserve each generated accessor in the word namespace and remember its compact
+# instruction. Accessors compile inline, so they do not need callable bodies.
+: register-record-field-accessors
     0 _RECORD_INDEX !
     loop
         _RECORD_INDEX @ _RECORD_COMPILE_FIELDS @ array-len <
@@ -1105,13 +1175,18 @@ deferred compile-next-node
         _RECORD_COMPILE_FIELDS @ _RECORD_INDEX @ array-get record-field-name
         _RECORD_FIELD_NAME !
 
-        _RECORD_FIELD_NAME @ _RECORD_INDEX @ record-getter-instructions
         _RECORD_COMPILE_NAME @ "-" str-cat _RECORD_FIELD_NAME @ str-cat
-        swap emit-generated-word
+        record-word-name
 
-        _RECORD_FIELD_NAME @ _RECORD_INDEX @ record-setter-instructions
+        _RECORD_COMPILE_NAME @ "-" str-cat _RECORD_FIELD_NAME @ str-cat
+        record-current-getter-instruction record-current-accessor-inline
+
         _RECORD_COMPILE_NAME @ "-set-" str-cat _RECORD_FIELD_NAME @ str-cat
-        swap emit-generated-word
+        record-word-name
+
+        _RECORD_COMPILE_NAME @ "-set-" str-cat _RECORD_FIELD_NAME @ str-cat
+        _RECORD_FIELD_NAME @ _RECORD_INDEX @ record-setter-instructions
+        0 array-get record-current-accessor-inline
 
         _RECORD_INDEX @ 1 + _RECORD_INDEX !
     repeat
@@ -1129,7 +1204,7 @@ deferred compile-next-node
     _RECORD_COMPILE_NAME @ "-copy" str-cat
     swap emit-generated-word
 
-    emit-record-field-definitions
+    register-record-field-accessors
 ;
 
 # append-current-record-field ( state -- state )
@@ -1394,7 +1469,9 @@ deferred compile-next-node
 
     # Known user-defined words compile to CALL with their recorded bytecode address.
     else
-        dup 2over swap  user-defined-word? if
+        dup 2over swap user-defined-record-accessor? if
+            over swap get-record-accessor-instruction emit-instruction
+        else dup 2over swap  user-defined-word? if
             over swap dup -rot user-defined-word-address
             # record deferred call if word address points to -1
             # ( state name addr )
@@ -1410,7 +1487,7 @@ deferred compile-next-node
             "PUSH" array-wrap swap array-push emit-instruction
         else
             "Unknown word: " swap show str-cat compiler-panic
-        end end
+        end end end
     end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
@@ -1499,5 +1576,5 @@ deferred compile-next-node
     # missing closer instead of a generic end-of-source block error.
     dup "unclosed block words after end of source" assert-no-open-blocks
     "HALT" array-wrap emit-instruction
-    compiler-instructions array-builder-freeze
+    compiler-state-instructions array-builder-freeze
 ;

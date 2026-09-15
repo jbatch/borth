@@ -16,116 +16,126 @@ import "./array.borth"
 
 # Lexer State
 #
-# Lexer state is stored in this array. `file-path` is carried only for lexer
+# Lexer state is stored in a heap-backed record. `file-path` is carried only for lexer
 # error messages. `index`, `line`, and `col` are zero-based cursor positions
 # while lexing; emitted spans convert line and column numbers to the public
 # one-based form.
 #
-#   [ file-path source index line col tokens spans ]
+#   file-path source index line col tokens spans
 #
 # Accessor and predicate words consume the lexer state they inspect. State
-# update words return a new lexer state with one field changed. The main lexer
-# loop threads that updated state explicitly.
+# update words mutate the lexer-state record and return it. The main lexer loop
+# threads that updated state explicitly.
+
+record lexer-state
+  field file-path 0
+  field source 0
+  field index 0
+  field line 0
+  field col 0
+  field tokens 0
+  field spans 0
+end
 
 # lexer-new ( file-path source -- lexer )
 #
 # Create a lexer for a source string at index 0 with no tokens or spans
 # collected. The file path is used when reporting lexer errors.
 : lexer-new
-  array-new
-  rot array-push        # file-path
-  swap array-push       # source
-  0 array-push          # index
-  0 array-push          # line
-  0 array-push          # col
-  array-builder-new array-push  # tokens
-  array-builder-new array-push  # spans
+  lexer-state-new
+  rot lexer-state-set-file-path
+  swap lexer-state-set-source
+  0 lexer-state-set-index
+  0 lexer-state-set-line
+  0 lexer-state-set-col
+  array-builder-new lexer-state-set-tokens
+  array-builder-new lexer-state-set-spans
 ;
 
 # lexer-file-path ( lexer -- file-path )
 #
 # Return the source path used in lexer error messages.
 : lexer-file-path
-  0 array-get
+  lexer-state-file-path
 ;
 
 # lexer-source ( lexer -- source )
 : lexer-source
-  1 array-get
+  lexer-state-source
 ;
 
 # lexer-index ( lexer -- index )
 : lexer-index
-  2 array-get
+  lexer-state-index
 ;
 
 # lexer-line ( lexer -- line )
 : lexer-line
-  3 array-get
+  lexer-state-line
 ;
 
 # lexer-col ( lexer -- col )
 : lexer-col
-  4 array-get
+  lexer-state-col
 ;
 
 # lexer-tokens ( lexer -- tokens )
 : lexer-tokens
-  5 array-get
+  lexer-state-tokens
 ;
 
 # lexer-spans ( lexer -- spans )
 : lexer-spans
-  6 array-get
+  lexer-state-spans
 ;
 
 # lexer-set-file-path ( lexer file-path -- lexer )
 #
 # Return lexer with a replaced error-reporting file path.
 : lexer-set-file-path
-  0 swap array-set
+  lexer-state-set-file-path
 ;
 
 # lexer-set-source ( lexer source -- lexer )
 #
 # Return lexer with a replaced source.
 : lexer-set-source
-  1 swap array-set
+  lexer-state-set-source
 ;
 
 # lexer-set-index ( lexer index -- lexer )
 #
 # Return lexer with a replaced source index.
 : lexer-set-index
-  2 swap array-set
+  lexer-state-set-index
 ;
 
 # lexer-set-line ( lexer line -- lexer )
 #
 # Return lexer with a replaced zero-based source line.
 : lexer-set-line
-  3 swap array-set
+  lexer-state-set-line
 ;
 
 # lexer-set-col ( lexer col -- lexer )
 #
 # Return lexer with a replaced zero-based source column.
 : lexer-set-col
-  4 swap array-set
+  lexer-state-set-col
 ;
 
 # lexer-set-tokens ( lexer tokens -- lexer )
 #
 # Return lexer with a replaced token array.
 : lexer-set-tokens
-  5 swap array-set
+  lexer-state-set-tokens
 ;
 
 # lexer-set-spans ( lexer spans -- lexer )
 #
 # Return lexer with a replaced span array.
 : lexer-set-spans
-  6 swap array-set
+  lexer-state-set-spans
 ;
 
 # lexer-current-char ( lexer -- char )
@@ -133,7 +143,7 @@ import "./array.borth"
 # Return the one-character string at the current lexer index.
 # Caller must check bounds before calling this word.
 : lexer-current-char
-  dup lexer-source swap lexer-index 1 str-slice
+  dup lexer-state-source swap lexer-state-index 1 str-slice
 ;
 
 # lexer-inc-index ( lexer -- lexer )
@@ -141,30 +151,30 @@ import "./array.borth"
 # Return lexer advanced by one source character.
 : lexer-inc-index
   dup lexer-current-char "\n" = if
-    dup lexer-line 1 + lexer-set-line
-    0 lexer-set-col
+    dup lexer-state-line 1 + lexer-state-set-line
+    0 lexer-state-set-col
   else
-    dup lexer-col 1 + lexer-set-col
+    dup lexer-state-col 1 + lexer-state-set-col
   end
-  dup lexer-index 1 + lexer-set-index
+  dup lexer-state-index 1 + lexer-state-set-index
 ;
 
 # lexer-append-token ( lexer token -- lexer )
 #
 # Return lexer with token appended to its token array.
 : lexer-append-token
-  swap dup lexer-tokens
+  swap dup lexer-state-tokens
     rot array-builder-push
-  lexer-set-tokens
+  lexer-state-set-tokens
 ;
 
 # lexer-append-span ( lexer span -- lexer )
 #
 # Return lexer with span appended to its span array.
 : lexer-append-span
-  swap dup lexer-spans
+  swap dup lexer-state-spans
     rot array-builder-push
-  lexer-set-spans
+  lexer-state-set-spans
 ;
 
 # Lexer Utils
@@ -175,9 +185,9 @@ import "./array.borth"
 # and column. The lexer state itself is consumed.
 : lexer-record-token-start
   array-new
-  over lexer-index array-push # index-start
-  over lexer-line array-push  # line-start
-  over lexer-col array-push   # col-start
+  over lexer-state-index array-push # index-start
+  over lexer-state-line array-push  # line-start
+  over lexer-state-col array-push   # col-start
   nip
 ;
 
@@ -186,10 +196,10 @@ import "./array.borth"
 # Prefix error-msg with the lexed file path and current one-based line/column,
 # then delegate to host panic to stop execution.
 : lexer-panic
-  swap dup lexer-file-path " error: " swap str-cat ":" str-cat
-  over lexer-line 1 + show str-cat
+  swap dup lexer-state-file-path " error: " swap str-cat ":" str-cat
+  over lexer-state-line 1 + show str-cat
   ":" str-cat
-  over lexer-col 1 + show str-cat
+  over lexer-state-col 1 + show str-cat
   ": " str-cat
   rot str-cat
   panic
@@ -201,7 +211,7 @@ import "./array.borth"
 #
 # Return 1 when the lexer index is at or past the end of source.
 : lexer-at-end?
-  dup lexer-source str-len swap lexer-index swap < not
+  dup lexer-state-source str-len swap lexer-state-index swap < not
 ;
 
 # lexer-new-line? ( char -- flag )
@@ -316,7 +326,7 @@ import "./array.borth"
   # ( lexer token-start-record -- token-start-record lexer start )
   dup 0 array-get swap -rot
   # ( token-start-record lexer source start length )
-  over lexer-source swap 2over lexer-index over -
+  over lexer-state-source swap 2over lexer-state-index over -
   # ( token-start-record lexer token )
   str-slice
 
@@ -327,8 +337,8 @@ import "./array.borth"
   -rot array-new
     2over 1 array-get 1 + array-push  # line-start
     rot 2 array-get 1 + array-push    # col-start
-    over lexer-line 1 + array-push    # line-end
-    over lexer-col 1 + array-push     # col-end
+    over lexer-state-line 1 + array-push    # line-end
+    over lexer-state-col 1 + array-push     # col-end
   rot swap
 ;
 
@@ -419,7 +429,7 @@ import "./array.borth"
       lexer-skip-whitespace
     end
   repeat
-  dup lexer-tokens swap lexer-spans
+  dup lexer-state-tokens swap lexer-state-spans
   array-builder-freeze swap array-builder-freeze swap
 ;
 

@@ -124,7 +124,7 @@ test("record accessors validate the record shape at runtime", () => {
 
         point-new line-x print
       `),
-    /RECORD_GET expected record line, got record point/,
+    /RECORD_GET_FIELD expected record line, got record point/,
   );
 });
 
@@ -181,11 +181,11 @@ test("Borth compiler emits generated record word bytecode", () => {
         compile-nodes
       ;
 
-      "record point field x 0 end point-new point-x"
+      "record point field x 0 end point-new 10 point-set-x point-x"
         test-compile-src show print
     `),
     [
-      '[["JUMP" 7] ["PUSH" "point"] ["ARRAY_NEW"] ["PUSH" 0] ["ARRAY_PUSH"] ["RECORD_NEW"] ["RET"] ["JUMP" 11] ["PUSH" "point"] ["RECORD_COPY"] ["RET"] ["JUMP" 17] ["PUSH" "point"] ["PUSH" "x"] ["PUSH" 0] ["RECORD_GET"] ["RET"] ["JUMP" 23] ["PUSH" "point"] ["PUSH" "x"] ["PUSH" 0] ["RECORD_SET"] ["RET"] ["CALL" 1] ["CALL" 12] ["HALT"]]',
+      '[["JUMP" 7] ["PUSH" "point"] ["ARRAY_NEW"] ["PUSH" 0] ["ARRAY_PUSH"] ["RECORD_NEW"] ["RET"] ["JUMP" 11] ["PUSH" "point"] ["RECORD_COPY"] ["RET"] ["CALL" 1] ["PUSH" 10] ["RECORD_SET_FIELD" "point" "x" 0] ["RECORD_GET_FIELD" "point" "x" 0] ["HALT"]]',
     ],
   );
 });
@@ -241,8 +241,8 @@ test("C emitter writes and runs compiler-generated native records", (t) => {
 
     const generated = readFileSync(sourcePath, "utf8");
     assert.match(generated, /borth_op_record_new\(rt\);/);
-    assert.match(generated, /borth_op_record_set\(rt\);/);
-    assert.match(generated, /borth_op_record_get\(rt\);/);
+    assert.match(generated, /borth_op_record_set_field\(rt, "point", "x", 0\);/);
+    assert.match(generated, /borth_op_record_get_field\(rt, "point", "x", 0\);/);
 
     if (!compileNativeProgram(t, sourcePath, executablePath)) {
       return;

@@ -26,6 +26,11 @@ export type CompilerState = {
   definitions: Map<string, number>;
   variables: Map<string, number>;
   deferredCalls: Map<string, number[]>;
+  recordAccessors: Map<
+    string,
+    | { op: "RECORD_GET_FIELD"; shape: string; field: string; index: number }
+    | { op: "RECORD_SET_FIELD"; shape: string; field: string; index: number }
+  >;
 };
 
 type RecordField = {
@@ -49,6 +54,7 @@ export function createCompilerState(): CompilerState {
     definitions: new Map(),
     variables: new Map(),
     deferredCalls: new Map(),
+    recordAccessors: new Map(),
   };
 }
 
@@ -469,30 +475,24 @@ function emitRecordDefinitions(
 
   for (let index = 0; index < fields.length; index += 1) {
     const field = fields[index];
-    emitGeneratedDefinition(
-      state,
-      `${recordName}-${field.name}`,
-      field.node,
-      [
-        { op: "PUSH", value: recordName },
-        { op: "PUSH", value: field.name },
-        { op: "PUSH", value: index },
-        { op: "RECORD_GET" },
-      ],
-      options,
-    );
-    emitGeneratedDefinition(
-      state,
-      `${recordName}-set-${field.name}`,
-      field.node,
-      [
-        { op: "PUSH", value: recordName },
-        { op: "PUSH", value: field.name },
-        { op: "PUSH", value: index },
-        { op: "RECORD_SET" },
-      ],
-      options,
-    );
+    const getterName = `${recordName}-${field.name}`;
+    const setterName = `${recordName}-set-${field.name}`;
+
+    state.definitions.set(getterName, state.instructions.length);
+    state.recordAccessors.set(getterName, {
+      op: "RECORD_GET_FIELD",
+      shape: recordName,
+      field: field.name,
+      index,
+    });
+
+    state.definitions.set(setterName, state.instructions.length);
+    state.recordAccessors.set(setterName, {
+      op: "RECORD_SET_FIELD",
+      shape: recordName,
+      field: field.name,
+      index,
+    });
   }
 }
 
@@ -912,6 +912,12 @@ function compileWord(
 
   if (builtIn !== undefined) {
     return withSource(builtIn, node, options);
+  }
+
+  const recordAccessor = state.recordAccessors.get(name);
+
+  if (recordAccessor !== undefined) {
+    return withSource(recordAccessor, node, options);
   }
 
   const target = state.definitions.get(name);

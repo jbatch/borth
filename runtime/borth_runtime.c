@@ -159,6 +159,8 @@ typedef struct {
   size_t record_copy;
   size_t record_get;
   size_t record_set;
+  size_t record_get_field;
+  size_t record_set_field;
   size_t read_text_file;
   size_t read_text_file_bytes;
   size_t write_text_file;
@@ -371,6 +373,8 @@ static void borth_profile_print(BorthRuntime *runtime) {
   fprintf(stderr, "record-copy: %zu\n", runtime->profile.record_copy);
   fprintf(stderr, "record-get: %zu\n", runtime->profile.record_get);
   fprintf(stderr, "record-set: %zu\n", runtime->profile.record_set);
+  fprintf(stderr, "record-get-field: %zu\n", runtime->profile.record_get_field);
+  fprintf(stderr, "record-set-field: %zu\n", runtime->profile.record_set_field);
   fprintf(
       stderr,
       "read-text-file: %zu bytes=%zu\n",
@@ -969,6 +973,27 @@ static BorthRecord *borth_pop_record(
   }
 
   if (!borth_strings_equal(value.as.record->shape, expected_shape)) {
+    borth_panic(op);
+  }
+
+  return value.as.record;
+}
+
+static BorthRecord *borth_pop_record_cstr(
+    BorthRuntime *runtime,
+    const char *expected_shape,
+    const char *op) {
+  BorthValue value = borth_stack_pop(runtime, op);
+
+  if (value.kind != BORTH_VALUE_RECORD) {
+    borth_panic(op);
+  }
+
+  BorthString *actual_shape = value.as.record->shape;
+  size_t expected_len = strlen(expected_shape);
+
+  if (actual_shape->len != expected_len ||
+      memcmp(actual_shape->chars, expected_shape, expected_len) != 0) {
     borth_panic(op);
   }
 
@@ -2165,6 +2190,57 @@ void borth_op_record_set(BorthRuntime *runtime) {
 
   if (runtime->profile.enabled) {
     runtime->profile.record_set += 1;
+  }
+
+  record->fields[index] = value;
+  borth_stack_push(runtime, borth_value_record(record));
+}
+
+void borth_op_record_get_field(
+    BorthRuntime *runtime, const char *shape, const char *field, long index) {
+  if (index < 0) {
+    borth_panic("RECORD_GET_FIELD requires index to be a non-negative integer");
+  }
+
+  BorthRecord *record = borth_pop_record_cstr(
+      runtime,
+      shape,
+      "RECORD_GET_FIELD requires matching record");
+
+  if ((size_t)index >= record->len) {
+    borth_panic("RECORD_GET_FIELD field is missing from record");
+  }
+
+  (void)field;
+
+  if (runtime->profile.enabled) {
+    runtime->profile.record_get_field += 1;
+  }
+
+  borth_stack_push(runtime, record->fields[index]);
+}
+
+void borth_op_record_set_field(
+    BorthRuntime *runtime, const char *shape, const char *field, long index) {
+  if (index < 0) {
+    borth_panic("RECORD_SET_FIELD requires index to be a non-negative integer");
+  }
+
+  BorthValue value =
+      borth_stack_pop(runtime, "RECORD_SET_FIELD requires a value on the stack");
+  BorthRecord *record = borth_pop_record_cstr(
+      runtime,
+      shape,
+      "RECORD_SET_FIELD requires matching record");
+
+  if ((size_t)index >= record->len) {
+    borth_panic("RECORD_SET_FIELD field is missing from record");
+  }
+
+  (void)field;
+
+  if (runtime->profile.enabled) {
+    runtime->profile.record_set_field += 1;
   }
 
   record->fields[index] = value;

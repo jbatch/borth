@@ -54,6 +54,28 @@ test("C emitter can return generated source as a string", () => {
   assert.match(output[0], /#include "borth_runtime\.h"/);
   assert.match(output[0], /borth_op_push_int\(rt, 7\);/);
   assert.match(output[0], /borth_op_print\(rt\);/);
+  assert.match(output[0], /borth_ip_0:/);
+  assert.doesNotMatch(output[0], /borth_ip_1:/);
+  assert.doesNotMatch(output[0], /case [0-9]+:/);
+});
+
+test("C emitter returns from a final CALL to program end", () => {
+  const output = [];
+
+  run(
+    `
+      import "lib/c-emitter.borth"
+
+      array-new
+        array-new "CALL" array-push 0 array-push array-push
+      emit-c-program-source print
+    `,
+    { write: (value) => output.push(value) },
+  );
+
+  assert.equal(output.length, 1);
+  assert.match(output[0], /case 1: goto borth_program_end;/);
+  assert.doesNotMatch(output[0], /borth_ip_1:/);
 });
 
 test("C emitter writes and runs a tiny native integer program", (t) => {

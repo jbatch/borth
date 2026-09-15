@@ -11,59 +11,66 @@ import "./array.borth"
 #   ["RET"]
 #   ["HALT"]
 #
-# The VM state is represented by this shape:
+# The VM state is represented by a heap-backed record with this shape:
 #
-#   [instructions ip stack call-stack memory]
+#   instructions ip stack call-stack memory
 #
-# The helpers below treat that array like a small object. Keeping state access
-# behind words makes the main loop easier to read and gives us one place to
-# change the representation later.
+# The helpers below keep state access behind words so the main loop stays
+# readable as the representation changes.
+
+record vm-state
+    field instructions 0
+    field ip 0
+    field stack 0
+    field call-stack 0
+    field memory 0
+end
 
 # vm-new ( instructions -- vm )
 #
 # Create a new VM state with ip = 0, an empty value stack, an empty call stack,
 # and empty memory.
 : vm-new
-    array-new swap 
-    array-push 
-    0 array-push
-    array-new array-push
-    array-new array-push
-    array-new array-push
+    vm-state-new
+    swap vm-state-set-instructions
+    0 vm-state-set-ip
+    array-new vm-state-set-stack
+    array-new vm-state-set-call-stack
+    array-new vm-state-set-memory
 ;
 
 # vm-instructions ( vm -- instructions )
 : vm-instructions
-    0 array-get
+    vm-state-instructions
 ;
 
 # vm-ip ( vm -- ip )
 : vm-ip
-    1 array-get
+    vm-state-ip
 ;
 
 # vm-stack ( vm -- stack )
 : vm-stack
-    2 array-get
+    vm-state-stack
 ;
 
 # vm-call-stack ( vm -- call-stack )
 : vm-call-stack
-    3 array-get
+    vm-state-call-stack
 ;
 
 # vm-memory ( vm -- memory )
 #
 # Return the VM memory array. Variables are stored as values in this array.
 : vm-memory
-    4 array-get
+    vm-state-memory
 ;
 
 # vm-current-instruction ( vm -- vm instruction )
 #
 # Leave the VM in place and push the instruction at its current ip.
 : vm-current-instruction
-    dup vm-instructions over vm-ip array-get
+    dup vm-state-instructions over vm-state-ip array-get
 ;
 
 # vm-value-at-memory-address ( vm addr -- value )
@@ -71,7 +78,7 @@ import "./array.borth"
 # Read the value stored in VM memory at addr.
 : vm-value-at-memory-address
     # ( addr memory )
-    swap vm-memory
+    swap vm-state-memory
     # validate addr is valid memory address
     2dup array-len < not if
         "Cannot access memory out of bounds" panic
@@ -84,28 +91,28 @@ import "./array.borth"
 #
 # Return a copy of vm with a replaced instruction pointer.
 : vm-set-ip
-    1 swap array-set
+    vm-state-set-ip
 ;
 
 # vm-inc-ip       ( vm -- vm )
 #
 # Advance the instruction pointer by one.
 : vm-inc-ip
-    dup vm-ip 1 + vm-set-ip
+    dup vm-state-ip 1 + vm-state-set-ip
 ;
 
 # vm-set-stack    ( vm stack -- vm )
 #
 # Return a copy of vm with a replaced value stack.
 : vm-set-stack
-     2 swap array-set
+    vm-state-set-stack
 ;
 
 # vm-set-memory    ( vm memory -- vm )
 #
 # Return a copy of vm with a replaced memory.
 : vm-set-memory
-     4 swap array-set
+    vm-state-set-memory
 ;
 
 # vm-stack-push    ( vm value -- vm )
@@ -113,21 +120,21 @@ import "./array.borth"
 # Push a value onto the VM value stack.
 : vm-stack-push
     # (  vm stack value)
-    swap dup vm-stack rot array-push vm-set-stack
+    swap dup vm-state-stack rot array-push vm-state-set-stack
 ;
 
 # vm-set-call-stack ( vm call-stack -- vm )
 #
 # Return a copy of vm with a replaced call stack.
 : vm-set-call-stack
-     3 swap array-set
+    vm-state-set-call-stack
 ;
 
 # vm-call-stack-push ( vm value -- vm )
 #
 # Push a value onto the VM call stack.
 : vm-call-stack-push
-     swap dup vm-call-stack rot array-push vm-set-call-stack
+     swap dup vm-state-call-stack rot array-push vm-state-set-call-stack
 ;
 
 # vm-call-stack-pop ( vm -- vm value )
@@ -135,11 +142,11 @@ import "./array.borth"
 # Pop a value off the VM call stack.
 # Panics with the same error as the TypeScript VM when RET has nowhere to go.
 : vm-call-stack-pop
-     dup vm-call-stack  
+     dup vm-state-call-stack
      dup array-len 0 = if
         "RET requires a return address" panic
      end
-     array-pop -rot vm-set-call-stack swap
+     array-pop -rot vm-state-set-call-stack swap
 ;
 
 # vm-memory-update ( vm addr value -- vm )
@@ -148,7 +155,7 @@ import "./array.borth"
 : vm-memory-update
     -rot
     # ( value vm addr memory )
-    over vm-memory
+    over vm-state-memory
     # validate addr is valid memory address
     2dup array-len < not if
         "Cannot write to memory out of bounds" panic
@@ -156,7 +163,7 @@ import "./array.borth"
     # ( value vm addr memory -- vm memory addr value )
     swap 3 roll
     array-set
-    vm-set-memory
+    vm-state-set-memory
 ;
 
 # assert-stack-length ( vm expected word -- vm )
@@ -164,7 +171,7 @@ import "./array.borth"
 # Panic if the VM value stack has fewer than expected values.
 : assert-stack-length
     # ( vm stack expected word )
-    rot dup vm-stack 3 roll 3 roll
+    rot dup vm-state-stack 3 roll 3 roll
     # ( vm word expected stack-len )
     -rot swap array-len
 
@@ -215,12 +222,12 @@ import "./array.borth"
 # into the VM before returning the operands.
 : prepare-binary-operation
     2 swap assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
     # ( vm stack a b )
     stack-pop-2
     # ( vm a b )
     # (  a b vm stack )
-    3 roll 3 roll vm-set-stack -rot
+    3 roll 3 roll vm-state-set-stack -rot
 ;
 
 # execute-drop ( vm -- vm )
@@ -229,9 +236,9 @@ import "./array.borth"
 # Validate stack has at least 1 value: "DROP requires a value on the stack"
 : execute-drop
     1 "DROP" assert-stack-length
-    dup vm-stack 
-        array-pop drop 
-    vm-set-stack
+    dup vm-state-stack
+        array-pop drop
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -241,9 +248,9 @@ import "./array.borth"
 # Validate stack has at least 1 value: "DUP requires a value on the stack"
 : execute-dup
     1 "DUP" assert-stack-length
-    dup vm-stack 
-        array-pop dup -rot array-push swap array-push 
-    vm-set-stack
+    dup vm-state-stack
+        array-pop dup -rot array-push swap array-push
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -253,9 +260,9 @@ import "./array.borth"
 # Validate stack has at least 2 values: "SWAP requires 2 values on the stack"
 : execute-swap
     2 "SWAP" assert-stack-length
-    dup vm-stack 
+    dup vm-state-stack
         array-pop swap array-pop -rot swap array-push swap array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -265,9 +272,9 @@ import "./array.borth"
 # Validate stack has at least 2 values: "OVER requires 2 values on the stack"
 : execute-over
     2 "OVER" assert-stack-length
-    dup vm-stack 
+    dup vm-state-stack
         array-pop swap array-pop dup -rot array-push rot array-push swap array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -277,10 +284,10 @@ import "./array.borth"
 # Validate stack has at least 3 values: "ROT requires 3 values on the stack"
 : execute-rot
     3 "ROT" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop swap array-pop swap array-pop
         -rot swap array-push rot array-push swap array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -294,12 +301,12 @@ import "./array.borth"
 #   [A B C D 3] -> [B C D A]
 : execute-roll
     2 "ROLL" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         # Remove the depth from the interpreted stack before reshaping values.
         # ( depth vm stack )
         array-pop 1 + -rot
-    vm-set-stack
-    dup vm-stack
+    vm-state-set-stack
+    dup vm-state-stack
         # ( vm stack depth )
         rot
         # Check there are enough values on the stack to do the roll.
@@ -331,7 +338,7 @@ import "./array.borth"
             # ( vm A stack array )
         repeat
         drop swap array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -345,12 +352,12 @@ import "./array.borth"
 #   [A B C D 3] -> [D A B C]
 : execute-roll-reverse
     2 "ROLL_REVERSE" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         # Remove the depth from the interpreted stack before reshaping values.
         # ( depth vm stack )
         array-pop 1 + -rot
-    vm-set-stack
-    dup vm-stack
+    vm-state-set-stack
+    dup vm-state-stack
         # ( vm stack depth )
         rot
         # Check there are enough values on the stack to do the reverse roll.
@@ -388,7 +395,7 @@ import "./array.borth"
             # ( vm stack array )
         repeat
         drop
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -397,10 +404,10 @@ import "./array.borth"
 # Execute ALLOC_VARIABLE by appending one zero-initialized cell to VM memory.
 # This does not push the new address; variable names push addresses when used.
 : execute-allocate-variable
-    dup vm-memory
+    dup vm-state-memory
         # push 0 to end of memory
         0 array-push  
-    vm-set-memory
+    vm-state-set-memory
     vm-inc-ip
 ;
 
@@ -411,14 +418,14 @@ import "./array.borth"
 : execute-store-variable
     2 "STORE" assert-stack-length
 
-    dup vm-stack
+    dup vm-state-stack
         # pop address and value off the stack
         # ( vm stack addr value  )
         array-pop swap array-pop rot swap
         # ( stack vm addr value )
         3 roll -rot
         vm-memory-update swap
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -429,13 +436,13 @@ import "./array.borth"
 : execute-fetch-variable
     1 "FETCH" assert-stack-length
 
-     dup dup vm-stack
+     dup dup vm-state-stack
         # pop address off the stack
         # ( vm vm stack addr )
         array-pop
         # ( vm stack )
         rot swap vm-value-at-memory-address array-push 
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -446,9 +453,9 @@ import "./array.borth"
 # Validate stack has at least 1 value: "PRINT requires a value on the stack"
 : execute-print
     1 "PRINT" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop print
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -456,7 +463,7 @@ import "./array.borth"
 #
 # Execute PRINT_STACK by printing the VM stack state and advancing ip.
 : execute-print-stack
-    dup vm-stack show print
+    dup vm-state-stack show print
     vm-inc-ip
 ;
 
@@ -466,9 +473,9 @@ import "./array.borth"
 # Validate stack has at least 1 value: "SHOW requires a value on the stack"
 : execute-show
     1 "SHOW" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop show array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -479,9 +486,9 @@ import "./array.borth"
 : execute-panic
     1 "PANIC" assert-stack-length
     # TODO validate top of the stack is a string
-    dup vm-stack
+    dup vm-state-stack
         array-pop panic
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -491,9 +498,9 @@ import "./array.borth"
 # random integer in the same range as the outer `random` word.
 : execute-random
     1 "RANDOM" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop random array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -502,9 +509,9 @@ import "./array.borth"
 # Execute CLOCK_MS by appending the host millisecond clock value to the
 # interpreted stack.
 : execute-clock-ms
-    dup vm-stack
+    dup vm-state-stack
         clock-ms array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -514,9 +521,9 @@ import "./array.borth"
 # Validate stack has at least 1 value: "STR_LEN requires a value on the stack"
 : execute-str-len
     1 "STR_LEN" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop str-len array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -526,9 +533,9 @@ import "./array.borth"
 # Validate stack has at least 2 values: "STR_CAT requires 2 values on the stack"
 : execute-str-cat
     2 "STR_CAT" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 str-cat array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -538,9 +545,9 @@ import "./array.borth"
 # Validate stack has at least 3 values: "STR_SLICE requires 3 values on the stack"
 : execute-str-slice
     3 "STR_SLICE" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-3 str-slice array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -551,9 +558,9 @@ import "./array.borth"
 # Validate stack has at least 3 values: "STR_INDEX_OF requires 3 values on the stack"
 : execute-str-index-of
     3 "STR_INDEX_OF" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-3 str-index-of array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -562,9 +569,9 @@ import "./array.borth"
 # Execute STR_BUILDER_NEW by appending a new string builder to the interpreted
 # stack.
 : execute-str-builder-new
-    dup vm-stack
+    dup vm-state-stack
         str-builder-new array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -573,9 +580,9 @@ import "./array.borth"
 # Execute STR_BUILDER_PUSH by appending one string to a string builder.
 : execute-str-builder-push
     2 "STR_BUILDER_PUSH" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 str-builder-push array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -584,9 +591,9 @@ import "./array.borth"
 # Execute STR_BUILDER_LEN by replacing a builder with its accumulated length.
 : execute-str-builder-len
     1 "STR_BUILDER_LEN" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop str-builder-len array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -595,9 +602,9 @@ import "./array.borth"
 # Execute STR_BUILDER_FREEZE by replacing a builder with its finished string.
 : execute-str-builder-freeze
     1 "STR_BUILDER_FREEZE" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop str-builder-freeze array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -605,9 +612,9 @@ import "./array.borth"
 #
 # Execute READ_LINE by appending one host input line to the interpreted stack.
 : execute-read-line
-    dup vm-stack
+    dup vm-state-stack
         read-line array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -616,9 +623,9 @@ import "./array.borth"
 # Execute READ_INT by appending one parsed host input integer to the interpreted
 # stack.
 : execute-read-int
-    dup vm-stack
+    dup vm-state-stack
         read-int array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -628,9 +635,9 @@ import "./array.borth"
 # file's text contents.
 : execute-read-text-file
     1 "READ_TEXT_FILE" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop read-text-file array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -640,9 +647,9 @@ import "./array.borth"
 # and replacing the file with those contents.
 : execute-write-text-file
     2 "WRITE_TEXT_FILE" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 write-text-file
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -652,9 +659,9 @@ import "./array.borth"
 # and appending those contents to the file.
 : execute-append-text-file
     2 "APPEND_TEXT_FILE" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 append-text-file
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -665,9 +672,9 @@ import "./array.borth"
 # numeric flag describing whether the host can see that file.
 : execute-file-exist
     1 "FILE_EXISTS" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop file-exist? array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -677,10 +684,10 @@ import "./array.borth"
 # result: value followed by found flag.
 : execute-env
     1 "ENV" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         # ( vm stack value found? )
         array-pop env -rot array-push swap array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -689,9 +696,9 @@ import "./array.borth"
 # Execute CWD by appending the host current working directory to the interpreted
 # stack.
 : execute-cwd
-    dup vm-stack
+    dup vm-state-stack
         cwd array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -701,9 +708,9 @@ import "./array.borth"
 # containing directory.
 : execute-path-dirname
     1 "PATH_DIRNAME" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop path-dirname array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -713,26 +720,26 @@ import "./array.borth"
 # resolved host path.
 : execute-path-resolve
     2 "PATH_RESOLVE" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         # ( vm stack A B)
         stack-pop-2
         path-resolve array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-args ( vm -- vm )
 : execute-args
-    dup vm-stack
+    dup vm-state-stack
         args array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 #
 : execute-run-command
     2 "RUN_COMMAND" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         # ( vm stack A B)
         stack-pop-2
         # ( vm stack exit-code stdout stderr )
@@ -740,13 +747,13 @@ import "./array.borth"
         3 roll 3 roll array-push
         rot array-push
         swap array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 : execute-run-exit
     1 "EXIT" assert-stack-length
-    dup vm-stack array-pop exit
+    dup vm-state-stack array-pop exit
 ;
 
 
@@ -754,9 +761,9 @@ import "./array.borth"
 #
 # Execute ARRAY_NEW by pushing an empty array onto the stack.
 : execute-array-new
-    dup vm-stack
+    dup vm-state-stack
         array-new array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -766,9 +773,9 @@ import "./array.borth"
 # Validate stack has at least 1 value: "ARRAY_LEN requires a value on the stack"
 : execute-array-len
     1 "ARRAY_LEN" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop array-len array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -778,9 +785,9 @@ import "./array.borth"
 # Validate stack has at least 2 values: "ARRAY_PUSH requires 2 values on the stack"
 : execute-array-push
     2 "ARRAY_PUSH" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 array-push array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
@@ -790,90 +797,114 @@ import "./array.borth"
 # Validate stack has at least 2 values: "ARRAY_GET requires 2 values on the stack"
 : execute-array-get
     2 "ARRAY_GET" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 array-get array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-map-new ( vm -- vm )
 : execute-map-new
-    dup vm-stack
+    dup vm-state-stack
         map-new array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-map-get ( vm -- vm )
 : execute-map-get
     2 "MAP_GET" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 map-get -rot array-push swap array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-map-has ( vm -- vm )
 : execute-map-has
     2 "MAP_HAS" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 map-has? array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-map-set ( vm -- vm )
 : execute-map-set
     3 "MAP_SET" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-3 map-set array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-map-size ( vm -- vm )
 : execute-map-size
     1 "MAP_SIZE" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         array-pop map-size array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-record-new ( vm -- vm )
 : execute-record-new
     2 "RECORD_NEW" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 record-new array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-record-copy ( vm -- vm )
 : execute-record-copy
     2 "RECORD_COPY" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-2 record-copy array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-record-get ( vm -- vm )
 : execute-record-get
     4 "RECORD_GET" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-4 record-get array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
 ;
 
 # execute-record-set ( vm -- vm )
 : execute-record-set
     5 "RECORD_SET" assert-stack-length
-    dup vm-stack
+    dup vm-state-stack
         stack-pop-5 record-set array-push
-    vm-set-stack
+    vm-state-set-stack
     vm-inc-ip
+;
+
+# execute-record-get-field ( vm instruction -- vm )
+: execute-record-get-field
+    over 1 "RECORD_GET_FIELD" assert-stack-length drop
+    over vm-state-stack
+        over 1 array-get array-push
+        over 2 array-get array-push
+        over 3 array-get array-push
+    swap drop
+    vm-state-set-stack
+    execute-record-get
+;
+
+# execute-record-set-field ( vm instruction -- vm )
+: execute-record-set-field
+    over 2 "RECORD_SET_FIELD" assert-stack-length drop
+    over vm-state-stack
+        over 1 array-get array-push
+        over 2 array-get array-push
+        over 3 array-get array-push
+    swap drop
+    vm-state-set-stack
+    execute-record-set
 ;
 
 # execute-jump ( vm jumpAddr -- vm )
@@ -881,7 +912,7 @@ import "./array.borth"
 # Unconditionally set the instruction pointer to jumpAddr. Jumps do not advance
 # ip after setting it.
 : execute-jump
-    vm-set-ip
+    vm-state-set-ip
 ;
 
 # execute-jump-if-false ( vm falseJumpAddr -- vm )
@@ -891,15 +922,15 @@ import "./array.borth"
 : execute-jump-if-false
     swap 1 "JUMP_IF_FALSE" assert-stack-length
     # ( falseJumpAddr vm stack )
-    dup vm-stack 
+    dup vm-state-stack
         array-pop 0 = if
             # ( stack vm )
-            -rot swap vm-set-ip
+            -rot swap vm-state-set-ip
         else
             # ( stack vm )
             -rot swap drop vm-inc-ip
         end
-    swap vm-set-stack
+    swap vm-state-set-stack
 ;
 
 # execute-call ( vm target -- vm )
@@ -907,8 +938,8 @@ import "./array.borth"
 # Push the next instruction address to the call stack, then set ip to target.
 # Calls do not advance ip after setting it.
 : execute-call
-    swap dup vm-ip 1 + vm-call-stack-push swap
-    vm-set-ip
+    swap dup vm-state-ip 1 + vm-call-stack-push swap
+    vm-state-set-ip
 ;
 
 # execute-ret ( vm -- vm )
@@ -916,7 +947,7 @@ import "./array.borth"
 # Pop the most recent return address from the call stack and jump back to it.
 # RET does not advance ip after setting it.
 : execute-ret
-    vm-call-stack-pop vm-set-ip
+    vm-call-stack-pop vm-state-set-ip
 ;
 
 # execute-instruction ( vm instruction -- vm haltedFlag )
@@ -1030,6 +1061,10 @@ import "./array.borth"
         drop execute-record-get 0
     else dup "RECORD_SET" = if drop
         drop execute-record-set 0
+    else dup "RECORD_GET_FIELD" = if drop
+        execute-record-get-field 0
+    else dup "RECORD_SET_FIELD" = if drop
+        execute-record-set-field 0
     else dup "ADD" = if nip
         prepare-binary-operation + vm-stack-push vm-inc-ip 0
     else dup "SUB" = if nip
@@ -1063,7 +1098,7 @@ import "./array.borth"
         drop 1
     else
         "Unknown instruction: " over show str-cat panic
-    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
+    end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end
 ;
 
 # run-bytecode ( instructions -- stack )
@@ -1076,5 +1111,5 @@ import "./array.borth"
         vm-current-instruction
         execute-instruction
     until
-    vm-stack
+    vm-state-stack
 ;

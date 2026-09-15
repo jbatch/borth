@@ -40,6 +40,8 @@ type InstructionData =
   | { op: "RECORD_COPY" }
   | { op: "RECORD_GET" }
   | { op: "RECORD_SET" }
+  | { op: "RECORD_GET_FIELD"; shape: string; field: string; index: number }
+  | { op: "RECORD_SET_FIELD"; shape: string; field: string; index: number }
   | { op: "SHOW" }
   | { op: "ARRAY_NEW" }
   | { op: "ARRAY_PUSH" }

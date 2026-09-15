@@ -1,7 +1,6 @@
 import "../lib/lexer.borth"
 import "../lib/parser.borth"
 import "../lib/compiler.borth"
-import "../lib/vm.borth"
 import "../lib/c-emitter.borth"
 import "../lib/args.borth"
 
@@ -217,6 +216,7 @@ end
 
 
 # run example file
+# The run-bytecode experiments below also require importing ../lib/vm.borth.
 # "examples/string-escape.borth" dup read-text-file over swap lexer-lex-src-file-with-spans swap parse-tokens swap compile-nodes run-bytecode .s
 
 

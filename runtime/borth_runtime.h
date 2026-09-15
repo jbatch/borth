@@ -52,6 +52,10 @@ void borth_op_record_new(BorthRuntime *runtime);
 void borth_op_record_copy(BorthRuntime *runtime);
 void borth_op_record_get(BorthRuntime *runtime);
 void borth_op_record_set(BorthRuntime *runtime);
+void borth_op_record_get_field(
+    BorthRuntime *runtime, const char *shape, const char *field, long index);
+void borth_op_record_set_field(
+    BorthRuntime *runtime, const char *shape, const char *field, long index);
 void borth_op_alloc_variable(BorthRuntime *runtime);
 void borth_op_fetch(BorthRuntime *runtime);
 void borth_op_store(BorthRuntime *runtime);

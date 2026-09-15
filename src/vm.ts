@@ -73,6 +73,8 @@ type VmProfile = {
   recordCopy: number;
   recordGet: number;
   recordSet: number;
+  recordGetField: number;
+  recordSetField: number;
   readTextFile: number;
   readTextFileBytes: number;
   writeTextFile: number;
@@ -416,6 +418,39 @@ export function execute(
             profile.recordSet += 1;
           }
           setRecordField(record, index, field, value, "RECORD_SET");
+          state.stack.push(record);
+          state.ip += 1;
+          break;
+        }
+        case "RECORD_GET_FIELD": {
+          const record = popRecord(state, "RECORD_GET_FIELD", instruction.shape);
+          if (profile !== undefined) {
+            profile.recordGetField += 1;
+          }
+          state.stack.push(
+            getRecordField(
+              record,
+              instruction.index,
+              instruction.field,
+              "RECORD_GET_FIELD",
+            ),
+          );
+          state.ip += 1;
+          break;
+        }
+        case "RECORD_SET_FIELD": {
+          const value = pop(state, "RECORD_SET_FIELD");
+          const record = popRecord(state, "RECORD_SET_FIELD", instruction.shape);
+          if (profile !== undefined) {
+            profile.recordSetField += 1;
+          }
+          setRecordField(
+            record,
+            instruction.index,
+            instruction.field,
+            value,
+            "RECORD_SET_FIELD",
+          );
           state.stack.push(record);
           state.ip += 1;
           break;
@@ -874,6 +909,8 @@ function createVmProfile(): VmProfile | undefined {
     recordCopy: 0,
     recordGet: 0,
     recordSet: 0,
+    recordGetField: 0,
+    recordSetField: 0,
     readTextFile: 0,
     readTextFileBytes: 0,
     writeTextFile: 0,
@@ -920,6 +957,8 @@ function printVmProfile(profile: VmProfile | undefined): void {
   console.error(`record-copy: ${profile.recordCopy}`);
   console.error(`record-get: ${profile.recordGet}`);
   console.error(`record-set: ${profile.recordSet}`);
+  console.error(`record-get-field: ${profile.recordGetField}`);
+  console.error(`record-set-field: ${profile.recordSetField}`);
   console.error(
     `read-text-file: ${profile.readTextFile} bytes=${profile.readTextFileBytes}`,
   );
