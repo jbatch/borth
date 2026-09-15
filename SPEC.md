@@ -1261,6 +1261,14 @@ Compiler library decision:
   the instruction array through every helper. This keeps the stack shape
   manageable as control-flow words need to remember and patch earlier
   instruction indexes.
+- Record declarations use a short-lived `record-compile-context` record for the
+  compiler reference, record name, accumulated fields, generated names, and
+  loop cursor. Generated callable words use a separate short-lived
+  `generated-word-context`. These contexts keep scratch state explicit and
+  re-entrant instead of storing an in-progress declaration in global variable
+  cells.
+- Record field names are accumulated in a map while parsing the declaration, so
+  duplicate-field checks do not repeatedly scan the field array.
 - `compiler-instructions` stores the emitted instruction array for the current
   compilation.
 - `compiler-block-stack` stores unresolved control-flow frames. Current frame

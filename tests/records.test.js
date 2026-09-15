@@ -190,6 +190,50 @@ test("Borth compiler emits generated record word bytecode", () => {
   );
 });
 
+test("Borth compiler rejects duplicate record fields", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+
+        1 SKIP_PRELUDE !
+
+        : test-compile-src
+          "<test>" swap over swap lexer-lex-src-file-with-spans
+          swap parse-tokens swap
+          compile-nodes
+        ;
+
+        "record point field x 0 field x 1 end" test-compile-src
+      `),
+    /duplicate field in record point: x/,
+  );
+});
+
+test("Borth compiler rejects generated record word collisions", () => {
+  assert.throws(
+    () =>
+      outputOf(`
+        import "lib/lexer.borth"
+        import "lib/parser.borth"
+        import "lib/compiler.borth"
+
+        1 SKIP_PRELUDE !
+
+        : test-compile-src
+          "<test>" swap over swap lexer-lex-src-file-with-spans
+          swap parse-tokens swap
+          compile-nodes
+        ;
+
+        "record point field new 0 end" test-compile-src
+      `),
+    /word already defined: point-new/,
+  );
+});
+
 test("Borth VM executes record bytecode compiled by the Borth compiler", () => {
   assert.deepEqual(
     outputOf(`

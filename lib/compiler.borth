@@ -49,20 +49,48 @@ variable COMPILER_DEBUG
 # prelude definitions.
 variable SKIP_PRELUDE
 
-variable _RECORD_COMPILE_NAME
-variable _RECORD_COMPILE_FIELDS
-variable _RECORD_COMPILE_DONE
-variable _RECORD_FIELD_NAME
-variable _RECORD_FIELD_DEFAULT
-variable _RECORD_GENERATED_NAMES
-variable _RECORD_INDEX
-variable _RECORD_FIND_FIELDS
-variable _RECORD_FIND_NAME
-variable _RECORD_FIND_FOUND
-variable _GEN_WORD_NAME
-variable _GEN_WORD_INSTRUCTIONS
-variable _GEN_WORD_SKIP_INDEX
-variable _GEN_WORD_INDEX
+# Temporary state used while compiling one record declaration. Keeping the
+# compiler reference here makes the record helpers explicit and re-entrant
+# without threading a wide pair of state objects through every stack effect.
+record record-compile-context
+    field compiler 0
+    field name ""
+    field fields 0
+    field field-names 0
+    field generated-names 0
+    field current-field-name ""
+    field current-field-default 0
+    field generated-instructions 0
+    field index 0
+end
+
+# new-record-compile-context ( compiler name -- context )
+: new-record-compile-context
+    swap record-compile-context-new
+    swap record-compile-context-set-compiler
+    swap record-compile-context-set-name
+    array-new record-compile-context-set-fields
+    map-new record-compile-context-set-field-names
+    map-new record-compile-context-set-generated-names
+    array-new record-compile-context-set-generated-instructions
+;
+
+# Temporary state used while emitting one generated callable word.
+record generated-word-context
+    field compiler 0
+    field name ""
+    field instructions 0
+    field skip-index 0
+    field index 0
+end
+
+# new-generated-word-context ( compiler name instructions -- context )
+: new-generated-word-context
+    generated-word-context-new
+    swap generated-word-context-set-instructions
+    swap generated-word-context-set-name
+    swap generated-word-context-set-compiler
+;
 
 # compiler-new ( file-path nodes spans allow-top-level-code -- compiler )
 #
@@ -472,15 +500,44 @@ variable _GEN_WORD_INDEX
     swap compiler-state-record-accessors swap map-has?
 ;
 
-# record-current-getter-instruction ( -- instruction )
+# record-current-getter-name ( context -- name )
+#
+# Build the generated getter name for the current field.
+: record-current-getter-name
+    dup record-compile-context-name "-" str-cat
+    swap record-compile-context-current-field-name str-cat
+;
+
+# record-current-setter-name ( context -- name )
+#
+# Build the generated setter name for the current field.
+: record-current-setter-name
+    dup record-compile-context-name "-set-" str-cat
+    swap record-compile-context-current-field-name str-cat
+;
+
+# record-current-getter-instruction ( context -- instruction )
 #
 # Build the compact field-access instruction for the current record/field loop.
 : record-current-getter-instruction
     array-new
         "RECORD_GET_FIELD" array-push
-        _RECORD_COMPILE_NAME @ array-push
-        _RECORD_FIELD_NAME @ array-push
-        _RECORD_INDEX @ array-push
+        over record-compile-context-name array-push
+        over record-compile-context-current-field-name array-push
+        over record-compile-context-index array-push
+    nip
+;
+
+# record-current-setter-instruction ( context -- instruction )
+#
+# Build the compact field-mutation instruction for the current record/field loop.
+: record-current-setter-instruction
+    array-new
+        "RECORD_SET_FIELD" array-push
+        over record-compile-context-name array-push
+        over record-compile-context-current-field-name array-push
+        over record-compile-context-index array-push
+    nip
 ;
 
 # record-current-accessor-inline ( state name instruction -- state )
@@ -1011,26 +1068,44 @@ deferred compile-next-node
 # Emit a hidden word definition with a skip jump, body instructions, and RET.
 # This is used by declarations that expand into ordinary callable words.
 : emit-generated-word
-    _GEN_WORD_INSTRUCTIONS !
-    _GEN_WORD_NAME !
+    new-generated-word-context
 
-    dup compiler-next-instruction-index _GEN_WORD_SKIP_INDEX !
-    "JUMP" array-wrap -1 array-push emit-instruction
+    dup generated-word-context-compiler compiler-next-instruction-index
+    generated-word-context-set-skip-index
 
-    _GEN_WORD_NAME @ record-word-name
+    dup generated-word-context-compiler
+        "JUMP" array-wrap -1 array-push emit-instruction
+    drop
 
-    0 _GEN_WORD_INDEX !
+    dup generated-word-context-compiler
+        over generated-word-context-name record-word-name
+    drop
+
+    0 generated-word-context-set-index
     loop
-        _GEN_WORD_INDEX @ _GEN_WORD_INSTRUCTIONS @ array-len <
+        dup generated-word-context-index
+        over generated-word-context-instructions array-len <
     while
-        _GEN_WORD_INSTRUCTIONS @ _GEN_WORD_INDEX @ array-get emit-instruction
-        _GEN_WORD_INDEX @ 1 + _GEN_WORD_INDEX !
+        dup generated-word-context-instructions
+            over generated-word-context-index array-get
+        over generated-word-context-compiler swap emit-instruction
+        drop
+
+        dup generated-word-context-index 1 +
+        generated-word-context-set-index
     repeat
 
-    "RET" array-wrap emit-instruction
-    _GEN_WORD_SKIP_INDEX @
-        "JUMP" array-wrap 2over compiler-next-instruction-index array-push
-        patch-instruction
+    dup generated-word-context-compiler "RET" array-wrap emit-instruction
+    drop
+
+    dup generated-word-context-compiler
+    over generated-word-context-skip-index
+    2over generated-word-context-compiler compiler-next-instruction-index
+        "JUMP" array-wrap swap array-push
+    patch-instruction
+    drop
+
+    generated-word-context-compiler
 ;
 
 # record-field-name ( field -- name )
@@ -1043,197 +1118,207 @@ deferred compile-next-node
     1 array-get
 ;
 
-# record-field-name-exists? ( fields name -- flag )
-: record-field-name-exists?
-    _RECORD_FIND_NAME !
-    _RECORD_FIND_FIELDS !
-    0 _RECORD_INDEX !
-    0 _RECORD_FIND_FOUND !
-
-    loop
-        _RECORD_INDEX @ _RECORD_FIND_FIELDS @ array-len <
-        _RECORD_FIND_FOUND @ not
-        and
-    while
-        _RECORD_FIND_FIELDS @ _RECORD_INDEX @ array-get record-field-name
-        _RECORD_FIND_NAME @ = if
-            1 _RECORD_FIND_FOUND !
-        end
-        _RECORD_INDEX @ 1 + _RECORD_INDEX !
-    repeat
-
-    _RECORD_FIND_FOUND @
+# record-context-panic ( context error-message -- never )
+: record-context-panic
+    swap record-compile-context-compiler swap compiler-panic
 ;
 
-# assert-record-generated-word-available ( state name -- state )
+# record-generated-name? ( context name -- flag )
+: record-generated-name?
+    swap record-compile-context-generated-names swap map-has?
+;
+
+# record-context-user-defined-word? ( context name -- flag )
+: record-context-user-defined-word?
+    swap record-compile-context-compiler swap user-defined-word?
+;
+
+# record-context-user-defined-variable? ( context name -- flag )
+: record-context-user-defined-variable?
+    swap record-compile-context-compiler swap user-defined-variable?
+;
+
+# assert-record-generated-word-available ( context name -- context )
 : assert-record-generated-word-available
-    dup _RECORD_GENERATED_NAMES @ swap map-has? if
-        "word already defined: " swap str-cat compiler-panic
+    2dup record-generated-name? if
+        "word already defined: " swap str-cat record-context-panic
     end
 
-    dup 2over swap user-defined-word? if
-        "word already defined: " swap str-cat compiler-panic
+    2dup record-context-user-defined-word? if
+        "word already defined: " swap str-cat record-context-panic
     end
 
-    dup 2over swap user-defined-variable? if
-        "word already defined: " swap str-cat compiler-panic
+    2dup record-context-user-defined-variable? if
+        "word already defined: " swap str-cat record-context-panic
     end
 
-    _RECORD_GENERATED_NAMES @ swap 1 map-set _RECORD_GENERATED_NAMES !
+    over record-compile-context-generated-names
+        swap 1 map-set
+    record-compile-context-set-generated-names
 ;
 
-# assert-record-generated-word-names ( state -- state )
+# record-select-current-field ( context -- context )
+#
+# Copy the field at context.index into context.current-field-name.
+: record-select-current-field
+    dup record-compile-context-fields
+        over record-compile-context-index array-get
+        record-field-name
+    record-compile-context-set-current-field-name
+;
+
+# assert-record-generated-word-names ( context -- context )
 : assert-record-generated-word-names
-    map-new _RECORD_GENERATED_NAMES !
-
-    _RECORD_COMPILE_NAME @ "-new" str-cat
+    dup record-compile-context-name "-new" str-cat
     assert-record-generated-word-available
-    _RECORD_COMPILE_NAME @ "-copy" str-cat
+    dup record-compile-context-name "-copy" str-cat
     assert-record-generated-word-available
 
-    0 _RECORD_INDEX !
+    0 record-compile-context-set-index
     loop
-        _RECORD_INDEX @ _RECORD_COMPILE_FIELDS @ array-len <
+        dup record-compile-context-index
+        over record-compile-context-fields array-len <
     while
-        _RECORD_COMPILE_FIELDS @ _RECORD_INDEX @ array-get record-field-name
-        _RECORD_FIELD_NAME !
+        record-select-current-field
 
-        _RECORD_COMPILE_NAME @ "-" str-cat _RECORD_FIELD_NAME @ str-cat
+        dup record-current-getter-name
         assert-record-generated-word-available
-        _RECORD_COMPILE_NAME @ "-set-" str-cat _RECORD_FIELD_NAME @ str-cat
+        dup record-current-setter-name
         assert-record-generated-word-available
 
-        _RECORD_INDEX @ 1 + _RECORD_INDEX !
+        dup record-compile-context-index 1 +
+        record-compile-context-set-index
     repeat
 ;
 
-# record-new-instructions ( -- instructions )
+# record-append-generated-instruction ( context instruction -- context )
+: record-append-generated-instruction
+    over record-compile-context-generated-instructions
+        swap array-push
+    record-compile-context-set-generated-instructions
+;
+
+# record-new-instructions ( context -- instructions )
 : record-new-instructions
-    array-new _GEN_WORD_INSTRUCTIONS !
-    _GEN_WORD_INSTRUCTIONS @
-        _RECORD_COMPILE_NAME @ create-push-value-instruction array-push
-    _GEN_WORD_INSTRUCTIONS !
-    _GEN_WORD_INSTRUCTIONS @ "ARRAY_NEW" array-wrap array-push
-    _GEN_WORD_INSTRUCTIONS !
+    array-new record-compile-context-set-generated-instructions
 
-    0 _RECORD_INDEX !
+    dup record-compile-context-name create-push-value-instruction
+    record-append-generated-instruction
+    "ARRAY_NEW" array-wrap record-append-generated-instruction
+
+    0 record-compile-context-set-index
     loop
-        _RECORD_INDEX @ _RECORD_COMPILE_FIELDS @ array-len <
+        dup record-compile-context-index
+        over record-compile-context-fields array-len <
     while
-        _GEN_WORD_INSTRUCTIONS @
-            _RECORD_COMPILE_FIELDS @ _RECORD_INDEX @ array-get
-            record-field-default create-push-value-instruction array-push
-        _GEN_WORD_INSTRUCTIONS !
-        _GEN_WORD_INSTRUCTIONS @ "ARRAY_PUSH" array-wrap array-push
-        _GEN_WORD_INSTRUCTIONS !
-        _RECORD_INDEX @ 1 + _RECORD_INDEX !
+        dup record-compile-context-fields
+            over record-compile-context-index array-get
+            record-field-default create-push-value-instruction
+        record-append-generated-instruction
+        "ARRAY_PUSH" array-wrap record-append-generated-instruction
+
+        dup record-compile-context-index 1 +
+        record-compile-context-set-index
     repeat
 
-    _GEN_WORD_INSTRUCTIONS @ "RECORD_NEW" array-wrap array-push
+    "RECORD_NEW" array-wrap record-append-generated-instruction
+    record-compile-context-generated-instructions
 ;
 
-# record-copy-instructions ( -- instructions )
+# record-copy-instructions ( context -- instructions )
 : record-copy-instructions
     array-new
-        _RECORD_COMPILE_NAME @ create-push-value-instruction array-push
+        over record-compile-context-name create-push-value-instruction array-push
         "RECORD_COPY" array-wrap array-push
+    nip
 ;
 
-# record-getter-instructions ( field-name index -- instructions )
-: record-getter-instructions
-    _RECORD_INDEX !
-    _RECORD_FIELD_NAME !
-    array-new
-        "RECORD_GET_FIELD" array-push
-        _RECORD_COMPILE_NAME @ array-push
-        _RECORD_FIELD_NAME @ array-push
-        _RECORD_INDEX @ array-push
-    array-wrap
-;
-
-# record-setter-instructions ( field-name index -- instructions )
-: record-setter-instructions
-    _RECORD_INDEX !
-    _RECORD_FIELD_NAME !
-    array-new
-        "RECORD_SET_FIELD" array-push
-        _RECORD_COMPILE_NAME @ array-push
-        _RECORD_FIELD_NAME @ array-push
-        _RECORD_INDEX @ array-push
-    array-wrap
-;
-
-# register-record-field-accessors ( state -- state )
+# register-record-field-accessors ( context -- context )
 #
 # Reserve each generated accessor in the word namespace and remember its compact
 # instruction. Accessors compile inline, so they do not need callable bodies.
 : register-record-field-accessors
-    0 _RECORD_INDEX !
+    0 record-compile-context-set-index
     loop
-        _RECORD_INDEX @ _RECORD_COMPILE_FIELDS @ array-len <
+        dup record-compile-context-index
+        over record-compile-context-fields array-len <
     while
-        _RECORD_COMPILE_FIELDS @ _RECORD_INDEX @ array-get record-field-name
-        _RECORD_FIELD_NAME !
+        record-select-current-field
 
-        _RECORD_COMPILE_NAME @ "-" str-cat _RECORD_FIELD_NAME @ str-cat
-        record-word-name
+        dup record-current-getter-name
+        over record-compile-context-compiler swap record-word-name drop
 
-        _RECORD_COMPILE_NAME @ "-" str-cat _RECORD_FIELD_NAME @ str-cat
-        record-current-getter-instruction record-current-accessor-inline
+        dup record-compile-context-compiler
+        over record-current-getter-name
+        2over record-current-getter-instruction
+        record-current-accessor-inline drop
 
-        _RECORD_COMPILE_NAME @ "-set-" str-cat _RECORD_FIELD_NAME @ str-cat
-        record-word-name
+        dup record-current-setter-name
+        over record-compile-context-compiler swap record-word-name drop
 
-        _RECORD_COMPILE_NAME @ "-set-" str-cat _RECORD_FIELD_NAME @ str-cat
-        _RECORD_FIELD_NAME @ _RECORD_INDEX @ record-setter-instructions
-        0 array-get record-current-accessor-inline
+        dup record-compile-context-compiler
+        over record-current-setter-name
+        2over record-current-setter-instruction
+        record-current-accessor-inline drop
 
-        _RECORD_INDEX @ 1 + _RECORD_INDEX !
+        dup record-compile-context-index 1 +
+        record-compile-context-set-index
     repeat
 ;
 
-# emit-record-definitions ( state -- state )
+# emit-record-definitions ( context -- context )
 : emit-record-definitions
     assert-record-generated-word-names
 
-    record-new-instructions
-    _RECORD_COMPILE_NAME @ "-new" str-cat
-    swap emit-generated-word
+    dup record-compile-context-compiler
+    over record-compile-context-name "-new" str-cat
+    2over record-new-instructions
+    emit-generated-word drop
 
-    record-copy-instructions
-    _RECORD_COMPILE_NAME @ "-copy" str-cat
-    swap emit-generated-word
+    dup record-compile-context-compiler
+    over record-compile-context-name "-copy" str-cat
+    2over record-copy-instructions
+    emit-generated-word drop
 
     register-record-field-accessors
 ;
 
-# append-current-record-field ( state -- state )
+# append-current-record-field ( context -- context )
 : append-current-record-field
-    "field requires a name" assert-has-next-node
-    compiler-increment-node-index dup compiler-current-node
+    dup record-compile-context-compiler
+        "field requires a name" assert-has-next-node
+        compiler-increment-node-index dup compiler-current-node
     dup node-kind "word" = not if
         drop "field name must be a word" compiler-panic
     end
-    dup node-value _RECORD_FIELD_NAME !
+    node-value nip record-compile-context-set-current-field-name
 
-    _RECORD_COMPILE_FIELDS @ _RECORD_FIELD_NAME @
-    record-field-name-exists? if
-        drop "duplicate field in record " _RECORD_COMPILE_NAME @ str-cat
-        ": " str-cat _RECORD_FIELD_NAME @ str-cat compiler-panic
+    dup record-compile-context-field-names
+        over record-compile-context-current-field-name map-has? if
+        "duplicate field in record "
+            over record-compile-context-name str-cat
+            ": " str-cat
+            over record-compile-context-current-field-name str-cat
+        record-context-panic
     end
-    drop
 
-    "field requires a default value" assert-has-next-node
-    compiler-increment-node-index dup compiler-current-node
+    dup record-compile-context-field-names
+        over record-compile-context-current-field-name 1 map-set
+    record-compile-context-set-field-names
+
+    dup record-compile-context-compiler
+        "field requires a default value" assert-has-next-node
+        compiler-increment-node-index dup compiler-current-node
     dup node-kind "integer" = over node-kind "string" = or not if
         drop "field default must be an integer or string literal" compiler-panic
     end
-    node-value _RECORD_FIELD_DEFAULT !
+    node-value nip record-compile-context-set-current-field-default
 
     array-new
-        _RECORD_FIELD_NAME @ array-push
-        _RECORD_FIELD_DEFAULT @ array-push
-    _RECORD_COMPILE_FIELDS @ swap array-push _RECORD_COMPILE_FIELDS !
+        over record-compile-context-current-field-name array-push
+        over record-compile-context-current-field-default array-push
+    over record-compile-context-fields swap array-push
+    record-compile-context-set-fields
 ;
 
 # compile-record ( state -- state )
@@ -1247,30 +1332,28 @@ deferred compile-next-node
     dup node-kind "word" = not if
         drop "record name must be a word" compiler-panic
     end
-    node-value _RECORD_COMPILE_NAME !
-
-    array-new _RECORD_COMPILE_FIELDS !
-    0 _RECORD_COMPILE_DONE !
+    node-value new-record-compile-context
 
     loop
-        _RECORD_COMPILE_DONE @ not
-    while
-        "record without closing end" assert-has-next-node
-        compiler-increment-node-index dup compiler-current-node
+        dup record-compile-context-compiler
+            "record without closing end" assert-has-next-node
+            compiler-increment-node-index dup compiler-current-node
+        nip
+
         dup node-kind "word" = not if
-            drop "record body expects field or end" compiler-panic
+            drop "record body expects field or end" record-context-panic
         end
 
         dup node-value "end" = if
-            drop
-            emit-record-definitions
-            1 _RECORD_COMPILE_DONE !
+            drop emit-record-definitions 1
         else dup node-value "field" = if
-            drop append-current-record-field
+            drop append-current-record-field 0
         else
-            drop "record body expects field or end" compiler-panic
+            drop "record body expects field or end" record-context-panic
         end end
-    repeat
+    until
+
+    record-compile-context-compiler
 ;
 
 # compile-literal-node ( state node -- state )
